@@ -1,0 +1,59 @@
+:root {
+  --color-primary: #9ecaff;
+  --color-primary-dim: #82bdff;
+  --color-on-primary: #004272;
+  --color-on-primary-container: #b1d3ff;
+  --color-surface: #090e1a;
+  --color-surface-container-low: #0b1324;
+  --color-surface-container: #0e1930;
+  --color-surface-container-high: #111f3c;
+  --color-surface-container-highest: #132549;
+  --color-surface-bright: #152a56;
+  --color-on-surface: #dde5ff;
+  --color-on-surface-variant: #9aaad6;
+  --color-secondary: #999dae;
+  --color-tertiary: #ffb14b;
+  --color-success: #56d364;
+  --color-error: #ff6b6b;
+  --color-outline-variant: #37476d;
+  --color-border-soft: rgb(255 255 255 / 5%);
+  --auth-overlay: rgb(3 10 22 / 52%);
+  --auth-card-bg: linear-gradient(160deg, rgb(9 21 44 / 88%), rgb(5 13 28 / 90%));
+  --auth-card-border: #6d8ec5;
+  --auth-input-bg: #11274d;
+  --auth-input-border: #2a436d;
+  --auth-brand-chip-bg: rgb(7 22 45 / 70%);
+  --auth-brand-chip-border: rgb(245 201 136 / 25%);
+  --auth-brand-title: #f5c988;
+  --auth-brand-subtitle: #d9e8ff;
+}
+
+:root[data-theme="light"] {
+  --color-primary: #2d6fcf;
+  --color-primary-dim: #4582de;
+  --color-on-primary: #f5f9ff;
+  --color-on-primary-container: #154a92;
+  --color-surface: #f3f7fd;
+  --color-surface-container-low: #ffffff;
+  --color-surface-container: #e9f0fb;
+  --color-surface-container-high: #dde8f8;
+  --color-surface-container-highest: #cfdef4;
+  --color-surface-bright: #c3d5f1;
+  --color-on-surface: #13233f;
+  --color-on-surface-variant: #4f6489;
+  --color-secondary: #7482a0;
+  --color-tertiary: #b67722;
+  --color-success: #1f9d55;
+  --color-error: #d64343;
+  --color-outline-variant: #b4c3dc;
+  --color-border-soft: rgb(16 32 58 / 9%);
+  --auth-overlay: rgb(3 10 22 / 52%);
+  --auth-card-bg: linear-gradient(160deg, rgb(241 246 255 / 88%), rgb(230 238 250 / 90%));
+  --auth-card-border: #97afd4;
+  --auth-input-bg: #dde8f8;
+  --auth-input-border: #b4c3dc;
+  --auth-brand-chip-bg: rgb(255 255 255 / 72%);
+  --auth-brand-chip-border: rgb(45 111 207 / 22%);
+  --auth-brand-title: #9a651b;
+  --auth-brand-subtitle: #173969;
+}

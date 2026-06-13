@@ -1,0 +1,11 @@
+node_modules
+dist
+coverage
+.vite
+*.log
+package-lock.json
+yarn.lock
+pnpm-lock.yaml
+*.tsbuildinfo
+public/mock
+public/mocks

@@ -1,0 +1,162 @@
+:root {
+  --screen-xs: 480px;
+  --screen-sm: 640px;
+  --screen-md: 768px;
+  --screen-lg: 1024px;
+  --screen-xl: 1280px;
+}
+
+.page-title {
+  line-height: 1.1;
+}
+
+.table-scroll {
+  width: 100%;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+.table-scroll table {
+  min-width: 640px;
+}
+
+.map-wrapper {
+  min-height: 380px;
+}
+
+@media (max-width: 1024px) {
+  .app-shell main {
+    padding-bottom: 5.5rem;
+  }
+
+  .app-shell__search-input {
+    width: 16rem;
+  }
+}
+
+@media (max-width: 768px) {
+  .app-shell main {
+    padding-left: 0.875rem;
+    padding-right: 0.875rem;
+    padding-top: 5.5rem;
+  }
+
+  .app-shell__header-search {
+    min-width: 0;
+    flex: 1;
+    gap: 0.5rem;
+  }
+
+  .app-shell__header-actions {
+    gap: 0.35rem;
+  }
+
+  .app-shell__search-input {
+    width: min(42vw, 12rem);
+  }
+
+  .app-shell__logout-btn {
+    padding: 0.4rem 0.55rem;
+    font-size: 0.7rem;
+  }
+
+  .app-shell__miner {
+    bottom: 1rem;
+    right: 0.8rem;
+    width: 4.75rem;
+    height: 4.75rem;
+    opacity: 0.75;
+  }
+
+  .auth-layout {
+    padding: 0.95rem;
+    align-items: flex-start;
+  }
+
+  .auth-split-card {
+    margin-top: 4rem;
+  }
+
+  .auth-side-panel,
+  .auth-form-panel,
+  .auth-card {
+    padding: 1.1rem;
+  }
+
+  .auth-brand-chip {
+    left: 0.8rem;
+    top: 0.8rem;
+    padding: 0.6rem 0.75rem;
+  }
+
+  .auth-miner-image {
+    right: 0.8rem;
+    width: 4.2rem;
+    height: 4.2rem;
+  }
+
+  .page-title {
+    font-size: 1.7rem !important;
+  }
+
+  .page-toolbar {
+    width: 100%;
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 0.6rem;
+  }
+
+  .table-scroll table {
+    min-width: 700px;
+  }
+
+  .map-wrapper {
+    min-height: 330px;
+    height: 52vh;
+  }
+}
+
+@media (max-width: 640px) {
+  .app-shell__search-input {
+    display: none;
+  }
+
+  .page-title {
+    font-size: 1.45rem !important;
+  }
+
+  .table-scroll table {
+    min-width: 760px;
+  }
+
+  .map-wrapper {
+    min-height: 300px;
+    height: 48vh;
+  }
+}
+
+@media (max-width: 480px) {
+  .app-shell main {
+    padding-left: 0.7rem;
+    padding-right: 0.7rem;
+  }
+
+  .auth-layout {
+    padding: 0.7rem;
+  }
+
+  .auth-side-panel,
+  .auth-form-panel,
+  .auth-card {
+    padding: 0.95rem;
+  }
+
+  .table-scroll table {
+    min-width: 820px;
+  }
+
+  .map-wrapper {
+    min-height: 270px;
+    height: 45vh;
+  }
+}

@@ -1,0 +1,20 @@
+node_modules
+dist
+*.tsbuildinfo
+npm-debug.log*
+.DS_Store
+.env
+.env.*
+!.env.example
+dev-dist
+Mining Company App
+INVENTARIO_FLUJOS.md
+FRONTEND_GUIDE.md
+inventario-import-api.md
+biometrico-api.md
+INVENTARIO_WORKFLOW.md
+historico-inventario.md
+BIOMETRIC_MODULE.md
+PERSONAL_MODULE.md
+Dockerfile
+docker-compose*.yml
