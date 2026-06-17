@@ -18,3 +18,4 @@ BIOMETRIC_MODULE.md
 PERSONAL_MODULE.md
 Dockerfile
 docker-compose*.yml
+API_DOCS.md

@@ -1,217 +1,283 @@
-import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
+import { FormEvent, useEffect, useMemo, useState } from "react";
+import L from "leaflet";
 import {
-  BarChart3,
-  ChevronDown,
-  ChevronUp,
+  Beaker,
   Eye,
-  FileDown,
-  FileUp,
-  FileSpreadsheet,
   FlaskConical,
+  Landmark,
+  Layers3,
+  MapPinned,
+  Microscope,
   Pencil,
   Plus,
+  RefreshCw,
   Save,
   Search,
+  Target,
   Trash2,
   X
 } from "lucide-react";
-import { ZodError } from "zod";
-import { useNavigate } from "react-router-dom";
-import { ApiError } from "@/shared/api/core/apiError";
-import {
-  exploracionMuestraPayloadSchema,
-  type ExploracionMuestraPayload,
-  type ExploracionMuestraResponse
-} from "@/features/exploraciones/model/muestra.schema";
-import {
-  useExploracionesElementosQuery,
-  useExploracionesLaboratoriosQuery,
-  useExploracionesOfflineQuery,
-  useQueueRemoteEditOfflineMutation,
-  useExploracionesRemotasQuery,
-  useSaveMuestraOfflineMutation,
-  useSaveMuestrasOfflineBatchMutation,
-  useSyncExploracionesMutation,
-  useUpdateMuestraOfflineMutation,
-  useUpdateMuestraRemotaMutation
-} from "@/features/exploraciones/hooks/useExploraciones";
-import type { OfflineExploracionMuestra } from "@/features/exploraciones/db/exploracionesDb";
-import { useToast } from "@/shared/ui/toast/ToastProvider";
+import { MapContainer, Marker, TileLayer } from "react-leaflet";
+import { AutocompleteSelect } from "@/shared/ui/AutocompleteSelect";
 import { InternalHeader } from "@/shared/ui/InternalHeader";
+import { ApiError } from "@/shared/api/core/apiError";
+import { useAuth } from "@/features/auth/context/AuthContext";
+import { useToast } from "@/shared/ui/toast/ToastProvider";
 import {
-  downloadTemplateXlsx,
-  normalizeIsoFromCell,
-  normalizeKey,
-  parsePrefixedNumeric,
-  readExcelRows
-} from "@/features/exploraciones/lib/excel.utils";
+  useInteriorAreasQuery,
+  useInteriorLaborsQuery,
+  useInteriorLaboratoriesQuery,
+  useInteriorLevelsQuery,
+  useInteriorObjectivesQuery,
+  useInteriorSamplesQuery,
+  useOfflineProposalCatalogsQuery,
+  useOfflineProposalSamplesQuery,
+  useQueueProposalCatalogMutation,
+  useQueueRemoteProposalSampleEditMutation,
+  useQueueProposalSampleMutation,
+  useSharedElementsQuery,
+  useSurfaceAreasQuery,
+  useSurfaceLaboratoriesQuery,
+  useSurfaceObjectivesQuery,
+  useSurfaceSamplesQuery,
+  useSyncProposalSamplesMutation,
+  useUpdateInteriorSampleWithResultsMutation,
+  useUpdateQueuedProposalSampleMutation,
+  useUpdateSurfaceSampleWithResultsMutation
+} from "@/features/exploraciones/hooks/useProposalSamples";
+import type {
+  CatalogItem,
+  ElementCatalogItem,
+  InteriorLabor,
+  InteriorSample,
+  LaboratorySlot,
+  SurfaceSample
+} from "@/features/exploraciones/model/proposalSamples.schema";
+import type { OfflineProposalCatalog, OfflineProposalSample } from "@/features/exploraciones/db/exploracionesDb";
+import { cacheProposalCatalogs } from "@/features/exploraciones/db/exploracionesDb";
 
-const inputClassName =
-  "w-full rounded-lg border border-[var(--color-border-soft)] bg-[var(--color-surface-container-highest)] px-4 py-3 text-base text-[var(--color-on-surface)] outline-none transition focus:border-[var(--color-primary)] focus:ring-1 focus:ring-[var(--color-primary)]";
+const pageShell =
+  "exploraciones-page mx-auto w-full max-w-7xl space-y-6 px-4 pb-8 sm:px-6 lg:px-8";
+const panelClass =
+  "rounded-xl border border-[var(--color-border-soft)] bg-[var(--color-surface-container-low)]";
+const fieldClass =
+  "w-full rounded-lg border border-[var(--color-border-soft)] bg-[var(--color-surface-container-high)] px-3 py-2.5 text-sm text-[var(--color-on-surface)] outline-none transition focus:border-[var(--color-primary)] focus:ring-1 focus:ring-[var(--color-primary)] disabled:cursor-not-allowed disabled:opacity-60";
+const secondaryButton =
+  "inline-flex items-center justify-center gap-2 rounded-lg border border-[var(--color-outline-variant)] px-3 py-2 text-sm font-semibold text-[var(--color-on-surface-variant)] transition hover:border-[var(--color-primary)] hover:text-[var(--color-on-surface)] disabled:cursor-not-allowed disabled:opacity-50";
+const primaryButton =
+  "inline-flex items-center justify-center gap-2 rounded-lg bg-[var(--color-primary)] px-4 py-2.5 text-sm font-semibold text-[var(--color-on-primary)] transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60";
 
-const numberInputClassName = `${inputClassName} [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none`;
+const geoMarkerIcon = L.divIcon({
+  className: "exploraciones-geo-marker",
+  html: `<span style="display:block;width:18px;height:18px;border-radius:9999px;background:var(--color-primary);border:3px solid white;box-shadow:0 2px 10px rgba(15,23,42,0.35);"></span>`,
+  iconSize: [18, 18],
+  iconAnchor: [9, 9]
+});
 
-const filterInputClassName =
-  "rounded-lg border border-[var(--color-border-soft)] bg-[var(--color-surface-container-high)] px-3 py-2 text-sm text-[var(--color-on-surface)] outline-none transition focus:border-[var(--color-primary)] focus:ring-1 focus:ring-[var(--color-primary)]";
+type RegisterType = "interior" | "surface";
+type ModalKind =
+  | "element"
+  | "interior-area"
+  | "interior-level"
+  | "interior-labor"
+  | "interior-objective"
+  | "interior-laboratory"
+  | "surface-area"
+  | "surface-objective"
+  | "surface-laboratory";
 
-interface DynamicResultado {
+interface ResultRow {
   id: string;
-  elemento: string;
-  valor: string;
+  labSlot: LaboratorySlot | "";
+  elementId: string;
+  value: string;
+  unit: string;
+  qualifier: string;
+  laboratoryId: string;
 }
 
-interface FormState {
-  nivel: string;
-  este: string;
-  norte: string;
-  elevacion: string;
-  referenciaLugar: string;
-  nombre: string;
-  numero: string;
-  tipoMuestra: string;
-  sector: string;
-  laboratorio1: string;
-  laboratorio2: string;
-  laboratorio3: string;
-  fechaMuestreo: string;
-  fechaEntrega: string;
-  descripcion: string;
+interface SampleForm {
+  interiorAreaId: string;
+  interiorLevelId: string;
+  interiorLaborId: string;
+  interiorObjectiveId: string;
+  surfaceAreaId: string;
+  surfaceObjectiveId: string;
+  sampleNameSuffix: string;
+  sampledAt: string;
+  east: string;
+  north: string;
+  elevation: string;
+  labL1: string;
+  labL2: string;
+  labL3: string;
 }
 
-type EditTarget = { mode: "local"; id: number } | { mode: "remota"; id: string } | null;
-type DetailTarget =
-  | { source: "local"; data: OfflineExploracionMuestra }
-  | { source: "remota"; data: ExploracionMuestraResponse }
+interface CatalogForm {
+  name: string;
+  abbreviation: string;
+  description: string;
+  symbol: string;
+  defaultUnit: string;
+  elevation: string;
+  parentId: string;
+}
+
+type EditTarget =
+  | { source: "local"; module: RegisterType; localId: string }
+  | { source: "remote"; module: RegisterType; remoteId: string }
   | null;
 
-type RowStatus = "Sincronizado" | "Pendiente local" | "Error de sincronizacion";
-type RowSource = "local" | "remota";
+type SampleTableRow = {
+  id: string;
+  code: string;
+  name?: string | null;
+  sampledAt?: string | null;
+  objectiveName: string;
+  location: string;
+  createdByName: string;
+  results: any[];
+  labAssignments: any[];
+  source: "local" | "remote";
+  raw: OfflineProposalSample | InteriorSample | SurfaceSample;
+};
 
-interface TableRow {
-  key: string;
-  source: RowSource;
-  id: number | string;
-  nombre: string;
-  numero?: number;
-  tipoMuestra?: string;
-  sector?: string;
-  usuarioNombre?: string;
-  nivel: string;
-  laboratorio1?: string;
-  laboratorio2?: string;
-  laboratorio3?: string;
-  fechaMuestreo?: string;
-  fechaEntrega?: string;
-  descripcion?: string;
-  este?: number;
-  norte?: number;
-  elevacion?: number;
-  referenciaLugar?: string;
-  resultadosTexto: string;
-  status: RowStatus;
-  canEdit: boolean;
-}
+type GeoPoint = {
+  latitude: number;
+  longitude: number;
+  accuracy?: number;
+};
 
-interface ExportRecord {
-  estado: string;
-  origen: string;
-  nombre: string;
-  codigo: string;
-  tipoMuestra: string;
-  sector: string;
-  usuario: string;
-  nivel: string;
-  este: string;
-  norte: string;
-  elevacion: string;
-  referenciaLugar: string;
-  laboratorio1: string;
-  laboratorio2: string;
-  laboratorio3: string;
-  fechaMuestreo: string;
-  fechaEntrega: string;
-  descripcion: string;
-  resultados: string;
-}
+const INTERIOR_DEFAULT_AREAS = [
+  { localId: "seed-interior-area-mosa", name: "MOSA", abbreviation: "MS" },
+  { localId: "seed-interior-area-central", name: "CENTRAL", abbreviation: "CEN" },
+  { localId: "seed-interior-area-lipena", name: "LIPEÑA", abbreviation: "LIP" }
+] as const;
 
-function mapRowToExportRecord(row: TableRow): ExportRecord {
-  return {
-    estado: row.status,
-    origen: row.source === "local" ? "Local" : "Servidor",
-    nombre: row.nombre,
-    codigo: row.numero?.toString() ?? "",
-    tipoMuestra: row.tipoMuestra ?? "",
-    sector: row.sector ?? "",
-    usuario: row.usuarioNombre ?? "",
-    nivel: row.nivel,
-    este: row.este?.toString() ?? "",
-    norte: row.norte?.toString() ?? "",
-    elevacion: row.elevacion?.toString() ?? "",
-    referenciaLugar: row.referenciaLugar ?? "",
-    laboratorio1: row.laboratorio1 ?? "",
-    laboratorio2: row.laboratorio2 ?? "",
-    laboratorio3: row.laboratorio3 ?? "",
-    fechaMuestreo: formatDateTime(row.fechaMuestreo),
-    fechaEntrega: formatDateTime(row.fechaEntrega),
-    descripcion: row.descripcion ?? "",
-    resultados: row.resultadosTexto
-  };
-}
+const INTERIOR_DEFAULT_LEVELS = [
+  { localId: "seed-interior-level-ms-esp", areaLocalId: "seed-interior-area-mosa", name: "ESPERANZA", abbreviation: "ESP" },
+  { localId: "seed-interior-level-ms-luz", areaLocalId: "seed-interior-area-mosa", name: "LUZ", abbreviation: "LZ" },
+  { localId: "seed-interior-level-cen-pv", areaLocalId: "seed-interior-area-central", name: "PORVENIR", abbreviation: "PV" },
+  { localId: "seed-interior-level-lip-cd", areaLocalId: "seed-interior-area-lipena", name: "CUADRO", abbreviation: "CD" },
+  { localId: "seed-interior-level-lip-niv0", areaLocalId: "seed-interior-area-lipena", name: "NIVEL 0", abbreviation: "NIV0" },
+  { localId: "seed-interior-level-lip-niv40", areaLocalId: "seed-interior-area-lipena", name: "NIVEL 40", abbreviation: "NIV40" },
+  { localId: "seed-interior-level-lip-niv80", areaLocalId: "seed-interior-area-lipena", name: "NIVEL 80", abbreviation: "NIV80" }
+] as const;
 
-function buildRowId() {
-  if (typeof globalThis.crypto?.randomUUID === "function") return globalThis.crypto.randomUUID();
+const INTERIOR_DEFAULT_LABORS = [
+  { levelLocalId: "seed-interior-level-ms-esp", name: "RECORTE_1", abbreviation: "R1" },
+  { levelLocalId: "seed-interior-level-ms-luz", name: "RECORTE_1", abbreviation: "R1" },
+  { levelLocalId: "seed-interior-level-cen-pv", name: "RECORTE_1", abbreviation: "R1" },
+  { levelLocalId: "seed-interior-level-lip-cd", name: "CANDELARIA", abbreviation: "CAN" },
+  { levelLocalId: "seed-interior-level-lip-niv0", name: "RAJO1", abbreviation: "RJ1" },
+  { levelLocalId: "seed-interior-level-lip-niv0", name: "RAJO2", abbreviation: "RJ2" },
+  { levelLocalId: "seed-interior-level-lip-niv0", name: "RAJO3", abbreviation: "RJ3" },
+  { levelLocalId: "seed-interior-level-lip-niv0", name: "RAJO4", abbreviation: "RJ4" },
+  { levelLocalId: "seed-interior-level-lip-niv40", name: "RAJO1", abbreviation: "RJ1" },
+  { levelLocalId: "seed-interior-level-lip-niv40", name: "RECORTE_SUR_1", abbreviation: "RS1" },
+  { levelLocalId: "seed-interior-level-lip-niv40", name: "RECORTE_SUR_2", abbreviation: "RS2" },
+  { levelLocalId: "seed-interior-level-lip-niv40", name: "RECORTE_NORTE_1", abbreviation: "RN1" },
+  { levelLocalId: "seed-interior-level-lip-niv80", name: "BANCA_NORTE", abbreviation: "BN" },
+  { levelLocalId: "seed-interior-level-lip-niv80", name: "BANCA_CENTRO", abbreviation: "BC" },
+  { levelLocalId: "seed-interior-level-lip-niv80", name: "BANCA_SUR", abbreviation: "BS" }
+].map((item) => ({
+  ...item,
+  localId: `seed-interior-labor-${item.levelLocalId}-${item.abbreviation.toLowerCase()}-${item.name.toLowerCase()}`
+}));
+
+const DEFAULT_LABORATORIES = [
+  { name: "LIPEÑA (LIPEÑA)", abbreviation: "LIP" },
+  { name: "CHILCOBIJA (CHILCOBIJA)", abbreviation: "CHI" },
+  { name: "POTOSI (CONDE ORTEGA)", abbreviation: "POT" },
+  { name: "SPECTRO LAB", abbreviation: "SPL" },
+  { name: "CASTRO", abbreviation: "CAS" }
+] as const;
+
+const SURFACE_DEFAULT_AREAS = [
+  { localId: "seed-surface-area-mosa", name: "MOSA", abbreviation: "MS/SUP" },
+  { localId: "seed-surface-area-central", name: "CENTRAL", abbreviation: "CEN/SUP" },
+  { localId: "seed-surface-area-lipena", name: "LIPEÑA", abbreviation: "LIP/SUP" },
+  { localId: "seed-surface-area-ayda", name: "AYDA", abbreviation: "AY/SUP" },
+  { localId: "seed-surface-area-progreso", name: "EL PROGRESO", abbreviation: "EP/SUP" },
+  { localId: "seed-surface-area-horizonte", name: "HORIZONTE", abbreviation: "HZ/SUP" }
+] as const;
+
+const INTERIOR_OBJECTIVE = {
+  localId: "seed-interior-objective-tope-lateral",
+  name: "TOPE_O_LATERAL_U_OTROS"
+} as const;
+
+const SURFACE_OBJECTIVE = {
+  localId: "seed-surface-objective-desencape",
+  name: "DESENCAPE_U_OTROS"
+} as const;
+
+function newId() {
+  if (typeof crypto?.randomUUID === "function") return crypto.randomUUID();
   return `${Date.now()}-${Math.random().toString(16).slice(2)}`;
 }
 
-function buildInitialState(): FormState {
-  return {
-    nivel: "",
-    este: "",
-    norte: "",
-    elevacion: "",
-    referenciaLugar: "",
-    nombre: "",
-    numero: "",
-    tipoMuestra: "",
-    sector: "",
-    laboratorio1: "",
-    laboratorio2: "",
-    laboratorio3: "",
-    fechaMuestreo: "",
-    fechaEntrega: "",
-    descripcion: ""
-  };
-}
-
-function getNowLaPazIso() {
-  // Keep the exact current instant and serialize in canonical ISO (UTC, Z suffix)
-  // so Zod/API datetime validation is always valid.
-  return new Date().toISOString();
-}
-
-function toIsoDatetime(value: string) {
-  if (!value.trim()) return undefined;
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return undefined;
-  return date.toISOString();
-}
-
-function normalizeIsoDatetime(value?: string) {
-  if (!value?.trim()) return undefined;
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return undefined;
-  return date.toISOString();
-}
-
-function toLocalDatetimeInput(value?: string | null) {
-  if (!value) return "";
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return "";
-  const pad = (n: number) => String(n).padStart(2, "0");
+function toLocalDatetimeInput(date = new Date()) {
+  const pad = (value: number) => String(value).padStart(2, "0");
   return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
 }
 
-function formatDateTime(value?: string | null) {
+function initialSampleForm(): SampleForm {
+  return {
+    interiorAreaId: "",
+    interiorLevelId: "",
+    interiorLaborId: "",
+    interiorObjectiveId: "",
+    surfaceAreaId: "",
+    surfaceObjectiveId: "",
+    sampleNameSuffix: "",
+    sampledAt: toLocalDatetimeInput(),
+    east: "",
+    north: "",
+    elevation: "",
+    labL1: "",
+    labL2: "",
+    labL3: ""
+  };
+}
+
+function initialCatalogForm(): CatalogForm {
+  return {
+    name: "",
+    abbreviation: "",
+    description: "",
+    symbol: "",
+    defaultUnit: "",
+    elevation: "",
+    parentId: ""
+  };
+}
+
+function initialResult(): ResultRow {
+  return {
+    id: newId(),
+    labSlot: "",
+    elementId: "",
+    value: "",
+    unit: "",
+    qualifier: "",
+    laboratoryId: ""
+  };
+}
+
+function toNumber(value: string) {
+  if (!value.trim()) return undefined;
+  const parsed = Number(value.trim().replace(",", "."));
+  return Number.isFinite(parsed) ? parsed : undefined;
+}
+
+function toIso(value: string) {
+  if (!value.trim()) return undefined;
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? undefined : date.toISOString();
+}
+
+function formatDate(value?: string | null) {
   if (!value) return "-";
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return value;
@@ -222,1738 +288,2139 @@ function formatDateTime(value?: string | null) {
   }).format(date);
 }
 
-function toOptionalNumber(value: string) {
-  return toNumberOrUndefined(value);
-}
-
-function parseChemicalValueWithPrefix(value: string) {
-  const normalized = value.trim().replace(",", ".");
-  if (!normalized) return undefined;
-
-  // Read the numeric portion from the tail of the string and keep any
-  // preceding text as prefix (examples: "<0.008", "> 2.5", "ND 0.01").
-  const numericTailMatch = normalized.match(/-?\d+(\.\d+)?$/);
-  if (!numericTailMatch) return undefined;
-
-  const numericToken = numericTailMatch[0];
-  const numeric = Number(numericToken);
-  if (Number.isNaN(numeric)) return undefined;
-
-  const prefixRaw = normalized.slice(0, normalized.length - numericToken.length).trim();
-  const prefix = prefixRaw.length > 0 ? prefixRaw : undefined;
-
-  return {
-    valor: numeric,
-    prefijo: prefix
-  };
-}
-
-function normalizeLooseKey(text: string) {
-  return normalizeKey(text).replace(/[^a-z0-9]/g, "");
-}
-
-function getCellValue(row: Record<string, unknown>, key: string) {
-  const normalizedTarget = normalizeLooseKey(key);
-  for (const [currentKey, currentValue] of Object.entries(row)) {
-    if (normalizeLooseKey(currentKey) === normalizedTarget) {
-      return currentValue;
-    }
-  }
-  return undefined;
-}
-
-function getCellValueByAliases(row: Record<string, unknown>, aliases: string[]) {
-  for (const alias of aliases) {
-    const value = getCellValue(row, alias);
-    if (value !== undefined) return value;
-  }
-  return undefined;
-}
-
-function toStringOrUndefined(value: unknown) {
-  if (value === null || value === undefined) return undefined;
-  const text = String(value).trim();
-  return text ? text : undefined;
-}
-
-function toNumberOrUndefined(value: unknown) {
-  if (value === null || value === undefined || value === "") return undefined;
-  if (typeof value === "number") return Number.isNaN(value) ? undefined : value;
-
-  const raw = String(value).trim();
-  if (!raw) return undefined;
-
-  const compact = raw.replace(/\s+/g, "");
-  const lastComma = compact.lastIndexOf(",");
-  const lastDot = compact.lastIndexOf(".");
-  const decimalSeparatorIndex = Math.max(lastComma, lastDot);
-
-  const normalized =
-    decimalSeparatorIndex >= 0
-      ? `${compact.slice(0, decimalSeparatorIndex).replace(/[.,]/g, "")}.${compact
-          .slice(decimalSeparatorIndex + 1)
-          .replace(/[.,]/g, "")}`
-      : compact.replace(/[.,]/g, "");
-
-  const parsed = Number(normalized);
-  return Number.isNaN(parsed) ? undefined : parsed;
-}
-
-const excelMetadataKeys = new Set(
-  [
-    "nivel",
-    "fechaMuestreo",
-    "fecha muestreo",
-    "fechaEntrega",
-    "fecha entrega",
-    "nombre",
-    "tipoMuestra",
-    "tipo de muestra",
-    "tipo muestra",
-    "codigo",
-    "código",
-    "numero",
-    "nro",
-    "referenciaLugar",
-    "referencia del lugar",
-    "referencia de lugar",
-    "sector",
-    "este",
-    "norte",
-    "elevacion",
-    "elevación",
-    "descripcion",
-    "descripción",
-    "laboratorio1",
-    "laboratorio 1",
-    "laboratorio2",
-    "laboratorio 2",
-    "laboratorio3",
-    "laboratorio 3"
-  ].map(normalizeLooseKey)
-);
-
-function inferElementoFromHeader(header: string) {
-  const cleaned = header.trim().replace(/\s+/g, " ");
-  const symbolMatch = cleaned.match(/^([A-Za-z]{1,3})\b/);
-  if (symbolMatch) {
-    const raw = symbolMatch[1];
-    return raw.length === 1
-      ? raw.toUpperCase()
-      : `${raw[0].toUpperCase()}${raw.slice(1).toLowerCase()}`;
-  }
-
-  const fallback = cleaned
-    .replace(/\(\s*l\s*\d+\s*\)/gi, "")
-    .replace(/\bL\s*\d+\b/gi, "")
-    .replace(/[%]/g, "")
-    .trim();
-  return fallback || cleaned;
-}
-
-function normalizeElementoMatch(value: string, removeUnits: boolean) {
-  const tokens =
-    value
-      .trim()
-      .toLowerCase()
-      .normalize("NFD")
-      .replace(/[\u0300-\u036f]/g, "")
-      .replace(/%/g, " ")
-      .replace(/[^a-z0-9]+/g, " ")
-      .split(" ")
-      .map((token) => token.trim())
-      .filter(Boolean) ?? [];
-
-  const filtered = removeUnits
-    ? tokens.filter((token) => !["dm", "g", "gr", "tn", "ppm", "ppb", "pct"].includes(token))
-    : tokens;
-
-  return filtered.join("");
-}
-
-function extractLabToken(value: string) {
-  const normalized = value
-    .trim()
-    .toLowerCase()
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "");
-  const match = normalized.match(/(?:^|[^a-z0-9])l\s*([1-9])(?:[^a-z0-9]|$)|\(\s*l\s*([1-9])\s*\)/i);
-  return match?.[1] ?? match?.[2] ?? undefined;
-}
-
-function extractSymbolToken(value: string) {
-  const normalized = value
-    .trim()
-    .toLowerCase()
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "");
-  const symbol = normalized.match(/[a-z]{1,3}/);
-  return symbol?.[0];
-}
-
-interface CatalogElementCandidate {
-  nombre: string;
-  exact: string;
-  relaxed: string;
-  symbol?: string;
-  lab?: string;
-}
-
-function buildCatalogElementCandidates(elementNames: string[]): CatalogElementCandidate[] {
-  return elementNames
-    .map((name) => name.trim())
-    .filter(Boolean)
-    .map((name) => ({
-      nombre: name,
-      exact: normalizeElementoMatch(name, false),
-      relaxed: normalizeElementoMatch(name, true),
-      symbol: extractSymbolToken(name),
-      lab: extractLabToken(name)
-    }));
-}
-
-function pickBestCandidate(
-  candidates: CatalogElementCandidate[],
-  headerSymbol?: string,
-  headerLab?: string
-) {
-  if (candidates.length === 0) return undefined;
-
-  const withLabPriority =
-    headerLab !== undefined
-      ? candidates.find((candidate) => candidate.lab === headerLab) ??
-        candidates.find((candidate) => candidate.lab === undefined) ??
-        candidates[0]
-      : candidates[0];
-
-  if (withLabPriority) return withLabPriority;
-
-  if (!headerSymbol) return candidates[0];
-  return candidates.find((candidate) => candidate.symbol === headerSymbol) ?? candidates[0];
-}
-
-function resolveCatalogElementName(
-  rawLabel: string,
-  catalog: CatalogElementCandidate[]
-): string | undefined {
-  const exact = normalizeElementoMatch(rawLabel, false);
-  const relaxed = normalizeElementoMatch(rawLabel, true);
-  const symbol = extractSymbolToken(rawLabel);
-  const lab = extractLabToken(rawLabel);
-
-  const exactMatches = catalog.filter((candidate) => candidate.exact === exact);
-  const exactBest = pickBestCandidate(exactMatches, symbol, lab);
-  if (exactBest) return exactBest.nombre;
-
-  const relaxedMatches = catalog.filter((candidate) => candidate.relaxed === relaxed);
-  const relaxedBest = pickBestCandidate(relaxedMatches, symbol, lab);
-  if (relaxedBest) return relaxedBest.nombre;
-
-  const symbolLabMatches = catalog.filter((candidate) => {
-    if (!symbol || candidate.symbol !== symbol) return false;
-    if (!lab) return true;
-    return candidate.lab === lab;
-  });
-  const symbolLabBest = pickBestCandidate(symbolLabMatches, symbol, lab);
-  if (symbolLabBest) return symbolLabBest.nombre;
-
-  if (!symbol) return undefined;
-  const symbolOnlyMatches = catalog.filter((candidate) => candidate.symbol === symbol);
-  if (symbolOnlyMatches.length === 1) return symbolOnlyMatches[0]?.nombre;
-
-  return undefined;
-}
-
-function extractResultadosFromExcelRow(
-  row: Record<string, unknown>,
-  availableElementNames: string[]
-) {
-  const results: Array<{ elemento: string; valor: number; prefijo?: string }> = [];
-  const unmatchedHeaders = new Set<string>();
-  const catalog = buildCatalogElementCandidates(availableElementNames);
-
-  const pushResolvedResult = (
-    rawLabel: string,
-    parsed: { valor: number; prefijo?: string },
-    explicitPrefijo?: string
-  ) => {
-    const resolvedName = resolveCatalogElementName(rawLabel, catalog);
-    if (!resolvedName) {
-      unmatchedHeaders.add(rawLabel);
-      return;
-    }
-    results.push({
-      elemento: resolvedName,
-      valor: parsed.valor,
-      prefijo: explicitPrefijo ?? parsed.prefijo
+function labelOptions(items: Array<{ id: string; name: string; abbreviation?: string | null }>) {
+  const unique = new Map<string, { id: string; label: string; searchText: string }>();
+  items.forEach((item) => {
+    const key = `${item.name}|${item.abbreviation ?? ""}`.toLowerCase();
+    if (unique.has(key)) return;
+    unique.set(key, {
+      id: item.id,
+      label: item.abbreviation ? `${item.name} (${item.abbreviation})` : item.name,
+      searchText: `${item.name} ${item.abbreviation ?? ""}`
     });
+  });
+  return Array.from(unique.values());
+}
+
+function elementOptions(items: ElementCatalogItem[]) {
+  const unique = new Map<string, { id: string; label: string; searchText: string }>();
+  items.forEach((item) => {
+    const key = `${item.symbol}|${item.defaultUnit ?? ""}`.toLowerCase();
+    if (unique.has(key)) return;
+    unique.set(key, {
+      id: item.id,
+      label: `${item.symbol} - ${item.name}${item.defaultUnit ? ` [${item.defaultUnit}]` : ""}`,
+      searchText: `${item.symbol} ${item.name} ${item.defaultUnit ?? ""}`
+    });
+  });
+  return Array.from(unique.values());
+}
+
+function localCatalogId(item: OfflineProposalCatalog) {
+  return item.remoteId ?? item.localId;
+}
+
+function localCatalogToItem(item: OfflineProposalCatalog): CatalogItem {
+  return {
+    id: localCatalogId(item),
+    name: item.name,
+    abbreviation: item.abbreviation,
+    description: item.description
   };
+}
 
-  for (const [rawKey, rawValue] of Object.entries(row)) {
-    const key = normalizeKey(rawKey);
-    if (!key.startsWith("elemento_")) continue;
-    const elemento = rawKey.slice(rawKey.indexOf("_") + 1).trim() || rawKey;
-    const parsed = parsePrefixedNumeric(rawValue);
-    if (!parsed) continue;
-    pushResolvedResult(elemento, parsed);
-  }
+function localElementToItem(item: OfflineProposalCatalog): ElementCatalogItem {
+  return {
+    id: localCatalogId(item),
+    name: item.name,
+    symbol: item.symbol ?? item.abbreviation ?? item.name,
+    defaultUnit: item.defaultUnit,
+    description: item.description
+  };
+}
 
-  for (let index = 1; index <= 100; index += 1) {
-    const elemento = toStringOrUndefined(getCellValue(row, `resultado_${index}_elemento`));
-    if (!elemento) continue;
-    const rawValor = getCellValue(row, `resultado_${index}_valor`);
-    const rawPrefijo = toStringOrUndefined(getCellValue(row, `resultado_${index}_prefijo`));
-    const parsed = parsePrefixedNumeric(rawValor);
-    if (!parsed) continue;
-    pushResolvedResult(elemento, parsed, rawPrefijo);
-  }
+function mergeById<T extends { id: string }>(remote: T[], local: T[]) {
+  return Array.from(new Map([...remote, ...local].map((item) => [item.id, item])).values());
+}
 
-  for (const [rawKey, rawValue] of Object.entries(row)) {
-    const looseKey = normalizeLooseKey(rawKey);
-    if (!looseKey || looseKey.startsWith("empty")) continue;
-    if (excelMetadataKeys.has(looseKey)) continue;
-    if (looseKey.startsWith("resultado")) continue;
-    if (looseKey.startsWith("elemento")) continue;
+function normalizeCatalogText(value?: string | null) {
+  return (value ?? "")
+    .trim()
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "");
+}
 
-    const parsed = parsePrefixedNumeric(rawValue);
-    if (!parsed) continue;
+function getLaborPath(labor?: InteriorLabor) {
+  const level = labor?.level;
+  const area = level?.area;
+  return [area?.abbreviation ?? area?.name, level?.abbreviation ?? level?.name, labor?.abbreviation ?? labor?.name]
+    .filter(Boolean)
+    .join(" / ");
+}
 
-    pushResolvedResult(rawKey, parsed);
-  }
+function getResultText(results: Array<{ element?: ElementCatalogItem; value?: number | null; unit?: string | null }>) {
+  if (results.length === 0) return "-";
+  return results
+    .slice(0, 4)
+    .map((result) => {
+      const label = result.element?.symbol ?? result.element?.name ?? "Elemento";
+      return `${label}: ${result.value ?? "-"}${result.unit ? ` ${result.unit}` : ""}`;
+    })
+    .join(" · ");
+}
 
-  const uniqueResults = Array.from(
-    new Map(
-      results.map((item) => [`${normalizeLooseKey(item.elemento)}|${item.valor}|${item.prefijo ?? ""}`, item])
-    ).values()
-  );
+function getLabAssignmentLabel(assignment?: any) {
+  if (!assignment) return "-";
+  const slot = assignment.slot ? `${assignment.slot} - ` : "";
+  const name = assignment.laboratory?.name ?? assignment.interiorLaboratoryId ?? assignment.surfaceLaboratoryId ?? "Laboratorio";
+  return `${slot}${name}`;
+}
 
-  return { results: uniqueResults, unmatchedHeaders };
+function flattenAssignmentResults(assignments?: any[], fallbackResults?: any[]) {
+  const nested =
+    assignments?.flatMap((assignment) =>
+      (assignment.results ?? []).map((result: any) => ({
+        ...result,
+        labSlot: assignment.slot ?? "",
+        laboratory: result.laboratory ?? assignment.laboratory,
+        interiorLaboratoryId: assignment.interiorLaboratoryId,
+        surfaceLaboratoryId: result.surfaceLaboratoryId ?? assignment.surfaceLaboratoryId,
+        labAssignment: assignment,
+        labAssignmentLabel: getLabAssignmentLabel(assignment)
+      }))
+    ) ?? [];
+  return nested.length > 0 ? nested : fallbackResults ?? [];
+}
+
+function hasResults(results: unknown[]) {
+  return results.length > 0;
+}
+
+function stringifyDetail(value: unknown) {
+  return JSON.stringify(value, null, 2);
 }
 
 function isConnectivityIssue(error: unknown) {
-  if (typeof navigator !== "undefined" && !navigator.onLine) return true;
-  if (error instanceof ApiError) {
-    if (!error.statusCode) return true;
-    if (error.message.toLowerCase().includes("no se pudo conectar")) return true;
+  if (!navigator.onLine) return true;
+  if (error instanceof ApiError) return !error.statusCode;
+  if (error instanceof Error) {
+    return /red|network|conectar|connect|timeout|offline/i.test(error.message);
   }
   return false;
 }
 
-function fromPayloadToForm(payload: ExploracionMuestraPayload): FormState {
-  return {
-    nivel: payload.ubicacion.nivel,
-    este: payload.ubicacion.este?.toString() ?? "",
-    norte: payload.ubicacion.norte?.toString() ?? "",
-    elevacion: payload.ubicacion.elevacion?.toString() ?? "",
-    referenciaLugar: payload.ubicacion.referenciaLugar ?? "",
-    nombre: payload.nombre,
-    numero: payload.numero?.toString() ?? "",
-    tipoMuestra: payload.tipoMuestra ?? "",
-    sector: payload.sector ?? "",
-    laboratorio1: payload.laboratorio1 ?? "",
-    laboratorio2: payload.laboratorio2 ?? "",
-    laboratorio3: payload.laboratorio3 ?? "",
-    fechaMuestreo: payload.fechaMuestreo ?? "",
-    fechaEntrega: toLocalDatetimeInput(payload.fechaEntrega),
-    descripcion: payload.descripcion ?? ""
+function modalTitle(kind: ModalKind) {
+  const titles: Record<ModalKind, string> = {
+    element: "Crear elemento",
+    "interior-area": "Crear área interior",
+    "interior-level": "Crear nivel interior",
+    "interior-labor": "Crear labor interior",
+    "interior-objective": "Crear objetivo interior",
+    "interior-laboratory": "Crear laboratorio interior",
+    "surface-area": "Crear área de superficie",
+    "surface-objective": "Crear objetivo de superficie",
+    "surface-laboratory": "Crear laboratorio de superficie"
   };
+  return titles[kind];
 }
 
-function fromRemoteToPayload(data: ExploracionMuestraResponse): ExploracionMuestraPayload {
-  return {
-    nombre: data.nombre,
-    numero: data.numero ?? undefined,
-    tipoMuestra: data.tipoMuestra ?? undefined,
-    sector: data.sector ?? undefined,
-    laboratorio1: data.laboratorio1 ?? undefined,
-    laboratorio2: data.laboratorio2 ?? undefined,
-    laboratorio3: data.laboratorio3 ?? undefined,
-    fechaMuestreo: data.fechaMuestreo ?? undefined,
-    fechaEntrega: data.fechaEntrega ?? undefined,
-    descripcion: data.descripcion ?? undefined,
-    ubicacion: {
-      nivel: data.ubicacion.nivel,
-      este: data.ubicacion.este ?? undefined,
-      norte: data.ubicacion.norte ?? undefined,
-      elevacion: data.ubicacion.elevacion ?? undefined,
-      referenciaLugar: data.ubicacion.referenciaLugar ?? undefined
-    },
-    resultados: data.resultados?.map((item) => ({
-      elemento: item.elemento.nombre,
-      valor: item.valor,
-      prefijo: item.prefijo ?? undefined
-    }))
-  };
-}
-
-function exportRecordsToCsv(records: ExportRecord[]) {
-  if (records.length === 0) return;
-  const headers = Object.keys(records[0]);
-  const escape = (value: string) => `"${value.replace(/"/g, '""')}"`;
-  const body = records.map((record) =>
-    headers.map((key) => escape(record[key as keyof ExportRecord])).join(",")
-  );
-  const csv = [headers.join(","), ...body].join("\n");
-  const blob = new Blob([`\uFEFF${csv}`], { type: "text/csv;charset=utf-8;" });
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement("a");
-  link.href = url;
-  link.download = `exploraciones-${new Date().toISOString().slice(0, 10)}.csv`;
-  link.click();
-  URL.revokeObjectURL(url);
-}
-
-function exportRecordsToPdf(records: ExportRecord[]) {
-  const rowsHtml = records
-    .map(
-      (row) => `
-      <tr>
-        <td>${row.estado}</td>
-        <td>${row.nombre}</td>
-        <td>${row.codigo}</td>
-        <td>${row.tipoMuestra}</td>
-        <td>${row.sector}</td>
-        <td>${row.usuario}</td>
-        <td>${row.nivel}</td>
-        <td>${row.fechaMuestreo}</td>
-        <td>${row.fechaEntrega}</td>
-        <td>${row.resultados}</td>
-      </tr>
-    `
-    )
-    .join("");
-
-  const html = `
-    <!doctype html>
-    <html>
-      <head>
-        <meta charset="utf-8" />
-        <title>Reporte Exploraciones</title>
-        <style>
-          body { font-family: Arial, sans-serif; padding: 24px; }
-          h1 { margin: 0 0 8px; font-size: 20px; }
-          p { margin: 0 0 18px; color: #555; }
-          table { width: 100%; border-collapse: collapse; font-size: 12px; }
-          th, td { border: 1px solid #ddd; padding: 8px; text-align: left; vertical-align: top; }
-          th { background: #f4f4f4; }
-        </style>
-      </head>
-      <body>
-        <h1>Reporte de Muestras - Exploraciones</h1>
-        <p>Generado: ${new Date().toLocaleString("es-BO", { timeZone: "America/La_Paz" })}</p>
-        <table>
-          <thead>
-            <tr>
-              <th>Estado</th>
-              <th>Nombre</th>
-              <th>Codigo</th>
-              <th>Tipo muestra</th>
-              <th>Sector</th>
-              <th>Usuario</th>
-              <th>Nivel</th>
-              <th>Fecha Muestreo</th>
-              <th>Fecha Entrega</th>
-              <th>Resultados</th>
-            </tr>
-          </thead>
-          <tbody>${rowsHtml || '<tr><td colspan="10">Sin registros</td></tr>'}</tbody>
-        </table>
-      </body>
-    </html>
-  `;
-
-  const popup = window.open("", "_blank", "width=1000,height=700");
-  if (!popup) return;
-  popup.document.write(html);
-  popup.document.close();
-  popup.focus();
-  popup.print();
-}
-
-interface DetailContentProps {
-  nombre: string;
-  numero?: number;
-  tipoMuestra?: string;
-  sector?: string;
-  usuarioNombre?: string;
-  fechaMuestreo?: string;
-  fechaEntrega?: string;
-  laboratorio1?: string;
-  laboratorio2?: string;
-  laboratorio3?: string;
-  descripcion?: string;
-  nivel: string;
-  este?: number;
-  norte?: number;
-  elevacion?: number;
-  referenciaLugar?: string;
-  resultados: Array<{ key: string; label: string; value: string }>;
-}
-
-function DetailContent(props: DetailContentProps) {
+function FieldLabel({ children }: { children: React.ReactNode }) {
   return (
-    <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-      <article className="rounded-xl bg-[var(--color-surface-container-high)] p-4">
-        <p className="mb-3 text-xs font-bold uppercase tracking-wider text-[var(--color-on-surface-variant)]">
-          Resumen
-        </p>
-        <div className="space-y-2 text-sm">
-          <p>
-            <strong>Nombre:</strong> {props.nombre}
-          </p>
-          <p>
-            <strong>Codigo:</strong> {props.numero ?? "-"}
-          </p>
-          <p>
-            <strong>Tipo de muestra:</strong> {props.tipoMuestra ?? "-"}
-          </p>
-          <p>
-            <strong>Sector:</strong> {props.sector ?? "-"}
-          </p>
-          <p>
-            <strong>Usuario:</strong> {props.usuarioNombre ?? "-"}
-          </p>
-          <p>
-            <strong>Fecha muestreo:</strong> {formatDateTime(props.fechaMuestreo)}
-          </p>
-          <p>
-            <strong>Fecha entrega:</strong> {formatDateTime(props.fechaEntrega)}
-          </p>
-        </div>
-      </article>
-
-      <article className="rounded-xl bg-[var(--color-surface-container-high)] p-4">
-        <p className="mb-3 text-xs font-bold uppercase tracking-wider text-[var(--color-on-surface-variant)]">
-          Laboratorios
-        </p>
-        <div className="space-y-2 text-sm">
-          <p>
-            <strong>Laboratorio 1:</strong> {props.laboratorio1 ?? "-"}
-          </p>
-          <p>
-            <strong>Laboratorio 2:</strong> {props.laboratorio2 ?? "-"}
-          </p>
-          <p>
-            <strong>Laboratorio 3:</strong> {props.laboratorio3 ?? "-"}
-          </p>
-        </div>
-      </article>
-
-      <article className="rounded-xl bg-[var(--color-surface-container-high)] p-4 md:col-span-2">
-        <p className="mb-3 text-xs font-bold uppercase tracking-wider text-[var(--color-on-surface-variant)]">
-          Ubicacion
-        </p>
-        <div className="grid grid-cols-1 gap-2 text-sm sm:grid-cols-2 lg:grid-cols-3">
-          <p>
-            <strong>Nivel:</strong> {props.nivel}
-          </p>
-          <p>
-            <strong>Este:</strong> {props.este ?? "-"}
-          </p>
-          <p>
-            <strong>Norte:</strong> {props.norte ?? "-"}
-          </p>
-          <p>
-            <strong>Elevacion:</strong> {props.elevacion ?? "-"}
-          </p>
-          <p className="sm:col-span-2">
-            <strong>Referencia:</strong> {props.referenciaLugar ?? "-"}
-          </p>
-        </div>
-      </article>
-
-      <article className="rounded-xl bg-[var(--color-surface-container-high)] p-4 md:col-span-2">
-        <p className="mb-2 text-xs font-bold uppercase tracking-wider text-[var(--color-on-surface-variant)]">
-          Descripcion
-        </p>
-        <p className="text-sm text-[var(--color-on-surface)]">{props.descripcion ?? "-"}</p>
-      </article>
-
-      <article className="rounded-xl bg-[var(--color-surface-container-high)] p-4 md:col-span-2">
-        <p className="mb-3 text-xs font-bold uppercase tracking-wider text-[var(--color-on-surface-variant)]">
-          Resultados quimicos
-        </p>
-        <div className="text-sm">
-          {props.resultados.length === 0 ? (
-            <p>Sin resultados.</p>
-          ) : (
-            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-3">
-              {props.resultados.map((item) => (
-                <article
-                  key={item.key}
-                  className="rounded-lg border border-[var(--color-border-soft)] bg-[var(--color-surface-container-low)] px-3 py-2"
-                >
-                  <p className="text-[11px] font-bold uppercase tracking-wider text-[var(--color-on-surface-variant)]">
-                    {item.label}
-                  </p>
-                  <p className="mt-1 text-base font-semibold text-[var(--color-on-surface)]">
-                    {item.value}
-                  </p>
-                </article>
-              ))}
-            </div>
-          )}
-        </div>
-      </article>
-    </div>
+    <label className="mb-1.5 block text-xs font-bold uppercase tracking-wider text-[var(--color-on-surface-variant)]">
+      {children}
+    </label>
   );
 }
 
 export function ExploracionesPage() {
-  const navigate = useNavigate();
   const { showError, showSuccess } = useToast();
-  const saveMutation = useSaveMuestraOfflineMutation();
-  const saveBatchMutation = useSaveMuestrasOfflineBatchMutation();
-  const updateOfflineMutation = useUpdateMuestraOfflineMutation();
-  const queueRemoteEditOfflineMutation = useQueueRemoteEditOfflineMutation();
-  const updateRemoteMutation = useUpdateMuestraRemotaMutation();
-  const syncMutation = useSyncExploracionesMutation();
-
-  const offlineQuery = useExploracionesOfflineQuery();
-  const remotasQuery = useExploracionesRemotasQuery();
-  const laboratoriosQuery = useExploracionesLaboratoriosQuery();
-  const elementosQuery = useExploracionesElementosQuery();
-
-  const [form, setForm] = useState<FormState>(buildInitialState);
-  const [resultados, setResultados] = useState<DynamicResultado[]>([
-    { id: buildRowId(), elemento: "", valor: "" }
-  ]);
-  const [editTarget, setEditTarget] = useState<EditTarget>(null);
-  const [detailTarget, setDetailTarget] = useState<DetailTarget>(null);
-  const [formCollapsed, setFormCollapsed] = useState(true);
+  const { user } = useAuth();
+  const [registerType, setRegisterType] = useState<RegisterType>("interior");
+  const [sampleForm, setSampleForm] = useState<SampleForm>(() => initialSampleForm());
+  const [catalogForm, setCatalogForm] = useState<CatalogForm>(() => initialCatalogForm());
+  const [results, setResults] = useState<ResultRow[]>(() => []);
+  const [modalKind, setModalKind] = useState<ModalKind | null>(null);
   const [search, setSearch] = useState("");
-  const [statusFilter, setStatusFilter] = useState<"todos" | RowStatus>("todos");
-  const [levelFilter, setLevelFilter] = useState("todos");
-  const [resultadosFilter, setResultadosFilter] = useState<"todos" | "con" | "sin">("todos");
-  const [entregaFilter, setEntregaFilter] = useState<"todos" | "con-entrega" | "sin-entrega">(
-    "todos"
-  );
+  const [onlyMine, setOnlyMine] = useState(false);
+  const [defaultsSeeded, setDefaultsSeeded] = useState(false);
+  const [editTarget, setEditTarget] = useState<EditTarget>(null);
+  const [geoPoint, setGeoPoint] = useState<GeoPoint | null>(null);
+  const [geoStatus, setGeoStatus] = useState<string>("");
+  const [isLocating, setIsLocating] = useState(false);
 
-  function downloadMuestrasTemplate() {
-    downloadTemplateXlsx(
-      "Muestras",
-      [
-        {
-          nombre: "N80 VETA S",
-          numero: 52,
-          tipoMuestra: "Canal",
-          sector: "SUR",
-          laboratorio1: "INGENIO LITORAL Chillcobija",
-          laboratorio2: "",
-          laboratorio3: "",
-          fechaEntrega: "",
-          descripcion: "Descripcion de la muestra",
-          nivel: "NIV - 80",
-          este: 763235.063,
-          norte: 7593360.633,
-          elevacion: 5072.42,
-          referenciaLugar: "VETA DE SULFUROS",
-          elemento_Ag: "<0.008",
-          elemento_Au: "0.01",
-          resultado_1_elemento: "",
-          resultado_1_valor: "",
-          resultado_1_prefijo: ""
+  const remoteElements = useSharedElementsQuery();
+  const remoteInteriorAreas = useInteriorAreasQuery();
+  const remoteInteriorLevels = useInteriorLevelsQuery(sampleForm.interiorAreaId);
+  const remoteInteriorLabors = useInteriorLaborsQuery(sampleForm.interiorLevelId);
+  const remoteInteriorObjectives = useInteriorObjectivesQuery();
+  const remoteInteriorLaboratories = useInteriorLaboratoriesQuery();
+  const remoteInteriorSamples = useInteriorSamplesQuery({
+    interiorLaborId: sampleForm.interiorLaborId || undefined,
+    createdById: onlyMine ? user?.id : undefined,
+    search: search || undefined
+  });
+  const remoteSurfaceAreas = useSurfaceAreasQuery();
+  const remoteSurfaceObjectives = useSurfaceObjectivesQuery();
+  const remoteSurfaceLaboratories = useSurfaceLaboratoriesQuery();
+  const remoteSurfaceSamples = useSurfaceSamplesQuery({
+    surfaceAreaId: sampleForm.surfaceAreaId || undefined,
+    createdById: onlyMine ? user?.id : undefined,
+    search: search || undefined
+  });
+  const offlineCatalogs = useOfflineProposalCatalogsQuery();
+  const offlineSamples = useOfflineProposalSamplesQuery();
+  const queueCatalog = useQueueProposalCatalogMutation();
+  const queueSample = useQueueProposalSampleMutation();
+  const updateQueuedSample = useUpdateQueuedProposalSampleMutation();
+  const queueRemoteEdit = useQueueRemoteProposalSampleEditMutation();
+  const updateInteriorSample = useUpdateInteriorSampleWithResultsMutation();
+  const updateSurfaceSample = useUpdateSurfaceSampleWithResultsMutation();
+  const syncMutation = useSyncProposalSamplesMutation();
+
+  const localCatalogs = offlineCatalogs.data ?? [];
+  const localSamples = offlineSamples.data ?? [];
+
+  useEffect(() => {
+    if (!offlineCatalogs.data) return;
+    if (defaultsSeeded) return;
+    setDefaultsSeeded(true);
+
+    const hasLocalSeed = (localId: string) => localCatalogs.some((item) => item.localId === localId);
+
+    async function seedDefaults() {
+      for (const area of INTERIOR_DEFAULT_AREAS) {
+        if (hasLocalSeed(area.localId)) continue;
+        await queueCatalog.mutateAsync({
+          module: "interior",
+          entity: "area",
+          payload: { name: area.name, abbreviation: area.abbreviation },
+          catalog: {
+            localId: area.localId,
+            module: "interior",
+            entity: "area",
+            name: area.name,
+            abbreviation: area.abbreviation
+          }
+        });
+      }
+
+      for (const level of INTERIOR_DEFAULT_LEVELS) {
+        if (hasLocalSeed(level.localId)) continue;
+        await queueCatalog.mutateAsync({
+          module: "interior",
+          entity: "level",
+          payload: {
+            interiorAreaId: level.areaLocalId,
+            name: level.name,
+            abbreviation: level.abbreviation
+          },
+          catalog: {
+            localId: level.localId,
+            module: "interior",
+            entity: "level",
+            name: level.name,
+            abbreviation: level.abbreviation,
+            parentLocalId: level.areaLocalId
+          }
+        });
+      }
+
+      for (const labor of INTERIOR_DEFAULT_LABORS) {
+        if (hasLocalSeed(labor.localId)) continue;
+        await queueCatalog.mutateAsync({
+          module: "interior",
+          entity: "labor",
+          payload: {
+            interiorLevelId: labor.levelLocalId,
+            name: labor.name,
+            abbreviation: labor.abbreviation
+          },
+          catalog: {
+            localId: labor.localId,
+            module: "interior",
+            entity: "labor",
+            name: labor.name,
+            abbreviation: labor.abbreviation,
+            parentLocalId: labor.levelLocalId
+          }
+        });
+      }
+
+      if (!hasLocalSeed(INTERIOR_OBJECTIVE.localId)) {
+        await queueCatalog.mutateAsync({
+          module: "interior",
+          entity: "objective",
+          payload: { name: INTERIOR_OBJECTIVE.name },
+          catalog: {
+            localId: INTERIOR_OBJECTIVE.localId,
+            module: "interior",
+            entity: "objective",
+            name: INTERIOR_OBJECTIVE.name
+          }
+        });
+      }
+
+      for (const area of SURFACE_DEFAULT_AREAS) {
+        if (hasLocalSeed(area.localId)) continue;
+        await queueCatalog.mutateAsync({
+          module: "surface",
+          entity: "area",
+          payload: { name: area.name, abbreviation: area.abbreviation },
+          catalog: {
+            localId: area.localId,
+            module: "surface",
+            entity: "area",
+            name: area.name,
+            abbreviation: area.abbreviation
+          }
+        });
+      }
+
+      if (!hasLocalSeed(SURFACE_OBJECTIVE.localId)) {
+        await queueCatalog.mutateAsync({
+          module: "surface",
+          entity: "objective",
+          payload: { name: SURFACE_OBJECTIVE.name },
+          catalog: {
+            localId: SURFACE_OBJECTIVE.localId,
+            module: "surface",
+            entity: "objective",
+            name: SURFACE_OBJECTIVE.name
+          }
+        });
+      }
+
+      for (const module of ["interior", "surface"] as const) {
+        for (const lab of DEFAULT_LABORATORIES) {
+          const localId = `seed-${module}-laboratory-${lab.abbreviation.toLowerCase()}`;
+          if (hasLocalSeed(localId)) continue;
+          await queueCatalog.mutateAsync({
+            module,
+            entity: "laboratory",
+            payload: { name: lab.name, abbreviation: lab.abbreviation },
+            catalog: {
+              localId,
+              module,
+              entity: "laboratory",
+              name: lab.name,
+              abbreviation: lab.abbreviation
+            }
+          });
         }
-      ],
-      "plantilla-muestras-exploraciones.xlsx"
-    );
+      }
+    }
+
+    void seedDefaults();
+  }, [defaultsSeeded, offlineCatalogs.data]);
+
+  const selectedInteriorArea = [
+    ...(remoteInteriorAreas.data ?? []),
+    ...localCatalogs.filter((item) => item.module === "interior" && item.entity === "area").map(localCatalogToItem)
+  ].find((item) => item.id === sampleForm.interiorAreaId);
+
+  const selectedInteriorAreaIds = new Set<string>(sampleForm.interiorAreaId ? [sampleForm.interiorAreaId] : []);
+  if (selectedInteriorArea) {
+    const selectedName = normalizeCatalogText(selectedInteriorArea.name);
+    const selectedAbbreviation = normalizeCatalogText(selectedInteriorArea.abbreviation);
+    localCatalogs
+      .filter((item) => item.module === "interior" && item.entity === "area")
+      .filter(
+        (item) =>
+          normalizeCatalogText(item.name) === selectedName ||
+          normalizeCatalogText(item.abbreviation) === selectedAbbreviation
+      )
+      .forEach((item) => {
+        selectedInteriorAreaIds.add(item.localId);
+        if (item.remoteId) selectedInteriorAreaIds.add(item.remoteId);
+      });
   }
 
-  async function onImportMuestrasFile(file: File) {
-    try {
-      const rows = await readExcelRows(file);
-      if (rows.length === 0) {
-        showError("El archivo no tiene filas para procesar.");
-        return;
-      }
+  const elements = mergeById(
+    remoteElements.data ?? [],
+    localCatalogs.filter((item) => item.entity === "element").map(localElementToItem)
+  );
+  const interiorAreas = mergeById(
+    remoteInteriorAreas.data ?? [],
+    localCatalogs.filter((item) => item.module === "interior" && item.entity === "area").map(localCatalogToItem)
+  );
+  const interiorLevels = mergeById(
+    remoteInteriorLevels.data ?? [],
+    localCatalogs
+      .filter((item) => item.module === "interior" && item.entity === "level")
+      .filter(
+        (item) =>
+          !sampleForm.interiorAreaId ||
+          selectedInteriorAreaIds.has(item.parentRemoteId ?? "") ||
+          selectedInteriorAreaIds.has(item.parentLocalId ?? "")
+      )
+      .map((item) => ({
+        ...localCatalogToItem(item),
+        interiorAreaId: item.parentRemoteId ?? item.parentLocalId ?? "",
+        elevation: item.elevation
+      }))
+  );
 
-      const catalogElementNames = elementos
-        .map((item) => item.nombre?.trim())
-        .filter((name): name is string => Boolean(name));
+  const selectedInteriorLevel = [
+    ...(remoteInteriorLevels.data ?? []),
+    ...localCatalogs
+      .filter((item) => item.module === "interior" && item.entity === "level")
+      .map((item) => ({
+        ...localCatalogToItem(item),
+        interiorAreaId: item.parentRemoteId ?? item.parentLocalId ?? "",
+        elevation: item.elevation
+      }))
+  ].find((item) => item.id === sampleForm.interiorLevelId);
 
-      if (catalogElementNames.length === 0) {
-        showError(
-          "No hay catálogo de elementos disponible. Sincroniza/crea elementos primero para importar resultados."
-        );
-        return;
-      }
+  const selectedInteriorLevelIds = new Set<string>(sampleForm.interiorLevelId ? [sampleForm.interiorLevelId] : []);
+  if (selectedInteriorLevel) {
+    const selectedName = normalizeCatalogText(selectedInteriorLevel.name);
+    const selectedAbbreviation = normalizeCatalogText(selectedInteriorLevel.abbreviation);
+    localCatalogs
+      .filter((item) => item.module === "interior" && item.entity === "level")
+      .filter(
+        (item) =>
+          normalizeCatalogText(item.name) === selectedName ||
+          normalizeCatalogText(item.abbreviation) === selectedAbbreviation
+      )
+      .forEach((item) => {
+        selectedInteriorLevelIds.add(item.localId);
+        if (item.remoteId) selectedInteriorLevelIds.add(item.remoteId);
+      });
+  }
 
-      const payloads: ExploracionMuestraPayload[] = [];
-      const unmatchedResultHeaders = new Set<string>();
+  const interiorLabors = mergeById(
+    remoteInteriorLabors.data ?? [],
+    localCatalogs
+      .filter((item) => item.module === "interior" && item.entity === "labor")
+      .filter(
+        (item) =>
+          !sampleForm.interiorLevelId ||
+          selectedInteriorLevelIds.has(item.parentRemoteId ?? "") ||
+          selectedInteriorLevelIds.has(item.parentLocalId ?? "")
+      )
+      .map((item) => ({
+        ...localCatalogToItem(item),
+        interiorLevelId: item.parentRemoteId ?? item.parentLocalId ?? ""
+      }))
+  );
+  const interiorObjectives = mergeById(
+    remoteInteriorObjectives.data ?? [],
+    localCatalogs.filter((item) => item.module === "interior" && item.entity === "objective").map(localCatalogToItem)
+  );
+  const selectedInteriorLevelOption = interiorLevels.find((item) => item.id === sampleForm.interiorLevelId);
+  const selectedInteriorLaborOption = interiorLabors.find((item) => item.id === sampleForm.interiorLaborId);
+  const interiorLaboratories = mergeById(
+    remoteInteriorLaboratories.data ?? [],
+    localCatalogs.filter((item) => item.module === "interior" && item.entity === "laboratory").map(localCatalogToItem)
+  );
+  const surfaceAreas = mergeById(
+    remoteSurfaceAreas.data ?? [],
+    localCatalogs.filter((item) => item.module === "surface" && item.entity === "area").map(localCatalogToItem)
+  );
+  const surfaceObjectives = mergeById(
+    remoteSurfaceObjectives.data ?? [],
+    localCatalogs.filter((item) => item.module === "surface" && item.entity === "objective").map(localCatalogToItem)
+  );
+  const surfaceLaboratories = mergeById(
+    remoteSurfaceLaboratories.data ?? [],
+    localCatalogs.filter((item) => item.module === "surface" && item.entity === "laboratory").map(localCatalogToItem)
+  );
+  const selectedSurfaceAreaOption = surfaceAreas.find((item) => item.id === sampleForm.surfaceAreaId);
 
-      for (const row of rows) {
-        const nombre = toStringOrUndefined(
-          getCellValueByAliases(row, ["nombre", "muestra", "sample", "idMuestra"])
-        );
-        const nivel = toStringOrUndefined(getCellValueByAliases(row, ["nivel"]));
-        if (!nombre || !nivel) continue;
+  const activeObjectives = registerType === "interior" ? interiorObjectives : surfaceObjectives;
+  const activeLaboratories = registerType === "interior" ? interiorLaboratories : surfaceLaboratories;
+  const localVisibleSamples = localSamples.filter((item) => item.module === registerType && !item.synced);
+  const remoteVisibleSamples = registerType === "interior" ? remoteInteriorSamples.data ?? [] : remoteSurfaceSamples.data ?? [];
+  const interiorNamePrefix = [
+    normalizeNameToken(selectedInteriorArea?.abbreviation ?? selectedInteriorArea?.name),
+    normalizeNameToken(selectedInteriorLevelOption?.abbreviation ?? selectedInteriorLevelOption?.name),
+    normalizeNameToken(selectedInteriorLaborOption?.abbreviation ?? selectedInteriorLaborOption?.name)
+  ]
+    .filter(Boolean)
+    .join("-");
+  const surfaceNamePrefix = normalizeNameToken(
+    selectedSurfaceAreaOption?.abbreviation ?? selectedSurfaceAreaOption?.name
+  );
+  const sampleNamePrefix = registerType === "interior" ? interiorNamePrefix : surfaceNamePrefix;
+  const normalizedSuffix = normalizeNameToken(sampleForm.sampleNameSuffix);
+  const sampleName = [sampleNamePrefix, normalizedSuffix].filter(Boolean).join("-");
 
-        const { results: resultados, unmatchedHeaders } = extractResultadosFromExcelRow(
-          row,
-          catalogElementNames
-        );
-        for (const header of unmatchedHeaders) unmatchedResultHeaders.add(header);
-        const payload = exploracionMuestraPayloadSchema.parse({
-          nombre,
-          numero: toNumberOrUndefined(
-            getCellValueByAliases(row, ["numero", "nro", "codigo", "código", "cod"])
-          ),
-          tipoMuestra: toStringOrUndefined(
-            getCellValueByAliases(row, ["tipoMuestra", "tipo de muestra", "tipo muestra"])
-          ),
-          sector: toStringOrUndefined(getCellValueByAliases(row, ["sector"])),
-          laboratorio1: toStringOrUndefined(
-            getCellValueByAliases(row, ["laboratorio1", "laboratorio 1"])
-          ),
-          laboratorio2: toStringOrUndefined(
-            getCellValueByAliases(row, ["laboratorio2", "laboratorio 2"])
-          ),
-          laboratorio3: toStringOrUndefined(
-            getCellValueByAliases(row, ["laboratorio3", "laboratorio 3"])
-          ),
-          fechaMuestreo:
-            normalizeIsoFromCell(
-              getCellValueByAliases(row, ["fechaMuestreo", "fecha muestreo"])
-            ) ?? getNowLaPazIso(),
-          fechaEntrega: normalizeIsoFromCell(
-            getCellValueByAliases(row, ["fechaEntrega", "fecha entrega"])
-          ),
-          descripcion: toStringOrUndefined(
-            getCellValueByAliases(row, ["descripcion", "descripción"])
-          ),
-          ubicacion: {
-            nivel,
-            este: toNumberOrUndefined(getCellValueByAliases(row, ["este"])),
-            norte: toNumberOrUndefined(getCellValueByAliases(row, ["norte"])),
-            elevacion: toNumberOrUndefined(getCellValueByAliases(row, ["elevacion", "elevación"])),
-            referenciaLugar: toStringOrUndefined(
-              getCellValueByAliases(row, [
-                "referenciaLugar",
-                "referencia del lugar",
-                "referencia de lugar",
-                "referencia"
-              ])
-            )
-          },
-          resultados: resultados.length ? resultados : undefined
-        });
+  const sampleRows = useMemo<SampleTableRow[]>(() => {
+    const elementById = new Map(elements.map((element) => [element.id, element]));
+    const localRows = localVisibleSamples.map((item) => ({
+      id: item.localId,
+      code: item.synced ? item.code : `${item.code} (offline)`,
+      name: (item.payload as any).name ?? null,
+      sampledAt: item.payload.sampledAt,
+      objectiveName: "-",
+      location: item.module === "interior" ? "Interior Mina" : "Superficie",
+      createdByName: user?.nombre ?? "Usuario actual",
+      results: flattenAssignmentResults((item.payload as any).labAssignments, (item.payload as any).results).map((result) => ({
+        ...result,
+        element: elementById.get(result.elementId)
+      })),
+      labAssignments: (item.payload as any).labAssignments ?? [],
+      raw: item,
+      source: "local" as const
+    }));
+    const remoteRows = remoteVisibleSamples.map((sample) => {
+      const isInterior = registerType === "interior";
+      const interiorSample = sample as InteriorSample;
+      const surfaceSample = sample as SurfaceSample;
+      return {
+        id: sample.id,
+        code: sample.code,
+        name: sample.name ?? null,
+        sampledAt: sample.sampledAt,
+        objectiveName: (isInterior ? interiorSample.objective?.name : surfaceSample.objective?.name) ?? "-",
+        location: isInterior ? getLaborPath(interiorSample.labor) || "-" : surfaceSample.area?.name ?? "-",
+        createdByName: sample.createdBy?.nombre ?? "-",
+        results: flattenAssignmentResults((sample as any).labAssignments, sample.results),
+        labAssignments: (sample as any).labAssignments ?? [],
+        raw: sample,
+        source: "remote" as const
+      };
+    });
+    const rows = [...localRows, ...remoteRows];
+    const query = search.trim().toLowerCase();
+    return query ? rows.filter((row) => `${row.code} ${row.name ?? ""} ${row.location}`.toLowerCase().includes(query)) : rows;
+  }, [elements, localVisibleSamples, registerType, remoteVisibleSamples, search, user?.nombre]);
 
-        payloads.push(payload);
-      }
-
-      if (payloads.length === 0) {
-        showError("No se encontraron filas válidas con nombre y nivel.");
-        return;
-      }
-
-      saveBatchMutation.mutate(payloads, {
-        onSuccess: () => {
-          const unmatchedCount = unmatchedResultHeaders.size;
-          if (unmatchedCount > 0) {
-            showError(
-              `Se cargaron ${payloads.length} muestras, pero ${unmatchedCount} columnas de resultados no coincidieron con elementos existentes.`
-            );
-          } else {
-            showSuccess(`${payloads.length} muestras cargadas a la cola local.`);
-          }
-          attemptAutoSync();
-        },
-        onError: (error) => {
-          const message = error instanceof Error ? error.message : "No se pudo cargar el archivo.";
-          showError(message);
+  useEffect(() => {
+    function onOnline() {
+      syncMutation.mutate(undefined, {
+        onSuccess: (result) => {
+          if (result.synced > 0) showSuccess(`${result.synced} registros offline sincronizados.`);
         }
       });
-    } catch (error) {
-      const message = error instanceof Error ? error.message : "No se pudo procesar el Excel.";
-      showError(message);
     }
-  }
+    window.addEventListener("online", onOnline);
+    if (navigator.onLine) onOnline();
+    return () => window.removeEventListener("online", onOnline);
+  }, []);
 
-  const pendingLocales = useMemo(
-    () => (offlineQuery.data ?? []).filter((item) => !item.synced),
-    [offlineQuery.data]
-  );
-  const laboratorios = laboratoriosQuery.data?.data ?? [];
-  const elementos = elementosQuery.data?.data ?? [];
-  const tableRows = useMemo<TableRow[]>(() => {
-    const pendingRemoteIds = new Set(
-      pendingLocales.map((item) => item.remoteId).filter((id): id is string => Boolean(id))
-    );
+  useEffect(() => {
+    const items: Array<Omit<OfflineProposalCatalog, "id" | "createdAt" | "updatedAt" | "synced">> = [
+      ...(remoteElements.data ?? []).map((item) => ({
+        localId: `cache-element-${item.id}`,
+        remoteId: item.id,
+        module: "shared" as const,
+        entity: "element" as const,
+        name: item.name,
+        symbol: item.symbol,
+        defaultUnit: item.defaultUnit ?? undefined,
+        description: item.description ?? undefined
+      })),
+      ...(remoteInteriorAreas.data ?? []).map((item) => ({
+        localId: `cache-interior-area-${item.id}`,
+        remoteId: item.id,
+        module: "interior" as const,
+        entity: "area" as const,
+        name: item.name,
+        abbreviation: item.abbreviation ?? undefined,
+        description: item.description ?? undefined
+      })),
+      ...(remoteInteriorLevels.data ?? []).map((item) => ({
+        localId: `cache-interior-level-${item.id}`,
+        remoteId: item.id,
+        module: "interior" as const,
+        entity: "level" as const,
+        name: item.name,
+        abbreviation: item.abbreviation ?? undefined,
+        description: item.description ?? undefined,
+        parentRemoteId: item.interiorAreaId,
+        elevation: item.elevation ?? undefined
+      })),
+      ...(remoteInteriorLabors.data ?? []).map((item) => ({
+        localId: `cache-interior-labor-${item.id}`,
+        remoteId: item.id,
+        module: "interior" as const,
+        entity: "labor" as const,
+        name: item.name,
+        abbreviation: item.abbreviation ?? undefined,
+        description: item.description ?? undefined,
+        parentRemoteId: item.interiorLevelId
+      })),
+      ...(remoteInteriorObjectives.data ?? []).map((item) => ({
+        localId: `cache-interior-objective-${item.id}`,
+        remoteId: item.id,
+        module: "interior" as const,
+        entity: "objective" as const,
+        name: item.name,
+        abbreviation: item.abbreviation ?? undefined,
+        description: item.description ?? undefined
+      })),
+      ...(remoteInteriorLaboratories.data ?? []).map((item) => ({
+        localId: `cache-interior-laboratory-${item.id}`,
+        remoteId: item.id,
+        module: "interior" as const,
+        entity: "laboratory" as const,
+        name: item.name,
+        abbreviation: item.abbreviation ?? undefined,
+        description: item.description ?? undefined
+      })),
+      ...(remoteSurfaceAreas.data ?? []).map((item) => ({
+        localId: `cache-surface-area-${item.id}`,
+        remoteId: item.id,
+        module: "surface" as const,
+        entity: "area" as const,
+        name: item.name,
+        abbreviation: item.abbreviation ?? undefined,
+        description: item.description ?? undefined
+      })),
+      ...(remoteSurfaceObjectives.data ?? []).map((item) => ({
+        localId: `cache-surface-objective-${item.id}`,
+        remoteId: item.id,
+        module: "surface" as const,
+        entity: "objective" as const,
+        name: item.name,
+        abbreviation: item.abbreviation ?? undefined,
+        description: item.description ?? undefined
+      })),
+      ...(remoteSurfaceLaboratories.data ?? []).map((item) => ({
+        localId: `cache-surface-laboratory-${item.id}`,
+        remoteId: item.id,
+        module: "surface" as const,
+        entity: "laboratory" as const,
+        name: item.name,
+        abbreviation: item.abbreviation ?? undefined,
+        description: item.description ?? undefined
+      }))
+    ];
 
-    const remotas: TableRow[] = (remotasQuery.data?.data ?? [])
-      .filter((item) => !pendingRemoteIds.has(item.id))
-      .map((item) => ({
-        key: `r-${item.id}`,
-        source: "remota",
-        id: item.id,
-        nombre: item.nombre,
-        numero: item.numero ?? undefined,
-        tipoMuestra: item.tipoMuestra ?? undefined,
-        sector: item.sector ?? undefined,
-        usuarioNombre: item.usuario?.nombre ?? undefined,
-        nivel: item.ubicacion.nivel,
-        laboratorio1: item.laboratorio1 ?? undefined,
-        laboratorio2: item.laboratorio2 ?? undefined,
-        laboratorio3: item.laboratorio3 ?? undefined,
-        fechaMuestreo: item.fechaMuestreo ?? undefined,
-        fechaEntrega: item.fechaEntrega ?? undefined,
-        descripcion: item.descripcion ?? undefined,
-        este: item.ubicacion.este ?? undefined,
-        norte: item.ubicacion.norte ?? undefined,
-        elevacion: item.ubicacion.elevacion ?? undefined,
-        referenciaLugar: item.ubicacion.referenciaLugar ?? undefined,
-        resultadosTexto: (item.resultados ?? [])
-          .map(
-            (r) =>
-              `${r.elemento.nombre}: ${r.prefijo ?? ""}${r.valor}${r.elemento.unidad ? ` ${r.elemento.unidad}` : ""}`
-          )
-          .join(" | "),
-        status: "Sincronizado",
-        canEdit: !item.fechaEntrega
-      }));
+    if (items.length > 0) void cacheProposalCatalogs(items);
+  }, [
+    remoteElements.data,
+    remoteInteriorAreas.data,
+    remoteInteriorLabors.data,
+    remoteInteriorLaboratories.data,
+    remoteInteriorLevels.data,
+    remoteInteriorObjectives.data,
+    remoteSurfaceAreas.data,
+    remoteSurfaceLaboratories.data,
+    remoteSurfaceObjectives.data
+  ]);
 
-    const locales: TableRow[] = pendingLocales.map((item) => ({
-      key: `l-${item.id}`,
-      source: "local",
-      id: item.id ?? item.localId,
-      nombre: item.payload.nombre,
-      numero: item.payload.numero,
-      tipoMuestra: item.payload.tipoMuestra,
-      sector: item.payload.sector,
-      usuarioNombre: undefined,
-      nivel: item.payload.ubicacion.nivel,
-      laboratorio1: item.payload.laboratorio1,
-      laboratorio2: item.payload.laboratorio2,
-      laboratorio3: item.payload.laboratorio3,
-      fechaMuestreo: item.payload.fechaMuestreo,
-      fechaEntrega: item.payload.fechaEntrega,
-      descripcion: item.payload.descripcion,
-      este: item.payload.ubicacion.este,
-      norte: item.payload.ubicacion.norte,
-      elevacion: item.payload.ubicacion.elevacion,
-      referenciaLugar: item.payload.ubicacion.referenciaLugar,
-      resultadosTexto: (item.payload.resultados ?? [])
-        .map((r) => `${r.elemento}: ${r.prefijo ?? ""}${r.valor}`)
-        .join(" | "),
-      status: item.syncError ? "Error de sincronizacion" : "Pendiente local",
-      canEdit: !item.payload.fechaEntrega
-    }));
-
-    return [...locales, ...remotas];
-  }, [pendingLocales, remotasQuery.data?.data]);
-
-  const levelOptions = useMemo(
-    () =>
-      Array.from(new Set(tableRows.map((row) => row.nivel).filter(Boolean))).sort((a, b) =>
-        a.localeCompare(b)
-      ),
-    [tableRows]
-  );
-
-  const sectorOptions = useMemo(
-    () =>
-      Array.from(new Set(tableRows.map((row) => row.sector).filter(Boolean))).sort((a, b) =>
-        String(a).localeCompare(String(b))
-      ),
-    [tableRows]
-  );
-
-  const tipoMuestraOptions = useMemo(
-    () =>
-      Array.from(new Set(tableRows.map((row) => row.tipoMuestra).filter(Boolean))).sort((a, b) =>
-        String(a).localeCompare(String(b))
-      ),
-    [tableRows]
-  );
-
-  const filteredRows = useMemo(() => {
-    const query = search.trim().toLowerCase();
-
-    return tableRows.filter((row) => {
-      const matchesSearch =
-        !query ||
-        row.nombre.toLowerCase().includes(query) ||
-        String(row.numero ?? "")
-          .toLowerCase()
-          .includes(query) ||
-        (row.tipoMuestra ?? "").toLowerCase().includes(query) ||
-        (row.sector ?? "").toLowerCase().includes(query) ||
-        (row.usuarioNombre ?? "").toLowerCase().includes(query) ||
-        row.nivel.toLowerCase().includes(query) ||
-        (row.laboratorio1 ?? "").toLowerCase().includes(query) ||
-        (row.laboratorio2 ?? "").toLowerCase().includes(query) ||
-        (row.laboratorio3 ?? "").toLowerCase().includes(query);
-
-      const matchesStatus = statusFilter === "todos" || row.status === statusFilter;
-      const matchesLevel = levelFilter === "todos" || row.nivel === levelFilter;
-      const hasResultados = Boolean(row.resultadosTexto.trim());
-      const matchesResultados =
-        resultadosFilter === "todos" ||
-        (resultadosFilter === "con" && hasResultados) ||
-        (resultadosFilter === "sin" && !hasResultados);
-      const hasEntrega = Boolean(row.fechaEntrega);
-      const matchesEntrega =
-        entregaFilter === "todos" ||
-        (entregaFilter === "con-entrega" && hasEntrega) ||
-        (entregaFilter === "sin-entrega" && !hasEntrega);
-
-      return matchesSearch && matchesStatus && matchesLevel && matchesResultados && matchesEntrega;
-    });
-  }, [tableRows, search, statusFilter, levelFilter, resultadosFilter, entregaFilter]);
-
-  const exportRows = useMemo<ExportRecord[]>(
-    () => filteredRows.map(mapRowToExportRecord),
-    [filteredRows]
-  );
-
-  const attemptAutoSync = useCallback(() => {
-    if (typeof navigator !== "undefined" && !navigator.onLine) return;
-    if (syncMutation.isPending || pendingLocales.length === 0) return;
-    syncMutation.mutate(undefined, {
-      onSuccess: (result) => {
-        if (result.failed > 0)
-          showError("Algunos registros no pudieron sincronizarse por un error.");
+  function setSampleField(field: keyof SampleForm, value: string) {
+    setSampleForm((current) => {
+      if (field === "interiorAreaId") {
+        return { ...current, interiorAreaId: value, interiorLevelId: "", interiorLaborId: "" };
       }
+      if (field === "interiorLevelId") {
+        return { ...current, interiorLevelId: value, interiorLaborId: "" };
+      }
+      return { ...current, [field]: value };
     });
-  }, [pendingLocales.length, showError, syncMutation]);
-
-  useEffect(() => {
-    // Initial remote fetch happens through React Query automatically.
-    // Only attempt syncing local pending queue here.
-    attemptAutoSync();
-  }, [attemptAutoSync]);
-
-  useEffect(() => {
-    function handleOnline() {
-      void remotasQuery.refetch();
-      attemptAutoSync();
-    }
-    window.addEventListener("online", handleOnline);
-    return () => window.removeEventListener("online", handleOnline);
-  }, [attemptAutoSync]);
-
-  function updateForm<K extends keyof FormState>(key: K, value: FormState[K]) {
-    setForm((current) => ({ ...current, [key]: value }));
   }
 
-  function updateResultado(id: string, key: "elemento" | "valor", value: string) {
-    setResultados((current) =>
-      current.map((row) => (row.id === id ? { ...row, [key]: value } : row))
-    );
+  function getInteriorPrefixFromIds(areaId?: string, levelId?: string, laborId?: string) {
+    const area = interiorAreas.find((item) => item.id === areaId);
+    const level = interiorLevels.find((item) => item.id === levelId);
+    const labor = interiorLabors.find((item) => item.id === laborId);
+    return [
+      normalizeNameToken(area?.abbreviation ?? area?.name),
+      normalizeNameToken(level?.abbreviation ?? level?.name),
+      normalizeNameToken(labor?.abbreviation ?? labor?.name)
+    ]
+      .filter(Boolean)
+      .join("-");
   }
 
-  function clearForm() {
-    setForm(buildInitialState());
-    setResultados([{ id: buildRowId(), elemento: "", valor: "" }]);
+  function getSurfacePrefixFromId(areaId?: string) {
+    const area = surfaceAreas.find((item) => item.id === areaId);
+    return normalizeNameToken(area?.abbreviation ?? area?.name);
+  }
+
+  function resetSampleForm() {
+    setSampleForm(initialSampleForm());
+    setResults([]);
     setEditTarget(null);
-    setFormCollapsed(true);
+    setGeoPoint(null);
+    setGeoStatus("");
   }
 
-  function loadForm(payload: ExploracionMuestraPayload) {
-    setForm(fromPayloadToForm(payload));
-    setResultados(
-      payload.resultados?.length
-        ? payload.resultados.map((item) => ({
-            id: buildRowId(),
-            elemento: item.elemento,
-            valor: `${item.prefijo ?? ""}${item.valor}`
-          }))
-        : [{ id: buildRowId(), elemento: "", valor: "" }]
-    );
-    setFormCollapsed(false);
+  function mapResultRows(rawResults?: any[]): ResultRow[] {
+    const mapped =
+      rawResults
+        ?.map((result) => ({
+          id: newId(),
+          labSlot: (result.labSlot ?? result.labAssignment?.slot ?? "") as LaboratorySlot | "",
+          elementId: result.element?.id ?? result.elementId ?? "",
+          value: result.value === null || result.value === undefined ? "" : String(result.value),
+          unit: result.unit ?? result.element?.defaultUnit ?? "",
+          qualifier: result.qualifier ?? "",
+          laboratoryId: result.laboratory?.id ?? result.surfaceLaboratoryId ?? ""
+        }))
+        .filter((row) => row.elementId) ?? [];
+    return mapped;
   }
 
-  function buildPayload(): ExploracionMuestraPayload {
-    const resultadoRows = resultados.filter((row) => row.elemento.trim() && row.valor.trim());
-    const invalidResultado = resultadoRows.find(
-      (row) => parseChemicalValueWithPrefix(row.valor) === undefined
-    );
-    if (invalidResultado) {
-      throw new Error(
-        `Valor químico inválido en "${invalidResultado.elemento}". Usa formatos como 1.23, <0.01 o ND 0.01.`
-      );
+  function startEdit(row: SampleTableRow) {
+    if (row.source === "local") {
+      const sample = row.raw as OfflineProposalSample;
+      setRegisterType(sample.module);
+      if (sample.module === "interior") {
+        const payload = sample.payload as any;
+        const labor = interiorLabors.find((item) => item.id === payload.interiorLaborId);
+        const levelId = labor?.interiorLevelId;
+        const level = interiorLevels.find((item) => item.id === levelId);
+        const areaId = level?.interiorAreaId;
+        const prefix = getInteriorPrefixFromIds(areaId, levelId, payload.interiorLaborId);
+        setSampleForm({
+          ...initialSampleForm(),
+          interiorAreaId: areaId ?? "",
+          interiorLevelId: levelId ?? "",
+          interiorLaborId: payload.interiorLaborId ?? "",
+          interiorObjectiveId: payload.interiorObjectiveId ?? "",
+          sampleNameSuffix: extractEditableSuffix(payload.name, prefix),
+          sampledAt: toLocalDatetimeInput(payload.sampledAt ? new Date(payload.sampledAt) : new Date()),
+          east: payload.east === undefined ? "" : String(payload.east),
+          north: payload.north === undefined ? "" : String(payload.north),
+          elevation: payload.elevation === undefined ? "" : String(payload.elevation),
+          labL1: payload.labAssignments?.find((item: any) => item.slot === "L1")?.interiorLaboratoryId ?? "",
+          labL2: payload.labAssignments?.find((item: any) => item.slot === "L2")?.interiorLaboratoryId ?? "",
+          labL3: payload.labAssignments?.find((item: any) => item.slot === "L3")?.interiorLaboratoryId ?? ""
+        });
+      } else {
+        const payload = sample.payload as any;
+        const prefix = getSurfacePrefixFromId(payload.surfaceAreaId);
+        setSampleForm({
+          ...initialSampleForm(),
+          surfaceAreaId: payload.surfaceAreaId ?? "",
+          surfaceObjectiveId: payload.surfaceObjectiveId ?? "",
+          sampleNameSuffix: extractEditableSuffix(payload.name, prefix),
+          sampledAt: toLocalDatetimeInput(payload.sampledAt ? new Date(payload.sampledAt) : new Date()),
+          east: payload.east === undefined ? "" : String(payload.east),
+          north: payload.north === undefined ? "" : String(payload.north),
+          elevation: payload.elevation === undefined ? "" : String(payload.elevation)
+        });
+      }
+      setResults(mapResultRows(flattenAssignmentResults((sample.payload as any).labAssignments, (sample.payload as any).results)));
+      setEditTarget({ source: "local", module: sample.module, localId: sample.localId });
+      return;
     }
 
-    const normalizedResultados = resultadoRows.map((row) => {
-      const parsed = parseChemicalValueWithPrefix(row.valor) as {
-        valor: number;
-        prefijo?: "<" | ">";
-      };
-      return {
-        elemento: row.elemento.trim(),
-        valor: parsed.valor,
-        prefijo: parsed.prefijo
-      };
-    });
-
-    return exploracionMuestraPayloadSchema.parse({
-      nombre: form.nombre.trim(),
-      numero: toOptionalNumber(form.numero),
-      tipoMuestra: form.tipoMuestra.trim() || undefined,
-      sector: form.sector.trim() || undefined,
-      laboratorio1: form.laboratorio1.trim() || undefined,
-      laboratorio2: form.laboratorio2.trim() || undefined,
-      laboratorio3: form.laboratorio3.trim() || undefined,
-      fechaMuestreo: editTarget ? normalizeIsoDatetime(form.fechaMuestreo) : getNowLaPazIso(),
-      fechaEntrega: toIsoDatetime(form.fechaEntrega),
-      descripcion: form.descripcion.trim() || undefined,
-      ubicacion: {
-        nivel: form.nivel.trim(),
-        este: toOptionalNumber(form.este),
-        norte: toOptionalNumber(form.norte),
-        elevacion: toOptionalNumber(form.elevacion),
-        referenciaLugar: form.referenciaLugar.trim() || undefined
-      },
-      resultados: normalizedResultados.length ? normalizedResultados : undefined
-    });
+    const sample = row.raw as any;
+    const module = registerType;
+    if (module === "interior") {
+      const prefix = getInteriorPrefixFromIds(
+        sample.labor?.level?.area?.id,
+        sample.labor?.level?.id,
+        sample.labor?.id
+      );
+      setSampleForm({
+        ...initialSampleForm(),
+        interiorAreaId: sample.labor?.level?.area?.id ?? "",
+        interiorLevelId: sample.labor?.level?.id ?? "",
+        interiorLaborId: sample.labor?.id ?? "",
+        interiorObjectiveId: sample.objective?.id ?? "",
+        sampleNameSuffix: extractEditableSuffix(sample.name, prefix),
+        sampledAt: toLocalDatetimeInput(sample.sampledAt ? new Date(sample.sampledAt) : new Date()),
+        east: sample.east === undefined || sample.east === null ? "" : String(sample.east),
+        north: sample.north === undefined || sample.north === null ? "" : String(sample.north),
+        elevation: sample.elevation === undefined || sample.elevation === null ? "" : String(sample.elevation),
+        labL1: sample.labAssignments?.find((item: any) => item.slot === "L1")?.laboratory?.id ?? "",
+        labL2: sample.labAssignments?.find((item: any) => item.slot === "L2")?.laboratory?.id ?? "",
+        labL3: sample.labAssignments?.find((item: any) => item.slot === "L3")?.laboratory?.id ?? ""
+      });
+    } else {
+      const prefix = getSurfacePrefixFromId(sample.area?.id);
+      setSampleForm({
+        ...initialSampleForm(),
+        surfaceAreaId: sample.area?.id ?? "",
+        surfaceObjectiveId: sample.objective?.id ?? "",
+        sampleNameSuffix: extractEditableSuffix(sample.name, prefix),
+        sampledAt: toLocalDatetimeInput(sample.sampledAt ? new Date(sample.sampledAt) : new Date()),
+        east: sample.east === undefined || sample.east === null ? "" : String(sample.east),
+        north: sample.north === undefined || sample.north === null ? "" : String(sample.north),
+        elevation: sample.elevation === undefined || sample.elevation === null ? "" : String(sample.elevation)
+      });
+    }
+    setResults(mapResultRows(flattenAssignmentResults(sample.labAssignments, sample.results)));
+    setEditTarget({ source: "remote", module, remoteId: sample.id });
   }
 
-  function onSave(event: FormEvent<HTMLFormElement>) {
+  function setCatalogField(field: keyof CatalogForm, value: string) {
+    setCatalogForm((current) => ({ ...current, [field]: value }));
+  }
+
+  function openModal(kind: ModalKind, parentId = "") {
+    setCatalogForm({ ...initialCatalogForm(), parentId });
+    setModalKind(kind);
+  }
+
+  function fillFromCurrentLocation() {
+    if (!("geolocation" in navigator)) {
+      showError("Este dispositivo no soporta geolocalización.");
+      return;
+    }
+
+    setIsLocating(true);
+    setGeoStatus("Obteniendo ubicación del dispositivo...");
+
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        const { latitude, longitude, accuracy, altitude } = position.coords;
+        const utm = latLonToUtm(latitude, longitude);
+
+        setSampleForm((current) => ({
+          ...current,
+          east: String(utm.east),
+          north: String(utm.north),
+          elevation:
+            current.elevation.trim() || altitude === null || altitude === undefined || Number.isNaN(altitude)
+              ? current.elevation
+              : String(Number(altitude.toFixed(2)))
+        }));
+        setGeoPoint({ latitude, longitude, accuracy });
+        setGeoStatus(
+          `Ubicación cargada. UTM zona ${utm.zoneNumber}${accuracy ? ` · precisión aprox. ${Math.round(accuracy)} m` : ""}`
+        );
+        setIsLocating(false);
+      },
+      (error) => {
+        setIsLocating(false);
+        const message =
+          error.code === error.PERMISSION_DENIED
+            ? "No se concedió permiso para acceder a la ubicación."
+            : error.code === error.POSITION_UNAVAILABLE
+              ? "La ubicación no está disponible en este momento."
+              : "Se agotó el tiempo al intentar obtener la ubicación.";
+        setGeoStatus(message);
+        showError(message);
+      },
+      {
+        enableHighAccuracy: true,
+        timeout: 15000,
+        maximumAge: 0
+      }
+    );
+  }
+
+  function closeModal() {
+    setModalKind(null);
+    setCatalogForm(initialCatalogForm());
+  }
+
+  function buildResultPayload(row: ResultRow) {
+    return {
+      elementId: row.elementId,
+      value: toNumber(row.value),
+      unit: row.unit.trim() || undefined,
+      qualifier: row.qualifier.trim() || undefined
+    };
+  }
+
+  function buildInteriorLabAssignmentsPayload() {
+    const selectedLabs = [
+      { slot: "L1" as LaboratorySlot, interiorLaboratoryId: sampleForm.labL1 },
+      { slot: "L2" as LaboratorySlot, interiorLaboratoryId: sampleForm.labL2 },
+      { slot: "L3" as LaboratorySlot, interiorLaboratoryId: sampleForm.labL3 }
+    ].filter((item) => item.interiorLaboratoryId);
+
+    const resultRows = results.filter((row) => row.elementId);
+    const missingSlot = resultRows.find((row) => !row.labSlot);
+    if (missingSlot) {
+      throw new Error("Cada resultado de Interior Mina debe indicar a qué laboratorio L1, L2 o L3 pertenece.");
+    }
+
+    const missingLab = resultRows.find(
+      (row) => row.labSlot && !selectedLabs.some((lab) => lab.slot === row.labSlot)
+    );
+    if (missingLab) {
+      throw new Error("Selecciona el laboratorio del slot antes de asignarle resultados.");
+    }
+
+    return selectedLabs
+      .map((lab) => ({
+        ...lab,
+        results: resultRows
+          .filter((row) => row.labSlot === lab.slot)
+          .map(buildResultPayload)
+      }))
+      .filter((lab) => lab.results.length > 0 || lab.interiorLaboratoryId);
+  }
+
+  function buildSurfaceLabAssignmentsPayload() {
+    const resultRows = results.filter((row) => row.elementId);
+    const missingLab = resultRows.find((row) => !row.laboratoryId);
+    if (missingLab) {
+      throw new Error("Cada resultado de Superficie debe indicar a qué laboratorio pertenece.");
+    }
+
+    const grouped = new Map<string, ReturnType<typeof buildResultPayload>[]>();
+    resultRows.forEach((row) => {
+      const current = grouped.get(row.laboratoryId) ?? [];
+      current.push(buildResultPayload(row));
+      grouped.set(row.laboratoryId, current);
+    });
+
+    return Array.from(grouped.entries()).map(([surfaceLaboratoryId, labResults]) => ({
+      surfaceLaboratoryId,
+      results: labResults
+    }));
+  }
+
+  async function onSubmitSample(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     try {
-      const payload = buildPayload();
+      const sampledAt = toIso(sampleForm.sampledAt) ?? new Date().toISOString();
+      const normalizedSampleName = sampleName.trim() || undefined;
+      const common = {
+        name: normalizedSampleName,
+        east: toNumber(sampleForm.east),
+        north: toNumber(sampleForm.north),
+        elevation: toNumber(sampleForm.elevation),
+        sampledAt
+      };
+      let payload:
+        | (typeof common & {
+            interiorLaborId: string;
+            interiorObjectiveId: string;
+            labAssignments?: ReturnType<typeof buildInteriorLabAssignmentsPayload>;
+          })
+        | (typeof common & {
+            surfaceAreaId: string;
+            surfaceObjectiveId: string;
+            labAssignments?: ReturnType<typeof buildSurfaceLabAssignmentsPayload>;
+          });
 
-      if (editTarget?.mode === "local") {
-        updateOfflineMutation.mutate(
-          { id: editTarget.id, payload },
-          {
-            onSuccess: () => {
-              showSuccess("Registro actualizado.");
-              clearForm();
-              attemptAutoSync();
-            }
-          }
-        );
+      if (registerType === "interior") {
+        if (!sampleForm.interiorLaborId || !sampleForm.interiorObjectiveId) {
+          showError("Selecciona labor y objetivo para Interior Mina.");
+          return;
+        }
+        const labAssignments = buildInteriorLabAssignmentsPayload();
+        payload = {
+          ...common,
+          interiorLaborId: sampleForm.interiorLaborId,
+          interiorObjectiveId: sampleForm.interiorObjectiveId,
+          labAssignments
+        };
+      } else {
+        if (!sampleForm.surfaceAreaId || !sampleForm.surfaceObjectiveId) {
+          showError("Selecciona área y objetivo para Superficie.");
+          return;
+        }
+        payload = {
+          ...common,
+          surfaceAreaId: sampleForm.surfaceAreaId,
+          surfaceObjectiveId: sampleForm.surfaceObjectiveId,
+          labAssignments: buildSurfaceLabAssignmentsPayload()
+        };
+      }
+
+      if (editTarget?.source === "local") {
+        await updateQueuedSample.mutateAsync({ localId: editTarget.localId, payload });
+        if (navigator.onLine) {
+          const result = await syncMutation.mutateAsync();
+          showSuccess(result.synced > 0 ? "Muestra actualizada y sincronizada." : "Muestra actualizada en la cola local.");
+        } else {
+          showSuccess("Muestra actualizada en la cola local.");
+        }
+        resetSampleForm();
         return;
       }
 
-      if (editTarget?.mode === "remota") {
-        const queueEditOffline = () =>
-          queueRemoteEditOfflineMutation.mutate(
-            { remoteId: editTarget.id, payload },
-            {
-              onSuccess: () => {
-                showSuccess("Sin conexión: edición guardada localmente como pendiente.");
-                clearForm();
-                attemptAutoSync();
-              }
-            }
-          );
+      if (editTarget?.source === "remote") {
+        const remotePatchPayload =
+          registerType === "interior"
+            ? (() => {
+                const { interiorLaborId: _interiorLaborId, ...patchPayload } = payload as Extract<
+                  typeof payload,
+                  { interiorLaborId: string }
+                >;
+                return patchPayload;
+              })()
+            : (() => {
+                const { surfaceAreaId: _surfaceAreaId, ...patchPayload } = payload as Extract<
+                  typeof payload,
+                  { surfaceAreaId: string }
+                >;
+                return patchPayload;
+              })();
 
-        if (typeof navigator !== "undefined" && !navigator.onLine) {
-          queueEditOffline();
+        if (!navigator.onLine) {
+          await queueRemoteEdit.mutateAsync({
+            module: registerType,
+            remoteId: editTarget.remoteId,
+            payload: remotePatchPayload
+          });
+          showSuccess("Edición guardada localmente. Se sincronizará al recuperar conexión.");
+          resetSampleForm();
           return;
         }
 
-        updateRemoteMutation.mutate(
-          { id: editTarget.id, payload },
-          {
-            onSuccess: () => {
-              showSuccess("Registro remoto actualizado.");
-              clearForm();
-            },
-            onError: (error) => {
-              if (isConnectivityIssue(error)) {
-                queueEditOffline();
-                return;
-              }
-              const message = error instanceof Error ? error.message : "No se pudo actualizar.";
-              showError(message);
-            }
+        try {
+          if (registerType === "interior") {
+            await updateInteriorSample.mutateAsync({ id: editTarget.remoteId, payload: remotePatchPayload as any });
+          } else {
+            await updateSurfaceSample.mutateAsync({ id: editTarget.remoteId, payload: remotePatchPayload as any });
           }
-        );
-        return;
-      }
-
-      saveMutation.mutate(payload, {
-        onSuccess: () => {
-          showSuccess("Registro guardado.");
-          clearForm();
-          attemptAutoSync();
+          showSuccess("Muestra actualizada.");
+          resetSampleForm();
+          return;
+        } catch (error) {
+          if (!isConnectivityIssue(error)) throw error;
+          await queueRemoteEdit.mutateAsync({
+            module: registerType,
+            remoteId: editTarget.remoteId,
+            payload: remotePatchPayload
+          });
+          showSuccess("No se pudo conectar al servidor. La edición quedó en cola local.");
+          resetSampleForm();
+          return;
         }
-      });
+      }
+
+      await queueSample.mutateAsync({ module: registerType, payload });
+      if (navigator.onLine) {
+        const result = await syncMutation.mutateAsync();
+        showSuccess(result.synced > 0 ? "Muestra guardada y sincronizada." : "Muestra guardada en cola local.");
+      } else {
+        showSuccess("Muestra guardada localmente. Se sincronizará cuando haya conexión.");
+      }
+      resetSampleForm();
     } catch (error) {
-      if (error instanceof ZodError) {
-        showError(error.issues[0]?.message ?? "Revisa los campos.");
-        return;
+      showError(error instanceof Error ? error.message : "No se pudo guardar la muestra.");
+    }
+  }
+
+  async function onSubmitCatalog(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!modalKind) return;
+
+    try {
+      const localId = `${modalKind}-${newId()}`;
+      const name = catalogForm.name.trim();
+      const abbreviation = catalogForm.abbreviation.trim() || undefined;
+      const description = catalogForm.description.trim() || undefined;
+      const elevation = toNumber(catalogForm.elevation);
+
+      if (modalKind === "element") {
+        await queueCatalog.mutateAsync({
+          module: "shared",
+          entity: "element",
+          payload: {
+            name,
+            symbol: catalogForm.symbol.trim(),
+            defaultUnit: catalogForm.defaultUnit.trim() || undefined,
+            description
+          },
+          catalog: {
+            localId,
+            module: "shared",
+            entity: "element",
+            name,
+            symbol: catalogForm.symbol.trim(),
+            defaultUnit: catalogForm.defaultUnit.trim() || undefined,
+            description
+          }
+        });
       }
-      if (error instanceof Error) {
-        showError(error.message);
-        return;
+
+      if (modalKind === "interior-area" || modalKind === "surface-area") {
+        const module = modalKind === "interior-area" ? "interior" : "surface";
+        await queueCatalog.mutateAsync({
+          module,
+          entity: "area",
+          payload: { name, abbreviation, description },
+          catalog: { localId, module, entity: "area", name, abbreviation, description }
+        });
       }
-      showError("No se pudo procesar la muestra.");
+
+      if (modalKind === "interior-level") {
+        await queueCatalog.mutateAsync({
+          module: "interior",
+          entity: "level",
+          payload: {
+            interiorAreaId: catalogForm.parentId,
+            name,
+            abbreviation,
+            elevation,
+            description
+          },
+          catalog: {
+            localId,
+            module: "interior",
+            entity: "level",
+            name,
+            abbreviation,
+            description,
+            elevation,
+            parentLocalId: catalogForm.parentId,
+            parentRemoteId: catalogForm.parentId
+          }
+        });
+      }
+
+      if (modalKind === "interior-labor") {
+        await queueCatalog.mutateAsync({
+          module: "interior",
+          entity: "labor",
+          payload: {
+            interiorLevelId: catalogForm.parentId,
+            name,
+            abbreviation,
+            description
+          },
+          catalog: {
+            localId,
+            module: "interior",
+            entity: "labor",
+            name,
+            abbreviation,
+            description,
+            parentLocalId: catalogForm.parentId,
+            parentRemoteId: catalogForm.parentId
+          }
+        });
+      }
+
+      if (modalKind === "interior-objective" || modalKind === "surface-objective") {
+        const module = modalKind === "interior-objective" ? "interior" : "surface";
+        await queueCatalog.mutateAsync({
+          module,
+          entity: "objective",
+          payload: { name, description },
+          catalog: { localId, module, entity: "objective", name, description }
+        });
+      }
+
+      if (modalKind === "interior-laboratory" || modalKind === "surface-laboratory") {
+        const module = modalKind === "interior-laboratory" ? "interior" : "surface";
+        await queueCatalog.mutateAsync({
+          module,
+          entity: "laboratory",
+          payload: { name, abbreviation, description },
+          catalog: { localId, module, entity: "laboratory", name, abbreviation, description }
+        });
+      }
+
+      showSuccess("Registro guardado localmente.");
+      closeModal();
+      if (navigator.onLine) syncMutation.mutate();
+    } catch (error) {
+      showError(error instanceof Error ? error.message : "No se pudo guardar el catálogo.");
     }
   }
 
-  function startEdit(row: TableRow) {
-    if (!row.canEdit) {
-      showError("Este registro ya tiene fecha de entrega y no se puede editar.");
-      return;
-    }
+  const areaOptions = registerType === "interior" ? labelOptions(interiorAreas) : labelOptions(surfaceAreas);
+  const levelOptions = labelOptions(interiorLevels);
+  const laborOptions = labelOptions(interiorLabors);
+  const objectiveOptions = labelOptions(activeObjectives);
+  const laboratoryOptions = labelOptions(activeLaboratories);
+  const selectedInteriorLabGroups = ([
+    ["L1", sampleForm.labL1],
+    ["L2", sampleForm.labL2],
+    ["L3", sampleForm.labL3]
+  ] as Array<[LaboratorySlot, string]>)
+    .map(([slot, laboratoryId]) => {
+      const laboratory = interiorLaboratories.find((item) => item.id === laboratoryId);
+      const label = laboratory ? `${slot} - ${laboratory.name}` : slot;
+      return { slot, laboratoryId, label };
+    });
+  const isEditing = Boolean(editTarget);
+  const isEditingRemote = editTarget?.source === "remote";
+  const isSaving =
+    queueSample.isPending ||
+    updateQueuedSample.isPending ||
+    queueRemoteEdit.isPending ||
+    updateInteriorSample.isPending ||
+    updateSurfaceSample.isPending ||
+    syncMutation.isPending;
 
-    if (row.source === "local") {
-      const found = pendingLocales.find((item) => item.id === row.id);
-      if (!found?.id) return;
-      setEditTarget({ mode: "local", id: found.id });
-      loadForm(found.payload);
-      return;
-    }
-
-    const found = (remotasQuery.data?.data ?? []).find((item) => item.id === row.id);
-    if (!found) return;
-    setEditTarget({ mode: "remota", id: found.id });
-    loadForm(fromRemoteToPayload(found));
-  }
-
-  function openDetail(row: TableRow) {
-    if (row.source === "local") {
-      const found = pendingLocales.find((item) => item.id === row.id);
-      if (found) setDetailTarget({ source: "local", data: found });
-      return;
-    }
-    const found = (remotasQuery.data?.data ?? []).find((item) => item.id === row.id);
-    if (found) setDetailTarget({ source: "remota", data: found });
-  }
-
-  const isSubmitting =
-    saveMutation.isPending ||
-    saveBatchMutation.isPending ||
-    updateOfflineMutation.isPending ||
-    updateRemoteMutation.isPending ||
-    queueRemoteEditOfflineMutation.isPending;
   return (
-    <section className="space-y-6 text-[var(--color-on-surface)]">
+    <div className={pageShell}>
       <InternalHeader
         eyebrow="Exploraciones"
-        title="Registro de muestra"
-        description="Completa la informacion de ubicacion, laboratorios y resultados quimicos de cada muestra."
+        title="Registro de muestras"
+        description="Captura offline para Interior Mina y Superficie. Los registros se sincronizan al recuperar conexión."
       />
 
-      <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-[var(--color-border-soft)] bg-[var(--color-surface-container-low)] p-3">
-        <p className="text-xs font-bold uppercase tracking-wider text-[var(--color-on-surface-variant)]">
-          Herramientas de muestras
-        </p>
-        <div className="flex flex-wrap items-center gap-2">
-          <button
-            type="button"
-            onClick={downloadMuestrasTemplate}
-            className="inline-flex items-center gap-2 rounded-lg border border-[var(--color-outline-variant)] px-4 py-2 text-sm font-semibold text-[var(--color-on-surface-variant)] transition hover:border-[var(--color-primary)] hover:text-[var(--color-on-surface)]"
+      <section className={`${panelClass} exploraciones-panel p-3`}>
+        <div className="exploraciones-mode-grid grid grid-cols-2 gap-2">
+          <ModeButton
+            active={registerType === "interior"}
+            onClick={() => {
+              setRegisterType("interior");
+              resetSampleForm();
+            }}
+            icon={Layers3}
           >
-            <FileSpreadsheet size={15} />
-            Plantilla Excel
-          </button>
-          <label className="inline-flex cursor-pointer items-center gap-2 rounded-lg border border-[var(--color-primary)]/55 px-4 py-2 text-sm font-semibold text-[var(--color-primary)] transition hover:bg-[var(--color-primary)]/10">
-            <FileUp size={15} />
-            Cargar Excel
-            <input
-              type="file"
-              accept=".xlsx,.xls"
-              className="hidden"
-              onChange={(event) => {
-                const file = event.target.files?.[0];
-                if (file) void onImportMuestrasFile(file);
-                event.currentTarget.value = "";
-              }}
-            />
-          </label>
-          <button
-            type="button"
-            onClick={() => navigate("/exploraciones/elementos")}
-            className="inline-flex items-center gap-2 rounded-lg border border-[var(--color-outline-variant)] px-4 py-2 text-sm font-semibold text-[var(--color-on-surface-variant)] transition hover:border-[var(--color-primary)] hover:text-[var(--color-on-surface)]"
+            Interior Mina
+          </ModeButton>
+          <ModeButton
+            active={registerType === "surface"}
+            onClick={() => {
+              setRegisterType("surface");
+              resetSampleForm();
+            }}
+            icon={MapPinned}
           >
-            Elementos
-          </button>
-          <button
-            type="button"
-            onClick={() => setFormCollapsed((c) => !c)}
-            className="inline-flex items-center gap-2 rounded-lg border border-[var(--color-outline-variant)] px-4 py-2 text-sm font-semibold text-[var(--color-on-surface-variant)] transition hover:border-[var(--color-primary)] hover:text-[var(--color-on-surface)]"
-          >
-            {formCollapsed ? <ChevronDown size={16} /> : <ChevronUp size={16} />}
-            {formCollapsed ? "Mostrar formulario" : "Minimizar formulario"}
-          </button>
+            Superficie
+          </ModeButton>
         </div>
-      </div>
+      </section>
 
-      <datalist id="exploraciones-laboratorios">
-        {laboratorios.map((lab) => (
-          <option key={lab} value={lab} />
-        ))}
-      </datalist>
-      <datalist id="exploraciones-niveles">
-        {levelOptions.map((value) => (
-          <option key={value} value={value} />
-        ))}
-      </datalist>
-      <datalist id="exploraciones-sectores">
-        {sectorOptions.map((value) => (
-          <option key={value} value={value ?? ""} />
-        ))}
-      </datalist>
-      <datalist id="exploraciones-tipos">
-        {tipoMuestraOptions.map((value) => (
-          <option key={value} value={value ?? ""} />
-        ))}
-      </datalist>
-      <datalist id="exploraciones-elementos">
-        {elementos.map((item) => (
-          <option key={item.id ?? item.nombre} value={item.nombre} />
-        ))}
-      </datalist>
-
-      {formCollapsed ? null : (
-        <form className="space-y-6" onSubmit={onSave}>
-          <article className="rounded-xl border border-[var(--color-border-soft)] bg-[var(--color-surface-container-low)] p-5 md:p-6">
-            <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
-              <div>
-                <label className="mb-2 block text-xs font-bold uppercase tracking-wider text-[var(--color-on-surface-variant)]">
+      <section className={`${panelClass} exploraciones-panel p-4`}>
+        <div className="exploraciones-catalog-bar flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <h2 className="text-sm font-bold uppercase tracking-wider text-[var(--color-on-surface-variant)]">
+              Catálogos
+            </h2>
+            <p className="mt-1 text-sm text-[var(--color-on-surface-variant)]">
+              Crea datos auxiliares sin salir del registro. Todo queda disponible offline.
+            </p>
+          </div>
+          <div className="exploraciones-catalog-actions flex flex-wrap gap-2">
+            <CatalogButton icon={Microscope} onClick={() => openModal("element")}>Elemento</CatalogButton>
+            <CatalogButton
+              icon={Landmark}
+              onClick={() => openModal(registerType === "interior" ? "interior-area" : "surface-area")}
+            >
+              Área
+            </CatalogButton>
+            {registerType === "interior" ? (
+              <>
+                <CatalogButton icon={MapPinned} onClick={() => openModal("interior-level", sampleForm.interiorAreaId)}>
                   Nivel
-                </label>
-                <input
-                  required
-                  list="exploraciones-niveles"
-                  value={form.nivel}
-                  onChange={(e) => updateForm("nivel", e.target.value)}
-                  placeholder="Ej: NIV-8"
-                  className={inputClassName}
-                />
-              </div>
-              <div>
-                <label className="mb-2 block text-xs font-bold uppercase tracking-wider text-[var(--color-on-surface-variant)]">
-                  Nombre
-                </label>
-                <input
-                  required
-                  value={form.nombre}
-                  onChange={(e) => updateForm("nombre", e.target.value)}
-                  placeholder=""
-                  className={inputClassName}
-                />
-              </div>
-              <div>
-                <label className="mb-2 block text-xs font-bold uppercase tracking-wider text-[var(--color-on-surface-variant)]">
-                  Codigo
-                </label>
-                <input
-                  type="number"
-                  step={1}
-                  min={0}
-                  inputMode="numeric"
-                  value={form.numero}
-                  onChange={(e) => updateForm("numero", e.target.value)}
-                  placeholder="Ej: 52"
-                  className={numberInputClassName}
-                />
-              </div>
-              <div>
-                <label className="mb-2 block text-xs font-bold uppercase tracking-wider text-[var(--color-on-surface-variant)]">
-                  Tipo de muestra
-                </label>
-                <input
-                  list="exploraciones-tipos"
-                  value={form.tipoMuestra}
-                  onChange={(e) => updateForm("tipoMuestra", e.target.value)}
-                  placeholder="Ej: SIMPLE"
-                  className={inputClassName}
-                />
-              </div>
-              <div>
-                <label className="mb-2 block text-xs font-bold uppercase tracking-wider text-[var(--color-on-surface-variant)]">
-                  Sector
-                </label>
-                <input
-                  list="exploraciones-sectores"
-                  value={form.sector}
-                  onChange={(e) => updateForm("sector", e.target.value)}
-                  placeholder=""
-                  className={inputClassName}
-                />
-              </div>
-              <div>
-                <label className="mb-2 block text-xs font-bold uppercase tracking-wider text-[var(--color-on-surface-variant)]">
-                  Laboratorio 1
-                </label>
-                <input
-                  list="exploraciones-laboratorios"
-                  value={form.laboratorio1}
-                  onChange={(e) => updateForm("laboratorio1", e.target.value)}
-                  placeholder="Ej: INGENIO LITORAL Chillcobija"
-                  className={inputClassName}
-                />
-              </div>
-              <div>
-                <label className="mb-2 block text-xs font-bold uppercase tracking-wider text-[var(--color-on-surface-variant)]">
-                  Laboratorio 2
-                </label>
-                <input
-                  list="exploraciones-laboratorios"
-                  value={form.laboratorio2}
-                  onChange={(e) => updateForm("laboratorio2", e.target.value)}
-                  placeholder=""
-                  className={inputClassName}
-                />
-              </div>
-              <div>
-                <label className="mb-2 block text-xs font-bold uppercase tracking-wider text-[var(--color-on-surface-variant)]">
-                  Laboratorio 3
-                </label>
-                <input
-                  list="exploraciones-laboratorios"
-                  value={form.laboratorio3}
-                  onChange={(e) => updateForm("laboratorio3", e.target.value)}
-                  placeholder=""
-                  className={inputClassName}
-                />
-              </div>
-              <div>
-                <label className="mb-2 block text-xs font-bold uppercase tracking-wider text-[var(--color-on-surface-variant)]">
-                  Fecha de muestreo
-                </label>
-                <div className="rounded-lg border border-[var(--color-border-soft)] bg-[var(--color-surface-container-high)] px-4 py-3 text-sm text-[var(--color-on-surface-variant)]">
-                  {form.fechaMuestreo
-                    ? formatDateTime(form.fechaMuestreo)
-                    : "Se registrara automaticamente al guardar"}
-                </div>
-              </div>
-              <div>
-                <label className="mb-2 block text-xs font-bold uppercase tracking-wider text-[var(--color-on-surface-variant)]">
-                  Fecha de entrega
-                </label>
-                <input
-                  type="datetime-local"
-                  value={form.fechaEntrega}
-                  onChange={(e) => updateForm("fechaEntrega", e.target.value)}
-                  placeholder="Selecciona fecha y hora"
-                  className={inputClassName}
-                />
-              </div>
-              <div>
-                <label className="mb-2 block text-xs font-bold uppercase tracking-wider text-[var(--color-on-surface-variant)]">
-                  Referencia de lugar
-                </label>
-                <input
-                  value={form.referenciaLugar}
-                  onChange={(e) => updateForm("referenciaLugar", e.target.value)}
-                  placeholder=""
-                  className={inputClassName}
-                />
-              </div>
-              <div>
-                <label className="mb-2 block text-xs font-bold uppercase tracking-wider text-[var(--color-on-surface-variant)]">
-                  Este
-                </label>
-                <input
-                  type="number"
-                  step="any"
-                  inputMode="decimal"
-                  min={0}
-                  value={form.este}
-                  onChange={(e) => updateForm("este", e.target.value)}
-                  placeholder="Ej: 763235.063"
-                  className={numberInputClassName}
-                />
-              </div>
-              <div>
-                <label className="mb-2 block text-xs font-bold uppercase tracking-wider text-[var(--color-on-surface-variant)]">
-                  Norte
-                </label>
-                <input
-                  type="number"
-                  step="any"
-                  inputMode="decimal"
-                  min={0}
-                  value={form.norte}
-                  onChange={(e) => updateForm("norte", e.target.value)}
-                  placeholder="Ej: 7593360.633"
-                  className={numberInputClassName}
-                />
-              </div>
-              <div>
-                <label className="mb-2 block text-xs font-bold uppercase tracking-wider text-[var(--color-on-surface-variant)]">
-                  Elevacion
-                </label>
-                <input
-                  type="number"
-                  step="any"
-                  inputMode="decimal"
-                  min={0}
-                  value={form.elevacion}
-                  onChange={(e) => updateForm("elevacion", e.target.value)}
-                  placeholder="Ej: 5072.42"
-                  className={numberInputClassName}
-                />
-              </div>
-              <div className="md:col-span-2 xl:col-span-3">
-                <label className="mb-2 block text-xs font-bold uppercase tracking-wider text-[var(--color-on-surface-variant)]">
-                  Descripcion
-                </label>
-                <textarea
-                  rows={3}
-                  value={form.descripcion}
-                  onChange={(e) => updateForm("descripcion", e.target.value)}
-                  placeholder="Describe litología, alteración, mineralización y observaciones relevantes."
-                  className={`${inputClassName} min-h-[90px] resize-y`}
-                />
-              </div>
-            </div>
-          </article>
+                </CatalogButton>
+                <CatalogButton icon={Layers3} onClick={() => openModal("interior-labor", sampleForm.interiorLevelId)}>
+                  Labor
+                </CatalogButton>
+              </>
+            ) : null}
+            <CatalogButton
+              icon={Target}
+              onClick={() => openModal(registerType === "interior" ? "interior-objective" : "surface-objective")}
+            >
+              Objetivo
+            </CatalogButton>
+            <CatalogButton
+              icon={Beaker}
+              onClick={() => openModal(registerType === "interior" ? "interior-laboratory" : "surface-laboratory")}
+            >
+              Laboratorio
+            </CatalogButton>
+            <button
+              type="button"
+              onClick={() => syncMutation.mutate(undefined, { onSuccess: () => showSuccess("Sincronización revisada.") })}
+              className={secondaryButton}
+            >
+              <RefreshCw size={14} />
+              Sincronizar
+            </button>
+          </div>
+        </div>
+      </section>
 
-          <article className="rounded-xl border border-[var(--color-border-soft)] bg-[var(--color-surface-container-low)] p-5 md:p-6">
-            <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-              <h2 className="text-lg font-bold">Resultados quimicos</h2>
+      <section className={`${panelClass} exploraciones-panel p-5`}>
+        <form onSubmit={onSubmitSample} className="space-y-5">
+          <div className="flex items-center gap-2">
+            <FlaskConical size={18} />
+            <h2 className="text-lg font-bold">
+              {isEditing ? "Editar muestra" : "Nueva muestra"} de{" "}
+              {registerType === "interior" ? "Interior Mina" : "Superficie"}
+            </h2>
+          </div>
+
+          {registerType === "interior" ? (
+            <div className="exploraciones-main-grid grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+              <FormSelect label="Área" value={sampleForm.interiorAreaId} options={areaOptions} onChange={(value) => setSampleField("interiorAreaId", value)} disabled={isEditingRemote} />
+              <FormSelect label="Nivel" value={sampleForm.interiorLevelId} options={levelOptions} onChange={(value) => setSampleField("interiorLevelId", value)} disabled={!sampleForm.interiorAreaId || isEditingRemote} />
+              <FormSelect label="Labor" value={sampleForm.interiorLaborId} options={laborOptions} onChange={(value) => setSampleField("interiorLaborId", value)} disabled={!sampleForm.interiorLevelId || isEditingRemote} />
+              <FormSelect label="Objetivo" value={sampleForm.interiorObjectiveId} options={objectiveOptions} onChange={(value) => setSampleField("interiorObjectiveId", value)} />
+            </div>
+          ) : (
+            <div className="exploraciones-main-grid grid gap-3 md:grid-cols-2">
+              <FormSelect label="Área" value={sampleForm.surfaceAreaId} options={areaOptions} onChange={(value) => setSampleField("surfaceAreaId", value)} disabled={isEditingRemote} />
+              <FormSelect label="Objetivo" value={sampleForm.surfaceObjectiveId} options={objectiveOptions} onChange={(value) => setSampleField("surfaceObjectiveId", value)} />
+            </div>
+          )}
+
+          <div className="exploraciones-main-grid grid gap-3 md:grid-cols-2 xl:grid-cols-[1.2fr_0.8fr]">
+            <TextField
+              label="Nombre"
+              value={sampleName}
+              onChange={() => undefined}
+              disabled
+              placeholder="Completa la ubicación y el sufijo"
+            />
+            <TextField
+              label="Sufijo"
+              value={sampleForm.sampleNameSuffix}
+              onChange={(value) => setSampleField("sampleNameSuffix", value.toUpperCase())}
+              placeholder="Ej. T2"
+            />
+          </div>
+          <p className="text-xs text-[var(--color-on-surface-variant)]">
+            Base automática: {sampleNamePrefix || "Completa área, nivel y labor para generar la base."}
+          </p>
+
+          <div className="exploraciones-main-grid grid gap-3 md:grid-cols-4">
+            <TextField
+              label="Fecha de muestreo"
+              type="datetime-local"
+              value={sampleForm.sampledAt}
+              onChange={(value) => setSampleField("sampledAt", value)}
+              disabled
+            />
+            <TextField label="Este" value={sampleForm.east} onChange={(value) => setSampleField("east", value)} />
+            <TextField label="Norte" value={sampleForm.north} onChange={(value) => setSampleField("north", value)} />
+            <TextField label="Elevación" value={sampleForm.elevation} onChange={(value) => setSampleField("elevation", value)} />
+          </div>
+
+          <div className="rounded-xl border border-[var(--color-border-soft)] bg-[var(--color-surface-container-high)] p-4">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <p className="text-sm font-bold text-[var(--color-on-surface)]">Ubicación del dispositivo</p>
+                <p className="text-xs text-[var(--color-on-surface-variant)]">
+                  Completa Este y Norte usando la geolocalización actual del equipo.
+                </p>
+              </div>
               <button
                 type="button"
-                onClick={() =>
-                  setResultados((c) => [...c, { id: buildRowId(), elemento: "", valor: "" }])
-                }
-                className="inline-flex items-center gap-2 rounded-lg border border-[var(--color-primary)]/55 px-4 py-2 text-sm font-semibold text-[var(--color-primary)] transition hover:bg-[var(--color-primary)]/10"
+                className={secondaryButton}
+                onClick={fillFromCurrentLocation}
+                disabled={isLocating}
               >
-                <Plus size={15} />
-                Agregar elemento
+                <MapPinned size={14} />
+                {isLocating ? "Ubicando..." : "Usar ubicación actual"}
               </button>
             </div>
-            <div className="space-y-3">
-              {resultados.map((row, index) => (
-                <div
-                  key={row.id}
-                  className="grid grid-cols-1 gap-3 rounded-lg bg-[var(--color-surface-container-high)] p-3 md:grid-cols-[1.2fr_1fr_auto]"
-                >
-                  <div>
-                    <label className="mb-2 block text-xs font-bold uppercase tracking-wider text-[var(--color-on-surface-variant)]">
-                      Elemento {index + 1}
-                    </label>
-                    <input
-                      list="exploraciones-elementos"
-                      value={row.elemento}
-                      onChange={(e) => updateResultado(row.id, "elemento", e.target.value)}
-                      placeholder="Ej: Ag DM (L1)"
-                      className={inputClassName}
-                    />
-                  </div>
-                  <div>
-                    <label className="mb-2 block text-xs font-bold uppercase tracking-wider text-[var(--color-on-surface-variant)]">
-                      Valor
-                    </label>
-                    <input
-                      type="text"
-                      inputMode="decimal"
-                      placeholder="Ej: 1.23, <0.01, >2.5, ND 0.01"
-                      value={row.valor}
-                      onChange={(e) => updateResultado(row.id, "valor", e.target.value)}
-                      className={inputClassName}
-                    />
-                  </div>
-                  <div className="flex items-end">
-                    <button
-                      type="button"
-                      onClick={() =>
-                        setResultados((c) =>
-                          c.length === 1 ? c : c.filter((i) => i.id !== row.id)
-                        )
-                      }
-                      disabled={resultados.length === 1}
-                      className="inline-flex h-[50px] w-full items-center justify-center rounded-lg border border-[var(--color-error)]/45 text-[var(--color-error)] transition hover:bg-[var(--color-error)]/10 disabled:cursor-not-allowed disabled:opacity-50 md:w-[52px]"
-                      aria-label="Eliminar resultado"
+            {geoStatus ? (
+              <p className="mt-3 text-xs text-[var(--color-on-surface-variant)]">{geoStatus}</p>
+            ) : null}
+            {geoPoint ? (
+              <div className="mt-4 overflow-hidden rounded-xl border border-[var(--color-border-soft)]">
+                {navigator.onLine ? (
+                  <div className="h-56 w-full">
+                    <MapContainer
+                      center={[geoPoint.latitude, geoPoint.longitude]}
+                      zoom={16}
+                      scrollWheelZoom={false}
+                      className="h-full w-full"
                     >
-                      <Trash2 size={16} />
-                    </button>
+                      <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
+                      <Marker position={[geoPoint.latitude, geoPoint.longitude]} icon={geoMarkerIcon} />
+                    </MapContainer>
                   </div>
+                ) : null}
+                <div className="grid gap-2 bg-[var(--color-surface-container-low)] px-4 py-3 text-xs text-[var(--color-on-surface-variant)] md:grid-cols-3">
+                  <p>Latitud: {geoPoint.latitude.toFixed(6)}</p>
+                  <p>Longitud: {geoPoint.longitude.toFixed(6)}</p>
+                  <p>Precisión: {geoPoint.accuracy ? `${Math.round(geoPoint.accuracy)} m` : "-"}</p>
                 </div>
+                {!navigator.onLine ? (
+                  <p className="border-t border-[var(--color-border-soft)] px-4 py-3 text-xs text-[var(--color-on-surface-variant)]">
+                    Sin conexión: se muestran las coordenadas capturadas, pero no el mapa base.
+                  </p>
+                ) : null}
+              </div>
+            ) : null}
+          </div>
+
+          {registerType === "interior" ? (
+            <div className="exploraciones-main-grid grid gap-3 md:grid-cols-3">
+              {(["labL1", "labL2", "labL3"] as const).map((field, index) => (
+                <FormSelect
+                  key={field}
+                  label={`Laboratorio L${index + 1}`}
+                  value={sampleForm[field]}
+                  options={laboratoryOptions}
+                  onChange={(value) => setSampleField(field, value)}
+                />
               ))}
             </div>
-          </article>
+          ) : null}
 
-          <div className="sticky bottom-3 z-20 rounded-xl border border-[var(--color-border-soft)] bg-[var(--color-surface-container-low)] p-3 shadow-xl backdrop-blur-sm md:p-4">
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              <p className="text-xs text-[var(--color-on-surface-variant)]">
-                Completa los campos y guarda el registro para continuar.
-              </p>
-              <div className="flex flex-wrap gap-2">
-                <button
-                  type="button"
-                  onClick={clearForm}
-                  className="rounded-lg border border-[var(--color-outline-variant)] px-4 py-2.5 text-sm font-semibold text-[var(--color-on-surface-variant)] transition hover:border-[var(--color-primary)] hover:text-[var(--color-on-surface)]"
-                >
-                  {editTarget ? "Cancelar edicion" : "Limpiar formulario"}
-                </button>
-                <button
-                  type="submit"
-                  disabled={isSubmitting}
-                  className="inline-flex items-center gap-2 rounded-lg bg-[var(--color-primary)] px-5 py-2.5 text-sm font-semibold text-[var(--color-on-primary)] transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
-                >
-                  <Save size={15} />
-                  {isSubmitting
-                    ? "Guardando..."
-                    : editTarget
-                      ? "Actualizar registro"
-                      : "Guardar registro"}
-                </button>
-              </div>
-            </div>
+          <ResultsEditor
+            registerType={registerType}
+            rows={results}
+            elements={elements}
+            interiorLabGroups={selectedInteriorLabGroups}
+            laboratories={surfaceLaboratories}
+            onChange={(id, field, value) =>
+              setResults((current) => current.map((row) => (row.id === id ? { ...row, [field]: value } : row)))
+            }
+            onAddForLab={(lab) =>
+              setResults((current) => [
+                ...current,
+                {
+                  ...initialResult(),
+                  labSlot: lab.slot ?? "",
+                  laboratoryId: lab.laboratoryId ?? ""
+                }
+              ])
+            }
+            onRemove={(id) => setResults((current) => current.filter((row) => row.id !== id))}
+          />
+
+          <div className="exploraciones-form-actions flex flex-wrap items-center justify-end gap-2 border-t border-[var(--color-border-soft)] pt-4">
+            {isEditing ? (
+              <button
+                type="button"
+                className={secondaryButton}
+                onClick={resetSampleForm}
+              >
+                Cancelar edición
+              </button>
+            ) : null}
+            <button
+              type="button"
+              className={secondaryButton}
+              onClick={resetSampleForm}
+            >
+              Limpiar
+            </button>
+            <button type="submit" className={primaryButton} disabled={isSaving}>
+              <Save size={15} />
+              {isEditing ? "Actualizar muestra" : "Guardar muestra"}
+            </button>
           </div>
         </form>
-      )}
+      </section>
 
-      <article className="overflow-hidden rounded-xl border border-[var(--color-border-soft)] bg-[var(--color-surface-container-low)]">
-        <div className="border-b border-[var(--color-border-soft)] bg-[var(--color-surface-container-high)] px-5 py-3">
-          <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
-            <h3 className="flex items-center gap-2 text-sm font-bold uppercase tracking-wider text-[var(--color-on-surface-variant)]">
-              <FlaskConical size={14} />
-              Registros de muestras
-            </h3>
-            <div className="flex flex-wrap items-center gap-2">
-              <button
-                type="button"
-                onClick={() => navigate("/exploraciones/reportes")}
-                className="inline-flex items-center gap-2 rounded-md border border-[var(--color-outline-variant)] px-3 py-1.5 text-xs font-semibold text-[var(--color-on-surface-variant)] transition hover:border-[var(--color-primary)] hover:text-[var(--color-on-surface)]"
-              >
-                <BarChart3 size={13} />
-                Reportes y tendencias
-              </button>
-              <button
-                type="button"
-                onClick={() => exportRecordsToCsv(exportRows)}
-                className="inline-flex items-center gap-2 rounded-md border border-[var(--color-outline-variant)] px-3 py-1.5 text-xs font-semibold text-[var(--color-on-surface-variant)] transition hover:border-[var(--color-primary)] hover:text-[var(--color-on-surface)]"
-              >
-                <FileSpreadsheet size={13} />
-                Exportar Excel
-              </button>
-              <button
-                type="button"
-                onClick={() => exportRecordsToPdf(exportRows)}
-                className="inline-flex items-center gap-2 rounded-md border border-[var(--color-outline-variant)] px-3 py-1.5 text-xs font-semibold text-[var(--color-on-surface-variant)] transition hover:border-[var(--color-primary)] hover:text-[var(--color-on-surface)]"
-              >
-                <FileDown size={13} />
-                Exportar PDF
-              </button>
+      <SamplesTable
+        rows={sampleRows}
+        search={search}
+        onlyMine={onlyMine}
+        onSearch={setSearch}
+        onOnlyMineChange={setOnlyMine}
+        onEdit={startEdit}
+      />
+
+      {modalKind ? (
+        <CatalogModal
+          kind={modalKind}
+          form={catalogForm}
+          areaOptions={labelOptions(interiorAreas)}
+          levelOptions={labelOptions(interiorLevels)}
+          onChange={setCatalogField}
+          onClose={closeModal}
+          onSubmit={onSubmitCatalog}
+        />
+      ) : null}
+    </div>
+  );
+}
+
+function ModeButton({
+  active,
+  icon: Icon,
+  onClick,
+  children
+}: {
+  active: boolean;
+  icon: typeof Layers3;
+  onClick: () => void;
+  children: React.ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`exploraciones-mode-button inline-flex items-center justify-center gap-2 rounded-lg px-4 py-3 text-sm font-bold transition ${
+        active
+          ? "bg-[var(--color-primary)] text-[var(--color-on-primary)]"
+          : "bg-[var(--color-surface-container-high)] text-[var(--color-on-surface-variant)] hover:text-[var(--color-on-surface)]"
+      }`}
+    >
+      <Icon size={16} />
+      {children}
+    </button>
+  );
+}
+
+function CatalogButton({
+  icon: Icon,
+  onClick,
+  children
+}: {
+  icon: typeof Plus;
+  onClick: () => void;
+  children: React.ReactNode;
+}) {
+  return (
+    <button type="button" onClick={onClick} className={`exploraciones-catalog-button ${secondaryButton}`}>
+      <Icon size={14} />
+      {children}
+    </button>
+  );
+}
+
+function FormSelect({
+  label,
+  value,
+  options,
+  onChange,
+  disabled
+}: {
+  label: string;
+  value: string;
+  options: Array<{ id: string; label: string; searchText?: string }>;
+  onChange: (value: string) => void;
+  disabled?: boolean;
+}) {
+  return (
+    <div>
+      <FieldLabel>{label}</FieldLabel>
+      <AutocompleteSelect
+        value={value}
+        options={options}
+        onChange={onChange}
+        disabled={disabled}
+        placeholder={`Seleccionar ${label.toLowerCase()}`}
+        className={fieldClass}
+      />
+    </div>
+  );
+}
+
+function TextField({
+  label,
+  value,
+  onChange,
+  type = "text",
+  disabled = false,
+  placeholder
+}: {
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+  type?: string;
+  disabled?: boolean;
+  placeholder?: string;
+}) {
+  return (
+    <div>
+      <FieldLabel>{label}</FieldLabel>
+      <input
+        type={type}
+        inputMode={type === "text" ? "decimal" : undefined}
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+        disabled={disabled}
+        placeholder={placeholder}
+        className={fieldClass}
+      />
+    </div>
+  );
+}
+
+function ResultsEditor({
+  registerType,
+  rows,
+  elements,
+  interiorLabGroups,
+  laboratories,
+  onChange,
+  onAddForLab,
+  onRemove
+}: {
+  registerType: RegisterType;
+  rows: ResultRow[];
+  elements: ElementCatalogItem[];
+  interiorLabGroups: Array<{ slot: LaboratorySlot; laboratoryId: string; label: string }>;
+  laboratories: CatalogItem[];
+  onChange: (id: string, field: keyof ResultRow, value: string) => void;
+  onAddForLab: (lab: { slot?: LaboratorySlot; laboratoryId?: string }) => void;
+  onRemove: (id: string) => void;
+}) {
+  const [surfaceLabToAdd, setSurfaceLabToAdd] = useState("");
+  const surfaceLabOptions = useMemo(() => labelOptions(laboratories), [laboratories]);
+  const surfaceLabMap = useMemo(
+    () => new Map(surfaceLabOptions.map((option) => [option.id, option.label])),
+    [surfaceLabOptions]
+  );
+  const groupedRows = useMemo(() => {
+    if (registerType === "interior") {
+      return interiorLabGroups
+        .filter((group) => group.laboratoryId)
+        .map((group) => ({
+          id: group.slot,
+          label: group.label,
+          rows: rows.filter((row) => row.labSlot === group.slot)
+        }));
+    }
+
+    const ids = Array.from(new Set(rows.map((row) => row.laboratoryId).filter(Boolean)));
+    return ids.map((laboratoryId) => ({
+      id: laboratoryId,
+      label: surfaceLabMap.get(laboratoryId) ?? "Laboratorio",
+      rows: rows.filter((row) => row.laboratoryId === laboratoryId)
+    }));
+  }, [interiorLabGroups, registerType, rows, surfaceLabMap]);
+
+  return (
+    <article className="rounded-xl border border-[var(--color-border-soft)] bg-[var(--color-surface-container-high)] p-4">
+      <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+        <h3 className="text-sm font-bold uppercase tracking-wider text-[var(--color-on-surface-variant)]">
+          Resultados por laboratorio
+        </h3>
+        {registerType === "surface" ? (
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="min-w-[240px] flex-1">
+              <AutocompleteSelect
+                value={surfaceLabToAdd}
+                onChange={setSurfaceLabToAdd}
+                options={surfaceLabOptions.filter((option) => !groupedRows.some((group) => group.id === option.id))}
+                placeholder="Seleccionar laboratorio"
+                className={fieldClass}
+              />
             </div>
+            <button
+              type="button"
+              className={secondaryButton}
+              onClick={() => {
+                if (!surfaceLabToAdd) return;
+                onAddForLab({ laboratoryId: surfaceLabToAdd });
+                setSurfaceLabToAdd("");
+              }}
+              disabled={!surfaceLabToAdd}
+            >
+              <Plus size={14} />
+              Agregar laboratorio
+            </button>
           </div>
+        ) : null}
+      </div>
+      <div className="space-y-3">
+        {groupedRows.length > 0 ? (
+          groupedRows.map((group) => (
+            <section
+              key={group.id}
+              className="rounded-xl border border-[var(--color-border-soft)] bg-[var(--color-surface-container-low)] p-4"
+            >
+              <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+                <div>
+                  <p className="text-sm font-bold text-[var(--color-on-surface)]">{group.label}</p>
+                  <p className="text-xs text-[var(--color-on-surface-variant)]">
+                    {group.rows.length > 0 ? `${group.rows.length} resultado(s)` : "Sin resultados todavía"}
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  className={secondaryButton}
+                  onClick={() =>
+                    onAddForLab(
+                      registerType === "interior"
+                        ? { slot: group.id as LaboratorySlot }
+                        : { laboratoryId: group.id }
+                    )
+                  }
+                >
+                  <Plus size={14} />
+                  Agregar resultado
+                </button>
+              </div>
+              {group.rows.length > 0 ? (
+                <div className="space-y-3">
+                  {group.rows.map((row) => (
+                    <div
+                      key={row.id}
+                      className="exploraciones-result-row grid gap-2 rounded-lg bg-[var(--color-surface-container-high)] p-3 md:grid-cols-[1.5fr_0.8fr_0.7fr_0.7fr_auto]"
+                    >
+                      <AutocompleteSelect
+                        value={row.elementId}
+                        onChange={(value) => {
+                          const selected = elements.find((element) => element.id === value);
+                          onChange(row.id, "elementId", value);
+                          if (selected?.defaultUnit) onChange(row.id, "unit", selected.defaultUnit);
+                        }}
+                        options={elementOptions(elements)}
+                        placeholder="Elemento"
+                        className={fieldClass}
+                      />
+                      <input
+                        className={fieldClass}
+                        placeholder="Valor"
+                        value={row.value}
+                        onChange={(event) => onChange(row.id, "value", event.target.value)}
+                      />
+                      <input
+                        className={fieldClass}
+                        placeholder="Unidad"
+                        value={row.unit}
+                        onChange={(event) => onChange(row.id, "unit", event.target.value)}
+                      />
+                      <input
+                        className={fieldClass}
+                        placeholder="<, >, ND"
+                        value={row.qualifier}
+                        onChange={(event) => onChange(row.id, "qualifier", event.target.value)}
+                      />
+                      <button
+                        type="button"
+                        className="inline-flex h-[42px] items-center justify-center rounded-lg border border-[var(--color-error)]/45 px-3 text-[var(--color-error)] transition hover:bg-[var(--color-error)]/10"
+                        onClick={() => onRemove(row.id)}
+                        aria-label="Eliminar resultado"
+                      >
+                        <Trash2 size={15} />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-sm text-[var(--color-on-surface-variant)]">
+                  Aún no se agregaron elementos para este laboratorio.
+                </p>
+              )}
+            </section>
+          ))
+        ) : (
+          <div className="rounded-xl border border-dashed border-[var(--color-border-soft)] px-4 py-6 text-sm text-[var(--color-on-surface-variant)]">
+            {registerType === "interior"
+              ? "Selecciona al menos un laboratorio L1, L2 o L3 para registrar sus elementos y resultados."
+              : "Agrega un laboratorio para empezar a cargar sus elementos y resultados."}
+          </div>
+        )}
+      </div>
+    </article>
+  );
+}
 
-          <div className="grid grid-cols-1 gap-2 md:grid-cols-2 xl:grid-cols-5">
-            <label className="relative">
-              <Search
-                size={14}
-                className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[var(--color-on-surface-variant)]"
-              />
-              <input
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                placeholder="Buscar por codigo, tipo, sector, usuario, nivel, nombre..."
-                className={`${filterInputClassName} w-full pl-9`}
-              />
+function normalizeNameToken(value?: string | null) {
+  return (value ?? "")
+    .trim()
+    .toUpperCase()
+    .replace(/[\/\s]+/g, "-")
+    .replace(/[^A-Z0-9-]/g, "")
+    .replace(/-+/g, "-")
+    .replace(/^-|-$/g, "");
+}
+
+function extractEditableSuffix(fullName?: string | null, prefix?: string) {
+  const normalizedName = normalizeNameToken(fullName);
+  const normalizedPrefix = normalizeNameToken(prefix);
+  if (!normalizedName) return "";
+  if (!normalizedPrefix) return normalizedName;
+  if (normalizedName === normalizedPrefix) return "";
+  if (normalizedName.startsWith(`${normalizedPrefix}-`)) {
+    return normalizedName.slice(normalizedPrefix.length + 1);
+  }
+  return normalizedName;
+}
+
+function latLonToUtm(latitude: number, longitude: number) {
+  const a = 6378137;
+  const f = 1 / 298.257223563;
+  const k0 = 0.9996;
+  const eccSquared = 2 * f - f * f;
+  const eccPrimeSquared = eccSquared / (1 - eccSquared);
+  const zoneNumber = Math.floor((longitude + 180) / 6) + 1;
+  const lonOrigin = (zoneNumber - 1) * 6 - 180 + 3;
+
+  const latRad = (latitude * Math.PI) / 180;
+  const lonRad = (longitude * Math.PI) / 180;
+  const lonOriginRad = (lonOrigin * Math.PI) / 180;
+
+  const N = a / Math.sqrt(1 - eccSquared * Math.sin(latRad) ** 2);
+  const T = Math.tan(latRad) ** 2;
+  const C = eccPrimeSquared * Math.cos(latRad) ** 2;
+  const A = Math.cos(latRad) * (lonRad - lonOriginRad);
+
+  const M =
+    a *
+    ((1 - eccSquared / 4 - (3 * eccSquared ** 2) / 64 - (5 * eccSquared ** 3) / 256) * latRad -
+      ((3 * eccSquared) / 8 + (3 * eccSquared ** 2) / 32 + (45 * eccSquared ** 3) / 1024) *
+        Math.sin(2 * latRad) +
+      ((15 * eccSquared ** 2) / 256 + (45 * eccSquared ** 3) / 1024) * Math.sin(4 * latRad) -
+      ((35 * eccSquared ** 3) / 3072) * Math.sin(6 * latRad));
+
+  let east =
+    k0 *
+      N *
+      (A +
+        ((1 - T + C) * A ** 3) / 6 +
+        ((5 - 18 * T + T ** 2 + 72 * C - 58 * eccPrimeSquared) * A ** 5) / 120) +
+    500000;
+
+  let north =
+    k0 *
+    (M +
+      N *
+        Math.tan(latRad) *
+        (A ** 2 / 2 +
+          ((5 - T + 9 * C + 4 * C ** 2) * A ** 4) / 24 +
+          ((61 - 58 * T + T ** 2 + 600 * C - 330 * eccPrimeSquared) * A ** 6) / 720));
+
+  if (latitude < 0) {
+    north += 10000000;
+  }
+
+  east = Number(east.toFixed(2));
+  north = Number(north.toFixed(2));
+
+  return { east, north, zoneNumber };
+}
+
+function SamplesTable({
+  rows,
+  search,
+  onlyMine,
+  onSearch,
+  onOnlyMineChange,
+  onEdit
+}: {
+  rows: SampleTableRow[];
+  search: string;
+  onlyMine: boolean;
+  onSearch: (value: string) => void;
+  onOnlyMineChange: (value: boolean) => void;
+  onEdit: (row: SampleTableRow) => void;
+}) {
+  const [detailRow, setDetailRow] = useState<SampleTableRow | null>(null);
+
+  return (
+    <>
+      <article className={`${panelClass} exploraciones-panel overflow-hidden`}>
+        <div className="border-b border-[var(--color-border-soft)] bg-[var(--color-surface-container-high)] px-5 py-3">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <h2 className="flex items-center gap-2 text-sm font-bold uppercase tracking-wider text-[var(--color-on-surface-variant)]">
+              <FlaskConical size={14} />
+              Registros recientes
+            </h2>
+            <label className="exploraciones-search relative min-w-64">
+              <Search size={14} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[var(--color-on-surface-variant)]" />
+              <input className={`${fieldClass} pl-9`} value={search} onChange={(event) => onSearch(event.target.value)} placeholder="Buscar código" />
             </label>
-            <select
-              value={statusFilter}
-              onChange={(e) => setStatusFilter(e.target.value as "todos" | RowStatus)}
-              className={filterInputClassName}
+            <button
+              type="button"
+              className={onlyMine ? primaryButton : secondaryButton}
+              onClick={() => onOnlyMineChange(!onlyMine)}
             >
-              <option value="todos">Todos los estados</option>
-              <option value="Sincronizado">Sincronizado</option>
-              <option value="Pendiente local">Pendiente local</option>
-              <option value="Error de sincronizacion">Error de sincronizacion</option>
-            </select>
-            <select
-              value={levelFilter}
-              onChange={(e) => setLevelFilter(e.target.value)}
-              className={filterInputClassName}
-            >
-              <option value="todos">Todos los niveles</option>
-              {levelOptions.map((level) => (
-                <option key={level} value={level}>
-                  {level}
-                </option>
-              ))}
-            </select>
-            <select
-              value={resultadosFilter}
-              onChange={(e) => setResultadosFilter(e.target.value as "todos" | "con" | "sin")}
-              className={filterInputClassName}
-            >
-              <option value="todos">Todos los resultados</option>
-              <option value="con">Con resultados</option>
-              <option value="sin">Sin resultados</option>
-            </select>
-            <select
-              value={entregaFilter}
-              onChange={(e) =>
-                setEntregaFilter(e.target.value as "todos" | "con-entrega" | "sin-entrega")
-              }
-              className={filterInputClassName}
-            >
-              <option value="todos">Con y sin entrega</option>
-              <option value="con-entrega">Con entrega</option>
-              <option value="sin-entrega">Sin entrega</option>
-            </select>
+              Mis registros
+            </button>
           </div>
         </div>
-
-        <div className="table-scroll overflow-x-auto">
+        <div className="exploraciones-table-wrap overflow-x-auto">
           <table className="w-full border-collapse text-left">
             <thead>
               <tr>
-                <th className="px-4 py-3 text-[10px] font-bold uppercase tracking-widest text-[var(--color-on-surface-variant)]">
-                  Estado
-                </th>
-                <th className="px-4 py-3 text-[10px] font-bold uppercase tracking-widest text-[var(--color-on-surface-variant)]">
-                  Nombre
-                </th>
-                <th className="px-4 py-3 text-[10px] font-bold uppercase tracking-widest text-[var(--color-on-surface-variant)]">
-                  Codigo
-                </th>
-                <th className="px-4 py-3 text-[10px] font-bold uppercase tracking-widest text-[var(--color-on-surface-variant)]">
-                  Tipo
-                </th>
-                <th className="px-4 py-3 text-[10px] font-bold uppercase tracking-widest text-[var(--color-on-surface-variant)]">
-                  Sector
-                </th>
-                <th className="px-4 py-3 text-[10px] font-bold uppercase tracking-widest text-[var(--color-on-surface-variant)]">
-                  Usuario
-                </th>
-                <th className="px-4 py-3 text-[10px] font-bold uppercase tracking-widest text-[var(--color-on-surface-variant)]">
-                  Nivel
-                </th>
-                <th className="px-4 py-3 text-[10px] font-bold uppercase tracking-widest text-[var(--color-on-surface-variant)]">
-                  Muestreo
-                </th>
-                <th className="px-4 py-3 text-[10px] font-bold uppercase tracking-widest text-[var(--color-on-surface-variant)]">
-                  Entrega
-                </th>
-                <th className="px-4 py-3 text-right text-[10px] font-bold uppercase tracking-widest text-[var(--color-on-surface-variant)]">
-                  Acciones
-                </th>
+                {["Código", "Nombre", "Ubicación", "Objetivo", "Registrado por", "Muestreo", "Resultados", "Acciones"].map((heading) => (
+                  <th key={heading} className="px-4 py-3 text-[10px] font-bold uppercase tracking-widest text-[var(--color-on-surface-variant)]">
+                    {heading}
+                  </th>
+                ))}
               </tr>
             </thead>
             <tbody className="divide-y divide-[var(--color-border-soft)]">
-              {filteredRows.map((row) => (
-                <tr
-                  key={row.key}
-                  className="transition hover:bg-[var(--color-surface-container-highest)]"
-                >
+              {rows.map((row) => (
+                <tr key={row.id} className="transition hover:bg-[var(--color-surface-container-highest)]">
+                  <td className="px-4 py-3 text-sm font-bold">{row.code}</td>
+                  <td className="px-4 py-3 text-xs">{row.name ?? "-"}</td>
+                  <td className="px-4 py-3 text-xs">{row.location}</td>
+                  <td className="px-4 py-3 text-xs">{row.objectiveName}</td>
+                  <td className="px-4 py-3 text-xs">{row.createdByName}</td>
+                  <td className="px-4 py-3 text-xs">{formatDate(row.sampledAt)}</td>
                   <td className="px-4 py-3 text-xs">
-                    <span
-                      className={`rounded-full px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider ${row.status === "Sincronizado" ? "bg-[var(--color-success)]/20 text-[var(--color-success)]" : row.status === "Error de sincronizacion" ? "bg-[var(--color-error)]/18 text-[var(--color-error)]" : "bg-[var(--color-tertiary)]/20 text-[var(--color-tertiary)]"}`}
-                    >
-                      {row.status}
-                    </span>
+                    <ResultStatus results={row.results} />
                   </td>
-                  <td className="px-4 py-3 text-sm font-semibold">{row.nombre}</td>
-                  <td className="px-4 py-3 text-xs">{row.numero ?? "-"}</td>
-                  <td className="px-4 py-3 text-xs">{row.tipoMuestra ?? "-"}</td>
-                  <td className="px-4 py-3 text-xs">{row.sector ?? "-"}</td>
-                  <td className="px-4 py-3 text-xs uppercase">{row.usuarioNombre ?? "-"}</td>
-                  <td className="px-4 py-3 text-xs">{row.nivel}</td>
-                  <td className="px-4 py-3 text-xs">{formatDateTime(row.fechaMuestreo)}</td>
-                  <td className="px-4 py-3 text-xs">{formatDateTime(row.fechaEntrega)}</td>
-                  <td className="px-4 py-3">
-                    <div className="flex justify-end gap-2">
-                      <button
-                        type="button"
-                        onClick={() => openDetail(row)}
-                        className="inline-flex items-center gap-1 rounded-md border border-[var(--color-outline-variant)] px-3 py-1.5 text-xs font-semibold text-[var(--color-on-surface-variant)] transition hover:border-[var(--color-primary)] hover:text-[var(--color-on-surface)]"
-                      >
-                        <Eye size={12} />
+                  <td className="px-4 py-3 text-xs">
+                    <div className="flex flex-wrap gap-2">
+                      <button type="button" className={secondaryButton} onClick={() => setDetailRow(row)}>
+                        <Eye size={14} />
                         Ver
                       </button>
-                      <button
-                        type="button"
-                        onClick={() => startEdit(row)}
-                        disabled={!row.canEdit}
-                        className="inline-flex items-center gap-1 rounded-md border border-[var(--color-tertiary)]/45 px-3 py-1.5 text-xs font-semibold text-[var(--color-tertiary)] transition hover:bg-[var(--color-tertiary)]/12 disabled:cursor-not-allowed disabled:opacity-40"
-                      >
-                        <Pencil size={12} />
+                      <button type="button" className={secondaryButton} onClick={() => onEdit(row)}>
+                        <Pencil size={14} />
                         Editar
                       </button>
                     </div>
                   </td>
                 </tr>
               ))}
-              {filteredRows.length === 0 ? (
+              {rows.length === 0 ? (
                 <tr>
-                  <td
-                    colSpan={10}
-                    className="px-4 py-6 text-center text-sm text-[var(--color-on-surface-variant)]"
-                  >
-                    No hay registros para los filtros aplicados.
+                  <td colSpan={8} className="px-4 py-6 text-center text-sm text-[var(--color-on-surface-variant)]">
+                    No hay muestras para mostrar.
                   </td>
                 </tr>
               ) : null}
             </tbody>
           </table>
         </div>
-      </article>
-
-      {detailTarget ? (
-        <div className="fixed inset-0 z-[95] flex items-center justify-center bg-black/55 p-4">
-          <div className="flex max-h-[92vh] w-full max-w-4xl flex-col overflow-hidden rounded-2xl border border-[var(--color-border-soft)] bg-[var(--color-surface-container-low)] p-5 shadow-2xl md:p-6">
-            <div className="mb-5 flex items-start justify-between gap-4 border-b border-[var(--color-border-soft)] pb-4">
-              <div>
-                <h4 className="text-xl font-bold">Detalle de muestra</h4>
-                <p className="mt-1 text-xs text-[var(--color-on-surface-variant)]">
-                  Vista completa del registro seleccionado.
+        <div className="exploraciones-mobile-list hidden divide-y divide-[var(--color-border-soft)]">
+          {rows.map((row) => (
+            <div key={row.id} className="space-y-2 px-4 py-4">
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <p className="text-xs font-bold uppercase tracking-wider text-[var(--color-on-surface-variant)]">
+                    Código
+                  </p>
+                  <p className="mt-1 text-sm font-bold">{row.code}</p>
+                  <p className="mt-1 text-xs text-[var(--color-on-surface-variant)]">{row.name ?? "-"}</p>
+                </div>
+                <p className="shrink-0 text-xs text-[var(--color-on-surface-variant)]">
+                  {formatDate(row.sampledAt)}
                 </p>
               </div>
-              <button
-                type="button"
-                onClick={() => setDetailTarget(null)}
-                className="rounded-md border border-[var(--color-outline-variant)] p-2 text-[var(--color-on-surface-variant)] transition hover:text-[var(--color-on-surface)]"
-              >
-                <X size={14} />
-              </button>
+              <div className="grid gap-2 text-xs">
+                <p>
+                  <span className="font-bold text-[var(--color-on-surface-variant)]">Ubicación: </span>
+                  {row.location}
+                </p>
+                <p>
+                  <span className="font-bold text-[var(--color-on-surface-variant)]">Objetivo: </span>
+                  {row.objectiveName}
+                </p>
+                <p>
+                  <span className="font-bold text-[var(--color-on-surface-variant)]">Registrado por: </span>
+                  {row.createdByName}
+                </p>
+                <div>
+                  <span className="font-bold text-[var(--color-on-surface-variant)]">Resultados: </span>
+                  <div className="mt-1">
+                    <ResultStatus results={row.results} />
+                  </div>
+                </div>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <button type="button" className={secondaryButton} onClick={() => setDetailRow(row)}>
+                  <Eye size={14} />
+                  Ver
+                </button>
+                <button type="button" className={secondaryButton} onClick={() => onEdit(row)}>
+                  <Pencil size={14} />
+                  Editar resultados
+                </button>
+              </div>
             </div>
-
-            <div className="overflow-y-auto pr-1">
-              {detailTarget.source === "local" ? (
-                <DetailContent
-                  nombre={detailTarget.data.payload.nombre}
-                  numero={detailTarget.data.payload.numero}
-                  tipoMuestra={detailTarget.data.payload.tipoMuestra}
-                  sector={detailTarget.data.payload.sector}
-                  usuarioNombre="-"
-                  fechaMuestreo={detailTarget.data.payload.fechaMuestreo}
-                  fechaEntrega={detailTarget.data.payload.fechaEntrega}
-                  laboratorio1={detailTarget.data.payload.laboratorio1}
-                  laboratorio2={detailTarget.data.payload.laboratorio2}
-                  laboratorio3={detailTarget.data.payload.laboratorio3}
-                  descripcion={detailTarget.data.payload.descripcion}
-                  nivel={detailTarget.data.payload.ubicacion.nivel}
-                  este={detailTarget.data.payload.ubicacion.este}
-                  norte={detailTarget.data.payload.ubicacion.norte}
-                  elevacion={detailTarget.data.payload.ubicacion.elevacion}
-                  referenciaLugar={detailTarget.data.payload.ubicacion.referenciaLugar}
-                  resultados={(detailTarget.data.payload.resultados ?? []).map((item, index) => ({
-                    key: `${item.elemento}-${index}`,
-                    label: item.elemento,
-                    value: `${item.prefijo ?? ""}${item.valor}`
-                  }))}
-                />
-              ) : (
-                <DetailContent
-                  nombre={detailTarget.data.nombre}
-                  numero={detailTarget.data.numero ?? undefined}
-                  tipoMuestra={detailTarget.data.tipoMuestra ?? undefined}
-                  sector={detailTarget.data.sector ?? undefined}
-                  usuarioNombre={detailTarget.data.usuario?.nombre ?? undefined}
-                  fechaMuestreo={detailTarget.data.fechaMuestreo ?? undefined}
-                  fechaEntrega={detailTarget.data.fechaEntrega ?? undefined}
-                  laboratorio1={detailTarget.data.laboratorio1 ?? undefined}
-                  laboratorio2={detailTarget.data.laboratorio2 ?? undefined}
-                  laboratorio3={detailTarget.data.laboratorio3 ?? undefined}
-                  descripcion={detailTarget.data.descripcion ?? undefined}
-                  nivel={detailTarget.data.ubicacion.nivel}
-                  este={detailTarget.data.ubicacion.este ?? undefined}
-                  norte={detailTarget.data.ubicacion.norte ?? undefined}
-                  elevacion={detailTarget.data.ubicacion.elevacion ?? undefined}
-                  referenciaLugar={detailTarget.data.ubicacion.referenciaLugar ?? undefined}
-                  resultados={(detailTarget.data.resultados ?? []).map((item) => ({
-                    key: item.id ?? `${item.elemento.nombre}-${item.valor}`,
-                    label: item.elemento.nombre,
-                    value: `${item.prefijo ?? ""}${item.valor}${item.elemento.unidad ? ` ${item.elemento.unidad}` : ""}`
-                  }))}
-                />
-              )}
-            </div>
-          </div>
+          ))}
+          {rows.length === 0 ? (
+            <p className="px-4 py-6 text-center text-sm text-[var(--color-on-surface-variant)]">
+              No hay muestras para mostrar.
+            </p>
+          ) : null}
         </div>
+      </article>
+
+      {detailRow ? <SampleDetailModal row={detailRow} onClose={() => setDetailRow(null)} /> : null}
+    </>
+  );
+}
+
+function ResultStatus({ results }: { results: any[] }) {
+  const hasAnyResults = hasResults(results);
+  return (
+    <div className="flex flex-col gap-1">
+      <span
+        className={`inline-flex w-fit rounded-full px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider ${
+          hasAnyResults
+            ? "bg-[var(--color-success)]/18 text-[var(--color-success)]"
+            : "bg-[var(--color-error)]/14 text-[var(--color-error)]"
+        }`}
+      >
+        {hasAnyResults ? `Con resultados (${results.length})` : "Sin resultados"}
+      </span>
+      {hasAnyResults ? (
+        <span className="text-xs text-[var(--color-on-surface-variant)]">{getResultText(results)}</span>
       ) : null}
+    </div>
+  );
+}
+
+function SampleDetailModal({ row, onClose }: { row: SampleTableRow; onClose: () => void }) {
+  const raw = row.raw as any;
+  const payload = row.source === "local" ? raw.payload ?? {} : raw;
+  const isInterior =
+    row.source === "local"
+      ? raw.module === "interior"
+      : Boolean(raw.labor);
+  const coordinates = [
+    ["Este", payload.east],
+    ["Norte", payload.north],
+    ["Elevación", payload.elevation]
+  ];
+  const labAssignments = row.labAssignments ?? [];
+
+  return (
+    <div className="exploraciones-modal fixed inset-0 z-[100] flex items-center justify-center bg-black/55 p-4">
+      <section className="exploraciones-modal-card flex max-h-[92vh] w-full max-w-4xl flex-col overflow-hidden rounded-2xl border border-[var(--color-border-soft)] bg-[var(--color-surface-container-low)] shadow-2xl">
+        <div className="flex items-start justify-between gap-3 border-b border-[var(--color-border-soft)] p-5">
+          <div>
+            <h3 className="text-xl font-bold">Detalle del registro</h3>
+            <p className="mt-1 text-sm font-semibold text-[var(--color-on-surface-variant)]">{row.code}</p>
+          </div>
+          <button type="button" onClick={onClose} className="rounded-lg border border-[var(--color-outline-variant)] p-2 text-[var(--color-on-surface-variant)]">
+            <X size={15} />
+          </button>
+        </div>
+
+        <div className="overflow-y-auto p-5">
+          <div className="grid gap-4 md:grid-cols-2">
+            <DetailSection title="Resumen">
+              <DetailItem label="Estado" value={row.source === "local" ? "Pendiente local" : "Sincronizado"} />
+              <DetailItem label="Tipo" value={isInterior ? "Interior Mina" : "Superficie"} />
+              <DetailItem label="Nombre" value={row.name ?? "-"} />
+              <DetailItem label="Ubicación" value={row.location} />
+              <DetailItem label="Objetivo" value={row.objectiveName} />
+              <DetailItem label="Registrado por" value={row.createdByName} />
+              <DetailItem label="Fecha de muestreo" value={formatDate(row.sampledAt)} />
+              <DetailItem label="Resultados" value={hasResults(row.results) ? `${row.results.length} registrados` : "Sin resultados"} />
+            </DetailSection>
+
+            <DetailSection title="Coordenadas">
+              {coordinates.map(([label, value]) => (
+                <DetailItem key={label} label={label} value={value ?? "-"} />
+              ))}
+            </DetailSection>
+          </div>
+
+          <DetailSection title="Laboratorios" className="mt-4">
+            {labAssignments.length > 0 ? (
+              <div className="grid gap-2 md:grid-cols-3">
+                {labAssignments.map((assignment: any, index: number) => (
+                  <div key={`${assignment.slot ?? assignment.surfaceLaboratoryId ?? index}-${index}`} className="rounded-lg bg-[var(--color-surface-container-high)] p-3">
+                    <p className="text-xs font-bold uppercase text-[var(--color-on-surface-variant)]">
+                      {assignment.slot ?? `LAB ${index + 1}`}
+                    </p>
+                    <p className="mt-1 text-sm">
+                      {assignment.laboratory?.name ?? assignment.interiorLaboratoryId ?? assignment.surfaceLaboratoryId ?? "-"}
+                    </p>
+                    <p className="mt-1 text-xs text-[var(--color-on-surface-variant)]">
+                      {(assignment.results ?? []).length} resultados
+                    </p>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="text-sm text-[var(--color-on-surface-variant)]">Sin laboratorios asignados.</p>
+            )}
+          </DetailSection>
+
+          <DetailSection title="Resultados" className="mt-4">
+            {hasResults(row.results) ? (
+              <div className="overflow-x-auto">
+                <table className="w-full min-w-[560px] border-collapse text-left text-sm">
+                  <thead>
+                    <tr className="text-[10px] font-bold uppercase tracking-widest text-[var(--color-on-surface-variant)]">
+                      <th className="px-3 py-2">Elemento</th>
+                      <th className="px-3 py-2">Valor</th>
+                      <th className="px-3 py-2">Unidad</th>
+                      <th className="px-3 py-2">Calificador</th>
+                      <th className="px-3 py-2">Laboratorio</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-[var(--color-border-soft)]">
+                    {row.results.map((result: any, index) => (
+                      <tr key={result.id ?? `${result.elementId ?? "result"}-${index}`}>
+                        <td className="px-3 py-2">{result.element?.symbol ?? result.element?.name ?? result.elementId ?? "-"}</td>
+                        <td className="px-3 py-2">{result.value ?? "-"}</td>
+                        <td className="px-3 py-2">{result.unit ?? "-"}</td>
+                        <td className="px-3 py-2">{result.qualifier ?? "-"}</td>
+                        <td className="px-3 py-2">{result.labAssignmentLabel ?? result.laboratory?.name ?? result.surfaceLaboratoryId ?? "-"}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            ) : (
+              <p className="text-sm font-semibold text-[var(--color-error)]">Este registro aún no tiene resultados.</p>
+            )}
+          </DetailSection>
+
+          <DetailSection title="Datos completos" className="mt-4">
+            <pre className="max-h-72 overflow-auto rounded-lg bg-[var(--color-surface-container-high)] p-3 text-xs text-[var(--color-on-surface-variant)]">
+              {stringifyDetail(row.source === "local" ? raw.payload : raw)}
+            </pre>
+          </DetailSection>
+        </div>
+      </section>
+    </div>
+  );
+}
+
+function DetailSection({
+  title,
+  children,
+  className = ""
+}: {
+  title: string;
+  children: React.ReactNode;
+  className?: string;
+}) {
+  return (
+    <section className={`rounded-xl border border-[var(--color-border-soft)] bg-[var(--color-surface-container-low)] p-4 ${className}`}>
+      <h4 className="mb-3 text-xs font-bold uppercase tracking-wider text-[var(--color-on-surface-variant)]">{title}</h4>
+      {children}
     </section>
+  );
+}
+
+function DetailItem({ label, value }: { label: string; value: React.ReactNode }) {
+  return (
+    <div className="mb-2 last:mb-0">
+      <p className="text-[10px] font-bold uppercase tracking-wider text-[var(--color-on-surface-variant)]">{label}</p>
+      <p className="mt-0.5 text-sm font-semibold">{value}</p>
+    </div>
+  );
+}
+
+function CatalogModal({
+  kind,
+  form,
+  areaOptions,
+  levelOptions,
+  onChange,
+  onClose,
+  onSubmit
+}: {
+  kind: ModalKind;
+  form: CatalogForm;
+  areaOptions: Array<{ id: string; label: string; searchText?: string }>;
+  levelOptions: Array<{ id: string; label: string; searchText?: string }>;
+  onChange: (field: keyof CatalogForm, value: string) => void;
+  onClose: () => void;
+  onSubmit: (event: FormEvent<HTMLFormElement>) => void;
+}) {
+  const needsAbbreviation = kind.includes("area") || kind === "interior-level" || kind === "interior-labor";
+  const isElement = kind === "element";
+  const needsAreaParent = kind === "interior-level";
+  const needsLevelParent = kind === "interior-labor";
+
+  return (
+    <div className="exploraciones-modal fixed inset-0 z-[100] flex items-center justify-center bg-black/55 p-4">
+      <form onSubmit={onSubmit} className="exploraciones-modal-card w-full max-w-lg rounded-2xl border border-[var(--color-border-soft)] bg-[var(--color-surface-container-low)] p-5 shadow-2xl">
+        <div className="mb-4 flex items-center justify-between gap-3 border-b border-[var(--color-border-soft)] pb-3">
+          <h3 className="text-lg font-bold">{modalTitle(kind)}</h3>
+          <button type="button" onClick={onClose} className="rounded-lg border border-[var(--color-outline-variant)] p-2 text-[var(--color-on-surface-variant)]">
+            <X size={15} />
+          </button>
+        </div>
+        <div className="space-y-3">
+          {needsAreaParent ? (
+            <FormSelect label="Área" value={form.parentId} options={areaOptions} onChange={(value) => onChange("parentId", value)} />
+          ) : null}
+          {needsLevelParent ? (
+            <FormSelect label="Nivel" value={form.parentId} options={levelOptions} onChange={(value) => onChange("parentId", value)} />
+          ) : null}
+          <TextField label="Nombre" value={form.name} onChange={(value) => onChange("name", value)} />
+          {isElement ? (
+            <div className="exploraciones-modal-grid grid grid-cols-2 gap-3">
+              <TextField label="Símbolo" value={form.symbol} onChange={(value) => onChange("symbol", value)} />
+              <TextField label="Unidad" value={form.defaultUnit} onChange={(value) => onChange("defaultUnit", value)} />
+            </div>
+          ) : null}
+          {needsAbbreviation || kind.includes("laboratory") ? (
+            <TextField label="Abreviatura" value={form.abbreviation} onChange={(value) => onChange("abbreviation", value)} />
+          ) : null}
+          {kind === "interior-level" ? (
+            <TextField label="Elevación" value={form.elevation} onChange={(value) => onChange("elevation", value)} />
+          ) : null}
+          <TextField label="Descripción" value={form.description} onChange={(value) => onChange("description", value)} />
+        </div>
+        <div className="exploraciones-modal-actions mt-5 flex justify-end gap-2">
+          <button type="button" className={secondaryButton} onClick={onClose}>Cancelar</button>
+          <button type="submit" className={primaryButton}>
+            <Plus size={15} />
+            Guardar
+          </button>
+        </div>
+      </form>
+    </div>
   );
 }
