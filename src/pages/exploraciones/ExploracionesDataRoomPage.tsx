@@ -115,8 +115,8 @@ const mapMarkerIcon = L.icon({
   shadowSize: [46, 46]
 });
 
-const DEFAULT_PROJECT_MAP_LAT = Number(import.meta.env.VITE_PROJECT_MAP_LAT ?? -16.5);
-const DEFAULT_PROJECT_MAP_LNG = Number(import.meta.env.VITE_PROJECT_MAP_LNG ?? -68.15);
+const DEFAULT_PROJECT_MAP_LAT = Number(import.meta.env.VITE_PROJECT_MAP_LAT ?? -21.734012998021456);
+const DEFAULT_PROJECT_MAP_LNG = Number(import.meta.env.VITE_PROJECT_MAP_LNG ?? -66.4585126387057);
 const EXPLORACIONES_INTRO_VIDEO_URL =
   import.meta.env.VITE_EXPLORACIONES_INTRO_VIDEO_URL ?? introVideoDefault;
 const DRILLHOLES_MEDIA_SCHEME = {
