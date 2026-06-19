@@ -21,13 +21,13 @@ type RouteItem = {
 };
 
 const SYSTEM_ROUTES: RouteItem[] = [
-  { label: "Inicio", to: "/dashboard", icon: LayoutDashboard },
+  { label: "Inicio", to: "/dashboard", icon: LayoutDashboard, roles: ["ADMIN", "SUPERINTENDENTE"] },
   { label: "Data Room", to: "/exploraciones-data-room", icon: FolderKanban },
   {
     label: "Exploraciones",
     to: "/exploraciones",
     icon: MapPinned,
-    roles: ["ADMIN", "SUPERINTENDENTE"]
+    roles: ["ADMIN", "SUPERINTENDENTE", "GEOLOGO"]
   },
   {
     label: "Trabajadores",

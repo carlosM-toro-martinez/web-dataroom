@@ -1,4 +1,4 @@
-import { Link } from "react-router-dom";
+import { Link, Navigate } from "react-router-dom";
 import { Database, FileSpreadsheet, MapPinned, Users } from "lucide-react";
 import { useAuth } from "@/features/auth/context/AuthContext";
 import { InternalHeader } from "@/shared/ui/InternalHeader";
@@ -8,6 +8,10 @@ const cardClassName =
 
 export function DashboardPage() {
   const { user } = useAuth();
+  if (user?.role === "GEOLOGO") {
+    return <Navigate to="/exploraciones-data-room" replace />;
+  }
+
   const canAdmin = user?.role === "ADMIN" || user?.role === "SUPERINTENDENTE";
 
   return (

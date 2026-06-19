@@ -142,7 +142,7 @@ export function ExploracionesDataRoomPage() {
   const navigate = useNavigate();
   const location = useLocation();
   const canManage = user?.role === "ADMIN" || user?.role === "SUPERINTENDENTE";
-  const canView = canManage || user?.role === "VISITANTE";
+  const canView = canManage || user?.role === "VISITANTE" || user?.role === "GEOLOGO";
   const isVisitante = user?.role === "VISITANTE";
   const isAdmin = user?.role === "ADMIN";
   const params = useParams();

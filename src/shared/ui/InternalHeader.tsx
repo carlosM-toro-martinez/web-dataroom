@@ -13,13 +13,13 @@ type MainRoute = {
 };
 
 const MAIN_ROUTES: MainRoute[] = [
-  { label: "Inicio", to: "/dashboard", icon: LayoutDashboard },
+  { label: "Inicio", to: "/dashboard", icon: LayoutDashboard, roles: ["ADMIN", "SUPERINTENDENTE"] },
   { label: "Data Room", to: "/exploraciones-data-room", icon: Database },
   {
     label: "Exploraciones",
     to: "/exploraciones",
     icon: MapPinned,
-    roles: ["ADMIN", "SUPERINTENDENTE"]
+    roles: ["ADMIN", "SUPERINTENDENTE", "GEOLOGO"]
   },
   {
     label: "Trabajadores",
