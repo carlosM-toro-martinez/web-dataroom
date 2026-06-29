@@ -10,6 +10,7 @@ import {
   surfaceAreaSchema,
   surfaceSampleSchema,
   type InteriorSampleWithResultsPayload,
+  type SamplePriority,
   type SurfaceSampleWithResultsPayload
 } from "@/features/exploraciones/model/proposalSamples.schema";
 
@@ -156,6 +157,7 @@ export async function getInteriorSamples(params?: {
   interiorLaborId?: string;
   interiorObjectiveId?: string;
   createdById?: number | string;
+  priority?: SamplePriority;
   search?: string;
   page?: number;
   limit?: number;
@@ -176,6 +178,11 @@ export async function updateInteriorSampleWithResults(
   payload: Partial<Omit<InteriorSampleWithResultsPayload, "interiorLaborId">>
 ) {
   const response = await httpClient.patch(apiEndpoints.exploraciones.interiorSampleWithResultsById(id), payload);
+  return parseOne(response.data, (item) => interiorSampleSchema.parse(item));
+}
+
+export async function assignInteriorSampleVoucher(id: string) {
+  const response = await httpClient.post(apiEndpoints.exploraciones.interiorSampleAssignVoucherById(id));
   return parseOne(response.data, (item) => interiorSampleSchema.parse(item));
 }
 
@@ -227,6 +234,7 @@ export async function getSurfaceSamples(params?: {
   surfaceAreaId?: string;
   surfaceObjectiveId?: string;
   createdById?: number | string;
+  priority?: SamplePriority;
   search?: string;
   page?: number;
   limit?: number;
@@ -252,6 +260,13 @@ export async function updateSurfaceSampleWithResults(
   const response = await httpClient.patch(
     apiEndpoints.exploraciones.surfaceProposalSampleWithResultsById(id),
     payload
+  );
+  return parseOne(response.data, (item) => surfaceSampleSchema.parse(item));
+}
+
+export async function assignSurfaceSampleVoucher(id: string) {
+  const response = await httpClient.post(
+    apiEndpoints.exploraciones.surfaceProposalSampleAssignVoucherById(id)
   );
   return parseOne(response.data, (item) => surfaceSampleSchema.parse(item));
 }

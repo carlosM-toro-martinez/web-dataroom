@@ -1,5 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
+  assignInteriorSampleVoucher,
+  assignSurfaceSampleVoucher,
   createInteriorArea,
   createInteriorLabor,
   createInteriorLaboratory,
@@ -42,6 +44,7 @@ import {
 import { syncPendingProposalSamples } from "@/features/exploraciones/services/proposalSamplesSync.service";
 import type {
   InteriorSampleWithResultsPayload,
+  SamplePriority,
   SurfaceSampleWithResultsPayload
 } from "@/features/exploraciones/model/proposalSamples.schema";
 
@@ -206,7 +209,12 @@ export function useInteriorLaboratoriesQuery() {
   });
 }
 
-export function useInteriorSamplesQuery(params: { interiorLaborId?: string; createdById?: number; search?: string }) {
+export function useInteriorSamplesQuery(params: {
+  interiorLaborId?: string;
+  createdById?: number;
+  priority?: SamplePriority;
+  search?: string;
+}) {
   return useQuery({
     queryKey: [...base, "interior", "samples", params],
     queryFn: () => getInteriorSamples({ ...params, page: 1, limit: 200 })
@@ -234,7 +242,12 @@ export function useSurfaceLaboratoriesQuery() {
   });
 }
 
-export function useSurfaceSamplesQuery(params: { surfaceAreaId?: string; createdById?: number; search?: string }) {
+export function useSurfaceSamplesQuery(params: {
+  surfaceAreaId?: string;
+  createdById?: number;
+  priority?: SamplePriority;
+  search?: string;
+}) {
   return useQuery({
     queryKey: [...base, "surface", "samples", params],
     queryFn: () => getSurfaceSamples({ ...params, page: 1, limit: 200 })
@@ -322,4 +335,14 @@ export function useUpdateSurfaceSampleWithResultsMutation() {
     }) => updateSurfaceSampleWithResults(id, payload),
     onSuccess: invalidate
   });
+}
+
+export function useAssignInteriorSampleVoucherMutation() {
+  const invalidate = useInvalidateProposalSamples();
+  return useMutation({ mutationFn: assignInteriorSampleVoucher, onSuccess: invalidate });
+}
+
+export function useAssignSurfaceSampleVoucherMutation() {
+  const invalidate = useInvalidateProposalSamples();
+  return useMutation({ mutationFn: assignSurfaceSampleVoucher, onSuccess: invalidate });
 }

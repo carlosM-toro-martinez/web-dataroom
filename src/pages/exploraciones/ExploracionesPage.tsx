@@ -10,6 +10,7 @@ import {
   Microscope,
   Pencil,
   Plus,
+  Printer,
   RefreshCw,
   Save,
   Search,
@@ -24,6 +25,8 @@ import { ApiError } from "@/shared/api/core/apiError";
 import { useAuth } from "@/features/auth/context/AuthContext";
 import { useToast } from "@/shared/ui/toast/ToastProvider";
 import {
+  useAssignInteriorSampleVoucherMutation,
+  useAssignSurfaceSampleVoucherMutation,
   useInteriorAreasQuery,
   useInteriorLaborsQuery,
   useInteriorLaboratoriesQuery,
@@ -51,6 +54,7 @@ import type {
   InteriorLabor,
   InteriorSample,
   LaboratorySlot,
+  SamplePriority,
   SurfaceSample
 } from "@/features/exploraciones/model/proposalSamples.schema";
 import type { OfflineProposalCatalog, OfflineProposalSample } from "@/features/exploraciones/db/exploracionesDb";
@@ -75,6 +79,7 @@ const geoMarkerIcon = L.divIcon({
 });
 
 type RegisterType = "interior" | "surface";
+type ResultStatusFilter = "all" | "with" | "without";
 type ModalKind =
   | "element"
   | "interior-area"
@@ -103,6 +108,7 @@ interface SampleForm {
   interiorObjectiveId: string;
   surfaceAreaId: string;
   surfaceObjectiveId: string;
+  priority: SamplePriority;
   sampleNameSuffix: string;
   sampledAt: string;
   east: string;
@@ -132,6 +138,8 @@ type SampleTableRow = {
   id: string;
   code: string;
   name?: string | null;
+  voucherNumber?: number | null;
+  priority: SamplePriority;
   sampledAt?: string | null;
   objectiveName: string;
   location: string;
@@ -146,6 +154,27 @@ type GeoPoint = {
   latitude: number;
   longitude: number;
   accuracy?: number;
+};
+
+const PRIORITY_OPTIONS: Array<{ id: SamplePriority; label: string }> = [
+  { id: "NORMAL", label: "Normal" },
+  { id: "HIGH", label: "Alta" },
+  { id: "URGENT", label: "Urgente" },
+  { id: "LOW", label: "Baja" }
+];
+
+const PRIORITY_LABELS: Record<SamplePriority, string> = {
+  URGENT: "Urgente",
+  HIGH: "Alta",
+  NORMAL: "Normal",
+  LOW: "Baja"
+};
+
+const PRIORITY_WEIGHT: Record<SamplePriority, number> = {
+  URGENT: 4,
+  HIGH: 3,
+  NORMAL: 2,
+  LOW: 1
 };
 
 const INTERIOR_DEFAULT_AREAS = [
@@ -230,6 +259,7 @@ function initialSampleForm(): SampleForm {
     interiorObjectiveId: "",
     surfaceAreaId: "",
     surfaceObjectiveId: "",
+    priority: "NORMAL",
     sampleNameSuffix: "",
     sampledAt: toLocalDatetimeInput(),
     east: "",
@@ -442,6 +472,8 @@ export function ExploracionesPage() {
   const [results, setResults] = useState<ResultRow[]>(() => []);
   const [modalKind, setModalKind] = useState<ModalKind | null>(null);
   const [search, setSearch] = useState("");
+  const [priorityFilter, setPriorityFilter] = useState<SamplePriority | "">("");
+  const [resultStatusFilter, setResultStatusFilter] = useState<ResultStatusFilter>("all");
   const [onlyMine, setOnlyMine] = useState(false);
   const [defaultsSeeded, setDefaultsSeeded] = useState(false);
   const [editTarget, setEditTarget] = useState<EditTarget>(null);
@@ -458,6 +490,7 @@ export function ExploracionesPage() {
   const remoteInteriorSamples = useInteriorSamplesQuery({
     interiorLaborId: sampleForm.interiorLaborId || undefined,
     createdById: onlyMine ? user?.id : undefined,
+    priority: priorityFilter || undefined,
     search: search || undefined
   });
   const remoteSurfaceAreas = useSurfaceAreasQuery();
@@ -466,6 +499,7 @@ export function ExploracionesPage() {
   const remoteSurfaceSamples = useSurfaceSamplesQuery({
     surfaceAreaId: sampleForm.surfaceAreaId || undefined,
     createdById: onlyMine ? user?.id : undefined,
+    priority: priorityFilter || undefined,
     search: search || undefined
   });
   const offlineCatalogs = useOfflineProposalCatalogsQuery();
@@ -476,6 +510,8 @@ export function ExploracionesPage() {
   const queueRemoteEdit = useQueueRemoteProposalSampleEditMutation();
   const updateInteriorSample = useUpdateInteriorSampleWithResultsMutation();
   const updateSurfaceSample = useUpdateSurfaceSampleWithResultsMutation();
+  const assignInteriorVoucher = useAssignInteriorSampleVoucherMutation();
+  const assignSurfaceVoucher = useAssignSurfaceSampleVoucherMutation();
   const syncMutation = useSyncProposalSamplesMutation();
 
   const localCatalogs = offlineCatalogs.data ?? [];
@@ -752,6 +788,8 @@ export function ExploracionesPage() {
       id: item.localId,
       code: item.synced ? item.code : `${item.code} (offline)`,
       name: (item.payload as any).name ?? null,
+      voucherNumber: (item.payload as any).voucherNumber ?? null,
+      priority: ((item.payload as any).priority ?? "NORMAL") as SamplePriority,
       sampledAt: item.payload.sampledAt,
       objectiveName: "-",
       location: item.module === "interior" ? "Interior Mina" : "Superficie",
@@ -772,6 +810,8 @@ export function ExploracionesPage() {
         id: sample.id,
         code: sample.code,
         name: sample.name ?? null,
+        voucherNumber: sample.voucherNumber ?? null,
+        priority: sample.priority ?? "NORMAL",
         sampledAt: sample.sampledAt,
         objectiveName: (isInterior ? interiorSample.objective?.name : surfaceSample.objective?.name) ?? "-",
         location: isInterior ? getLaborPath(interiorSample.labor) || "-" : surfaceSample.area?.name ?? "-",
@@ -784,8 +824,31 @@ export function ExploracionesPage() {
     });
     const rows = [...localRows, ...remoteRows];
     const query = search.trim().toLowerCase();
-    return query ? rows.filter((row) => `${row.code} ${row.name ?? ""} ${row.location}`.toLowerCase().includes(query)) : rows;
-  }, [elements, localVisibleSamples, registerType, remoteVisibleSamples, search, user?.nombre]);
+    return rows
+      .filter((row) => (!priorityFilter ? true : row.priority === priorityFilter))
+      .filter((row) => {
+        if (resultStatusFilter === "all") return true;
+        const rowHasResults = hasResults(row.results);
+        return resultStatusFilter === "with" ? rowHasResults : !rowHasResults;
+      })
+      .filter((row) => (!query ? true : row.code.toLowerCase().includes(query)))
+      .sort((left, right) => {
+        const priorityDiff = PRIORITY_WEIGHT[right.priority] - PRIORITY_WEIGHT[left.priority];
+        if (priorityDiff !== 0) return priorityDiff;
+        const leftDate = left.sampledAt ? new Date(left.sampledAt).getTime() : 0;
+        const rightDate = right.sampledAt ? new Date(right.sampledAt).getTime() : 0;
+        return rightDate - leftDate;
+      });
+  }, [
+    elements,
+    localVisibleSamples,
+    priorityFilter,
+    registerType,
+    remoteVisibleSamples,
+    resultStatusFilter,
+    search,
+    user?.nombre
+  ]);
 
   useEffect(() => {
     function onOnline() {
@@ -887,7 +950,7 @@ export function ExploracionesPage() {
         abbreviation: item.abbreviation ?? undefined,
         description: item.description ?? undefined
       }))
-    ];
+];
 
     if (items.length > 0) void cacheProposalCatalogs(items);
   }, [
@@ -973,6 +1036,7 @@ export function ExploracionesPage() {
           interiorLevelId: levelId ?? "",
           interiorLaborId: payload.interiorLaborId ?? "",
           interiorObjectiveId: payload.interiorObjectiveId ?? "",
+          priority: payload.priority ?? "NORMAL",
           sampleNameSuffix: extractEditableSuffix(payload.name, prefix),
           sampledAt: toLocalDatetimeInput(payload.sampledAt ? new Date(payload.sampledAt) : new Date()),
           east: payload.east === undefined ? "" : String(payload.east),
@@ -989,6 +1053,7 @@ export function ExploracionesPage() {
           ...initialSampleForm(),
           surfaceAreaId: payload.surfaceAreaId ?? "",
           surfaceObjectiveId: payload.surfaceObjectiveId ?? "",
+          priority: payload.priority ?? "NORMAL",
           sampleNameSuffix: extractEditableSuffix(payload.name, prefix),
           sampledAt: toLocalDatetimeInput(payload.sampledAt ? new Date(payload.sampledAt) : new Date()),
           east: payload.east === undefined ? "" : String(payload.east),
@@ -1015,6 +1080,7 @@ export function ExploracionesPage() {
         interiorLevelId: sample.labor?.level?.id ?? "",
         interiorLaborId: sample.labor?.id ?? "",
         interiorObjectiveId: sample.objective?.id ?? "",
+        priority: sample.priority ?? "NORMAL",
         sampleNameSuffix: extractEditableSuffix(sample.name, prefix),
         sampledAt: toLocalDatetimeInput(sample.sampledAt ? new Date(sample.sampledAt) : new Date()),
         east: sample.east === undefined || sample.east === null ? "" : String(sample.east),
@@ -1030,6 +1096,7 @@ export function ExploracionesPage() {
         ...initialSampleForm(),
         surfaceAreaId: sample.area?.id ?? "",
         surfaceObjectiveId: sample.objective?.id ?? "",
+        priority: sample.priority ?? "NORMAL",
         sampleNameSuffix: extractEditableSuffix(sample.name, prefix),
         sampledAt: toLocalDatetimeInput(sample.sampledAt ? new Date(sample.sampledAt) : new Date()),
         east: sample.east === undefined || sample.east === null ? "" : String(sample.east),
@@ -1169,6 +1236,7 @@ export function ExploracionesPage() {
       const normalizedSampleName = sampleName.trim() || undefined;
       const common = {
         name: normalizedSampleName,
+        priority: sampleForm.priority,
         east: toNumber(sampleForm.east),
         north: toNumber(sampleForm.north),
         elevation: toNumber(sampleForm.elevation),
@@ -1284,6 +1352,43 @@ export function ExploracionesPage() {
       resetSampleForm();
     } catch (error) {
       showError(error instanceof Error ? error.message : "No se pudo guardar la muestra.");
+    }
+  }
+
+  async function handlePrintVoucher(row: SampleTableRow) {
+    if (row.source !== "remote") {
+      showError("Sincroniza la muestra antes de imprimir el talón.");
+      return;
+    }
+
+    const isInterior = registerType === "interior";
+    const printWindow = window.open("", "_blank", "width=1280,height=560");
+    if (!printWindow) {
+      showError("El navegador bloqueó la ventana de impresión.");
+      return;
+    }
+
+    printWindow.document.write("<p style=\"font-family:Arial,sans-serif;padding:24px\">Preparando talón...</p>");
+    printWindow.document.close();
+
+    try {
+      const assigned =
+        row.voucherNumber !== null && row.voucherNumber !== undefined
+          ? row.raw
+          : isInterior
+            ? await assignInteriorVoucher.mutateAsync(row.id)
+            : await assignSurfaceVoucher.mutateAsync(row.id);
+
+      const nextRow: SampleTableRow = {
+        ...row,
+        raw: assigned as InteriorSample | SurfaceSample,
+        voucherNumber: (assigned as InteriorSample | SurfaceSample).voucherNumber ?? row.voucherNumber,
+        priority: (assigned as InteriorSample | SurfaceSample).priority ?? row.priority
+      };
+      writeVoucherPrintDocument(printWindow, nextRow);
+    } catch (error) {
+      printWindow.close();
+      showError(error instanceof Error ? error.message : "No se pudo asignar el número de talón.");
     }
   }
 
@@ -1540,7 +1645,7 @@ export function ExploracionesPage() {
             </div>
           )}
 
-          <div className="exploraciones-main-grid grid gap-3 md:grid-cols-2 xl:grid-cols-[1.2fr_0.8fr]">
+          <div className="exploraciones-main-grid grid gap-3 md:grid-cols-2 xl:grid-cols-[1.2fr_0.8fr_0.7fr]">
             <TextField
               label="Nombre"
               value={sampleName}
@@ -1553,6 +1658,12 @@ export function ExploracionesPage() {
               value={sampleForm.sampleNameSuffix}
               onChange={(value) => setSampleField("sampleNameSuffix", value.toUpperCase())}
               placeholder="Ej. T2"
+            />
+            <FormSelect
+              label="Prioridad"
+              value={sampleForm.priority}
+              options={PRIORITY_OPTIONS}
+              onChange={(value) => setSampleField("priority", value as SamplePriority)}
             />
           </div>
           <p className="text-xs text-[var(--color-on-surface-variant)]">
@@ -1686,10 +1797,15 @@ export function ExploracionesPage() {
       <SamplesTable
         rows={sampleRows}
         search={search}
+        priorityFilter={priorityFilter}
+        resultStatusFilter={resultStatusFilter}
         onlyMine={onlyMine}
         onSearch={setSearch}
+        onPriorityFilterChange={setPriorityFilter}
+        onResultStatusFilterChange={setResultStatusFilter}
         onOnlyMineChange={setOnlyMine}
         onEdit={startEdit}
+        onPrintVoucher={handlePrintVoucher}
       />
 
       {modalKind ? (
@@ -1982,6 +2098,41 @@ function ResultsEditor({
   );
 }
 
+function formatVoucherNumber(value?: number | null) {
+  return typeof value === "number" && Number.isFinite(value) ? `N° ${String(value).padStart(5, "0")}` : "-";
+}
+
+function priorityRowClass(priority: SamplePriority) {
+  const classes: Record<SamplePriority, string> = {
+    URGENT: "bg-red-50/90 hover:bg-red-100/80",
+    HIGH: "bg-amber-50/90 hover:bg-amber-100/80",
+    NORMAL: "bg-emerald-50/70 hover:bg-emerald-100/70",
+    LOW: "bg-sky-50/70 hover:bg-sky-100/70"
+  };
+  return classes[priority];
+}
+
+function priorityMobileClass(priority: SamplePriority) {
+  const classes: Record<SamplePriority, string> = {
+    URGENT: "bg-red-50/90",
+    HIGH: "bg-amber-50/90",
+    NORMAL: "bg-emerald-50/70",
+    LOW: "bg-sky-50/70"
+  };
+  return classes[priority];
+}
+
+function priorityBadgeClass(priority: SamplePriority) {
+  const classes: Record<SamplePriority, string> = {
+    URGENT: "inline-flex rounded-full bg-red-600 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider text-white",
+    HIGH: "inline-flex rounded-full bg-amber-500 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider text-white",
+    NORMAL:
+      "inline-flex rounded-full bg-emerald-600 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider text-white",
+    LOW: "inline-flex rounded-full bg-sky-600 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider text-white"
+  };
+  return classes[priority];
+}
+
 function normalizeNameToken(value?: string | null) {
   return (value ?? "")
     .trim()
@@ -2057,20 +2208,173 @@ function latLonToUtm(latitude: number, longitude: number) {
   return { east, north, zoneNumber };
 }
 
+function escapeHtml(value: unknown) {
+  return String(value ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#039;");
+}
+
+function formatVoucherDate(value?: string | null) {
+  if (!value) return "____/____/____";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "____/____/____";
+  const pad = (part: number) => String(part).padStart(2, "0");
+  return `${pad(date.getDate())}/${pad(date.getMonth() + 1)}/${date.getFullYear()}`;
+}
+
+function lineValue(value?: unknown, minLength = 12) {
+  const text = value === null || value === undefined || value === "" ? "" : String(value);
+  const underline = "_".repeat(Math.max(minLength, 1));
+  return text ? `${escapeHtml(text)}${underline.slice(0, Math.max(2, minLength - text.length))}` : underline;
+}
+
+function compactValue(value: unknown, maxLength = 26) {
+  const text = String(value ?? "").trim();
+  if (text.length <= maxLength) return escapeHtml(text);
+  return `${escapeHtml(text.slice(0, Math.max(0, maxLength - 1)))}…`;
+}
+
+function writeVoucherPrintDocument(printWindow: Window, row: SampleTableRow) {
+  const raw = row.raw as any;
+  const payload = row.source === "local" ? raw.payload ?? {} : raw;
+  const voucher = formatVoucherNumber(row.voucherNumber).replace("N° ", "");
+  const sampleId = row.code || row.name || "";
+  const east = compactValue(payload.east, 12);
+  const north = compactValue(payload.north, 12);
+  const elevation = compactValue(payload.elevation, 10);
+  const html = `<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>Talón ${escapeHtml(voucher)}</title>
+  <style>
+    @page { size: landscape; margin: 8mm; }
+    * { box-sizing: border-box; }
+    body { margin: 0; background: #fff; color: #171717; font-family: "Courier New", monospace; }
+    .voucher-sheet { width: 1188px; height: 302px; padding: 18px 14px 0; }
+    .voucher { display: grid; grid-template-columns: 810px 376px; width: 1188px; height: 302px; border: 3px solid #27384a; overflow: hidden; }
+    .main { border: 4px solid #27384a; border-right: 0; padding: 17px 16px 8px 14px; position: relative; overflow: hidden; }
+    .header { display: grid; grid-template-columns: 142px 1fr 157px; align-items: center; height: 53px; margin-bottom: 4px; }
+    .logo { width: 142px; height: 53px; border: 2px solid #8e9ba2; font-family: Arial, sans-serif; line-height: 1; position: relative; overflow: hidden; }
+    .logo .small { position: absolute; left: 3px; top: 3px; font-size: 16px; font-weight: 700; color: #374151; }
+    .logo .big { position: absolute; left: 3px; bottom: 4px; font-size: 18px; font-weight: 900; color: #111827; letter-spacing: 0; }
+    .logo .mark { position: absolute; left: 40px; top: 12px; font-size: 13px; font-weight: 800; color: #111827; opacity: .9; }
+    .brand { height: 53px; background: #26384b; padding: 5px 10px 0; }
+    .brand-title { color: #ffe31f; font-family: Arial, sans-serif; font-size: 24px; font-weight: 900; line-height: 1.05; }
+    .brand-sub { color: #fff; font-family: Arial, sans-serif; font-size: 14px; margin-left: 16px; }
+    .number { justify-self: end; width: 150px; height: 38px; background: #d43a2f; color: #fff; border-radius: 4px; display: flex; align-items: center; justify-content: center; gap: 12px; font-family: Arial, sans-serif; font-weight: 900; font-size: 24px; }
+    .number span:first-child { font-size: 20px; }
+    .form { width: 100%; overflow: hidden; }
+    .form-row { display: grid; gap: 10px; height: 27px; align-items: end; font-size: 18px; line-height: 1; white-space: nowrap; }
+    .cols-project { grid-template-columns: 1fr 220px; }
+    .cols-sampler { grid-template-columns: 1fr 300px; }
+    .cols-place { grid-template-columns: 315px 1fr; }
+    .field { display: flex; min-width: 0; align-items: end; gap: 4px; }
+    .label { flex: 0 0 auto; }
+    .fill { flex: 1 1 auto; min-width: 0; height: 18px; border-bottom: 1.7px solid #171717; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding: 0 4px 1px; }
+    .coords { display: grid; grid-template-columns: 1fr 1fr .8fr; gap: 5px; min-width: 0; }
+    .coord { display: flex; min-width: 0; align-items: end; }
+    .coord-label { flex: 0 0 auto; }
+    .coord-value { flex: 1 1 auto; min-width: 0; height: 18px; border-bottom: 1.7px solid #171717; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding: 0 3px 1px; }
+    .line { font-size: 18px; line-height: 1.5; white-space: nowrap; overflow: hidden; }
+    .obs { letter-spacing: 1px; font-size: 18px; line-height: 1.45; }
+    .stubs { border-left: 3px dashed #7d8a8e; padding: 8px 10px 8px 18px; display: grid; grid-template-rows: 1fr 1fr 1fr; gap: 8px; }
+    .stub { border-top: 3px dashed #7d8a8e; padding-top: 8px; }
+    .stub:first-child { border-top: 0; padding-top: 0; }
+    .stub-title { height: 32px; border: 2px solid #9fc4d6; border-radius: 3px; display: flex; align-items: center; justify-content: center; color: #788487; font-family: Arial, sans-serif; font-weight: 800; font-size: 12px; }
+    .stub-box { height: 45px; margin-top: 4px; border-radius: 3px; background: #e7f1f7; }
+    @media print {
+      body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+      .voucher-sheet { padding-top: 0; }
+    }
+  </style>
+</head>
+<body>
+  <div class="voucher-sheet">
+    <div class="voucher">
+      <section class="main">
+        <div class="header">
+          <div class="logo"><div class="small">Empresa Minera</div><div class="big">Marte S.R.L.</div></div>
+          <div class="brand"><div class="brand-title">EMPRESA MINERA MARTE S.R.L.</div><div class="brand-sub">REGISTRO DE MUESTREO</div></div>
+          <div class="number"><span>N°</span><span>${escapeHtml(voucher)}</span></div>
+        </div>
+        <div class="form">
+          <div class="form-row cols-project">
+            <div class="field"><span class="label">PROYECTO:</span><span class="fill">LIPEÑA</span></div>
+            <div class="field"><span class="label">FECHA:</span><span class="fill">${escapeHtml(formatVoucherDate(row.sampledAt))}</span></div>
+          </div>
+          <div class="form-row cols-sampler">
+            <div class="field"><span class="label">MUESTREADOR:</span><span class="fill">${compactValue(row.createdByName, 34)}</span></div>
+            <div class="field"><span class="label">ID DE MUESTRA:</span><span class="fill">${compactValue(sampleId, 24)}</span></div>
+          </div>
+          <div class="form-row cols-place">
+            <div class="field"><span class="label">LUGAR:</span><span class="fill">${compactValue(row.location, 24)}</span></div>
+            <div class="field">
+              <span class="label">COORDENADAS UTM:</span>
+              <span class="coords">
+                <span class="coord"><span class="coord-label">X:</span><span class="coord-value">${east}</span></span>
+                <span class="coord"><span class="coord-label">Y:</span><span class="coord-value">${north}</span></span>
+                <span class="coord"><span class="coord-label">Z:</span><span class="coord-value">${elevation}</span></span>
+              </span>
+            </div>
+          </div>
+          <div class="line">TIPO DE MUESTRA: [ ] Testigo&nbsp; [ ] Canal&nbsp; [ ] Chips/Detrito&nbsp; [ ] Grab</div>
+          <div class="line">ELEMENTOS A ANALIZAR: [ ]Cu&nbsp; [ ]Au&nbsp; [ ]Ag&nbsp; [ ]ICP Multi&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; OTROS:________</div>
+          <div class="line obs">OBSERVACIONES:_____________________________________________________</div>
+          <div class="line obs">___________________________________________________________________</div>
+          <div class="line obs">___________________________________________________________________</div>
+        </div>
+      </section>
+      <aside class="stubs">
+        <div class="stub"><div class="stub-title">EMPRESA MINERA MARTE S.R.L.</div><div class="stub-box"></div></div>
+        <div class="stub"><div class="stub-title">EMPRESA MINERA MARTE S.R.L.</div><div class="stub-box"></div></div>
+        <div class="stub"><div class="stub-title">EMPRESA MINERA MARTE S.R.L.</div><div class="stub-box"></div></div>
+      </aside>
+    </div>
+  </div>
+  <script>
+    window.addEventListener("load", () => {
+      setTimeout(() => {
+        window.focus();
+        window.print();
+      }, 120);
+    });
+  </script>
+</body>
+</html>`;
+
+  printWindow.document.open();
+  printWindow.document.write(html);
+  printWindow.document.close();
+}
+
 function SamplesTable({
   rows,
   search,
+  priorityFilter,
+  resultStatusFilter,
   onlyMine,
   onSearch,
+  onPriorityFilterChange,
+  onResultStatusFilterChange,
   onOnlyMineChange,
-  onEdit
+  onEdit,
+  onPrintVoucher
 }: {
   rows: SampleTableRow[];
   search: string;
+  priorityFilter: SamplePriority | "";
+  resultStatusFilter: ResultStatusFilter;
   onlyMine: boolean;
   onSearch: (value: string) => void;
+  onPriorityFilterChange: (value: SamplePriority | "") => void;
+  onResultStatusFilterChange: (value: ResultStatusFilter) => void;
   onOnlyMineChange: (value: boolean) => void;
   onEdit: (row: SampleTableRow) => void;
+  onPrintVoucher: (row: SampleTableRow) => void;
 }) {
   const [detailRow, setDetailRow] = useState<SampleTableRow | null>(null);
 
@@ -2085,8 +2389,29 @@ function SamplesTable({
             </h2>
             <label className="exploraciones-search relative min-w-64">
               <Search size={14} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[var(--color-on-surface-variant)]" />
-              <input className={`${fieldClass} pl-9`} value={search} onChange={(event) => onSearch(event.target.value)} placeholder="Buscar código" />
+              <input className={`${fieldClass} pl-9`} value={search} onChange={(event) => onSearch(event.target.value)} placeholder="Buscar por código" />
             </label>
+            <select
+              className={`${fieldClass} w-auto min-w-40`}
+              value={priorityFilter}
+              onChange={(event) => onPriorityFilterChange(event.target.value as SamplePriority | "")}
+            >
+              <option value="">Todas las prioridades</option>
+              {PRIORITY_OPTIONS.map((option) => (
+                <option key={option.id} value={option.id}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+            <select
+              className={`${fieldClass} w-auto min-w-40`}
+              value={resultStatusFilter}
+              onChange={(event) => onResultStatusFilterChange(event.target.value as ResultStatusFilter)}
+            >
+              <option value="all">Todos los resultados</option>
+              <option value="with">Con resultados</option>
+              <option value="without">Sin resultados</option>
+            </select>
             <button
               type="button"
               className={onlyMine ? primaryButton : secondaryButton}
@@ -2100,7 +2425,7 @@ function SamplesTable({
           <table className="w-full border-collapse text-left">
             <thead>
               <tr>
-                {["Código", "Nombre", "Ubicación", "Objetivo", "Registrado por", "Muestreo", "Resultados", "Acciones"].map((heading) => (
+                {["Código", "Nombre", "Talón", "Prioridad", "Ubicación", "Objetivo", "Registrado por", "Muestreo", "Resultados", "Acciones"].map((heading) => (
                   <th key={heading} className="px-4 py-3 text-[10px] font-bold uppercase tracking-widest text-[var(--color-on-surface-variant)]">
                     {heading}
                   </th>
@@ -2109,9 +2434,13 @@ function SamplesTable({
             </thead>
             <tbody className="divide-y divide-[var(--color-border-soft)]">
               {rows.map((row) => (
-                <tr key={row.id} className="transition hover:bg-[var(--color-surface-container-highest)]">
+                <tr key={row.id} className={`${priorityRowClass(row.priority)} transition hover:brightness-[0.98]`}>
                   <td className="px-4 py-3 text-sm font-bold">{row.code}</td>
                   <td className="px-4 py-3 text-xs">{row.name ?? "-"}</td>
+                  <td className="px-4 py-3 text-xs font-bold">{formatVoucherNumber(row.voucherNumber)}</td>
+                  <td className="px-4 py-3 text-xs">
+                    <span className={priorityBadgeClass(row.priority)}>{PRIORITY_LABELS[row.priority]}</span>
+                  </td>
                   <td className="px-4 py-3 text-xs">{row.location}</td>
                   <td className="px-4 py-3 text-xs">{row.objectiveName}</td>
                   <td className="px-4 py-3 text-xs">{row.createdByName}</td>
@@ -2129,13 +2458,22 @@ function SamplesTable({
                         <Pencil size={14} />
                         Editar
                       </button>
+                      <button
+                        type="button"
+                        className={secondaryButton}
+                        onClick={() => onPrintVoucher(row)}
+                        disabled={row.source !== "remote"}
+                      >
+                        <Printer size={14} />
+                        Imprimir talón
+                      </button>
                     </div>
                   </td>
                 </tr>
               ))}
               {rows.length === 0 ? (
                 <tr>
-                  <td colSpan={8} className="px-4 py-6 text-center text-sm text-[var(--color-on-surface-variant)]">
+                  <td colSpan={10} className="px-4 py-6 text-center text-sm text-[var(--color-on-surface-variant)]">
                     No hay muestras para mostrar.
                   </td>
                 </tr>
@@ -2145,7 +2483,7 @@ function SamplesTable({
         </div>
         <div className="exploraciones-mobile-list hidden divide-y divide-[var(--color-border-soft)]">
           {rows.map((row) => (
-            <div key={row.id} className="space-y-2 px-4 py-4">
+            <div key={row.id} className={`space-y-2 px-4 py-4 ${priorityMobileClass(row.priority)}`}>
               <div className="flex items-start justify-between gap-3">
                 <div>
                   <p className="text-xs font-bold uppercase tracking-wider text-[var(--color-on-surface-variant)]">
@@ -2153,12 +2491,17 @@ function SamplesTable({
                   </p>
                   <p className="mt-1 text-sm font-bold">{row.code}</p>
                   <p className="mt-1 text-xs text-[var(--color-on-surface-variant)]">{row.name ?? "-"}</p>
+                  <p className="mt-1 text-xs font-bold">Talón {formatVoucherNumber(row.voucherNumber)}</p>
                 </div>
                 <p className="shrink-0 text-xs text-[var(--color-on-surface-variant)]">
                   {formatDate(row.sampledAt)}
                 </p>
               </div>
               <div className="grid gap-2 text-xs">
+                <p>
+                  <span className="font-bold text-[var(--color-on-surface-variant)]">Prioridad: </span>
+                  <span className={priorityBadgeClass(row.priority)}>{PRIORITY_LABELS[row.priority]}</span>
+                </p>
                 <p>
                   <span className="font-bold text-[var(--color-on-surface-variant)]">Ubicación: </span>
                   {row.location}
@@ -2186,6 +2529,15 @@ function SamplesTable({
                 <button type="button" className={secondaryButton} onClick={() => onEdit(row)}>
                   <Pencil size={14} />
                   Editar resultados
+                </button>
+                <button
+                  type="button"
+                  className={secondaryButton}
+                  onClick={() => onPrintVoucher(row)}
+                  disabled={row.source !== "remote"}
+                >
+                  <Printer size={14} />
+                  Imprimir talón
                 </button>
               </div>
             </div>
@@ -2256,6 +2608,8 @@ function SampleDetailModal({ row, onClose }: { row: SampleTableRow; onClose: () 
               <DetailItem label="Estado" value={row.source === "local" ? "Pendiente local" : "Sincronizado"} />
               <DetailItem label="Tipo" value={isInterior ? "Interior Mina" : "Superficie"} />
               <DetailItem label="Nombre" value={row.name ?? "-"} />
+              <DetailItem label="Talón" value={formatVoucherNumber(row.voucherNumber)} />
+              <DetailItem label="Prioridad" value={PRIORITY_LABELS[row.priority]} />
               <DetailItem label="Ubicación" value={row.location} />
               <DetailItem label="Objetivo" value={row.objectiveName} />
               <DetailItem label="Registrado por" value={row.createdByName} />

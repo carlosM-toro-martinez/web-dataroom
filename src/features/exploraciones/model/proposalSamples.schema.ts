@@ -5,6 +5,7 @@ const optionalDate = z.string().nullable().optional();
 const optionalNumber = z.coerce.number().nullable().optional();
 
 export const laboratorySlotSchema = z.enum(["L1", "L2", "L3"]);
+export const samplePrioritySchema = z.enum(["URGENT", "HIGH", "NORMAL", "LOW"]);
 
 export const elementSchema = z
   .object({
@@ -32,6 +33,7 @@ export const interiorAreaSchema = catalogItemSchema.extend({
 export const interiorLevelSchema = catalogItemSchema.extend({
   interiorAreaId: z.string(),
   elevation: optionalNumber,
+  codeStart: optionalNumber,
   area: catalogItemSchema.optional()
 });
 
@@ -79,6 +81,8 @@ export const interiorSampleSchema = z
     code: z.string(),
     name: optionalText,
     sequentialNumber: z.number().nullable().optional(),
+    voucherNumber: z.number().nullable().optional(),
+    priority: samplePrioritySchema.optional().default("NORMAL"),
     east: optionalNumber,
     north: optionalNumber,
     elevation: optionalNumber,
@@ -102,6 +106,8 @@ export const surfaceSampleSchema = z
     code: z.string(),
     name: optionalText,
     sequentialNumber: z.number().nullable().optional(),
+    voucherNumber: z.number().nullable().optional(),
+    priority: samplePrioritySchema.optional().default("NORMAL"),
     east: optionalNumber,
     north: optionalNumber,
     elevation: optionalNumber,
@@ -116,6 +122,7 @@ export const surfaceSampleSchema = z
   .passthrough();
 
 export type LaboratorySlot = z.infer<typeof laboratorySlotSchema>;
+export type SamplePriority = z.infer<typeof samplePrioritySchema>;
 export type ElementCatalogItem = z.infer<typeof elementSchema>;
 export type CatalogItem = z.infer<typeof catalogItemSchema>;
 export type SampleLabAssignment = z.infer<typeof sampleLabAssignmentSchema>;
@@ -152,6 +159,8 @@ export interface InteriorSampleWithResultsPayload {
   interiorLaborId: string;
   interiorObjectiveId: string;
   name?: string;
+  priority?: SamplePriority;
+  voucherNumber?: number;
   east?: number;
   north?: number;
   elevation?: number;
@@ -163,6 +172,8 @@ export interface SurfaceSampleWithResultsPayload {
   surfaceAreaId: string;
   surfaceObjectiveId: string;
   name?: string;
+  priority?: SamplePriority;
+  voucherNumber?: number;
   east?: number;
   north?: number;
   elevation?: number;

@@ -71,6 +71,7 @@ export const exploracionesEndpoints = {
   interiorSamples: "/api/interior/samples",
   interiorSamplesWithResults: "/api/interior/samples/with-results",
   interiorSampleById: (id: string) => `/api/interior/samples/${id}`,
+  interiorSampleAssignVoucherById: (id: string) => `/api/interior/samples/${id}/assign-voucher`,
   interiorSampleWithResultsById: (id: string) => `/api/interior/samples/${id}/with-results`,
   interiorResults: "/api/interior/results",
   interiorResultById: (id: string) => `/api/interior/results/${id}`,
@@ -83,6 +84,8 @@ export const exploracionesEndpoints = {
   surfaceProposalSamples: "/api/surface-sample/samples",
   surfaceProposalSamplesWithResults: "/api/surface-sample/samples/with-results",
   surfaceProposalSampleById: (id: string) => `/api/surface-sample/samples/${id}`,
+  surfaceProposalSampleAssignVoucherById: (id: string) =>
+    `/api/surface-sample/samples/${id}/assign-voucher`,
   surfaceProposalSampleWithResultsById: (id: string) =>
     `/api/surface-sample/samples/${id}/with-results`,
   surfaceProposalResults: "/api/surface-sample/results",
