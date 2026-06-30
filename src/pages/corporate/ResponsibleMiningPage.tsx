@@ -2,6 +2,7 @@ import { ArrowLeft, ArrowRight, CheckCircle2, Leaf, ShieldCheck } from "lucide-r
 import { Link } from "react-router-dom";
 import Navbar from "@/corporate-site/components/Navbar";
 import Footer from "@/corporate-site/components/Footer";
+import ClickableImage from "@/corporate-site/components/ClickableImage";
 import heroImage from "@/assets/images/fotografias_Medio_Ambiente/IMG_20241228_140951_994.jpg";
 import environmentImageA from "@/assets/images/fotografias_Medio_Ambiente/IMG_20240926_142306_063.jpg";
 import environmentImageB from "@/assets/images/fotografias_Medio_Ambiente/IMG_20260203_100156_744.jpg";
@@ -28,10 +29,11 @@ export function ResponsibleMiningPage() {
 
       <main>
         <section className="responsible-hero relative flex min-h-[82vh] items-end overflow-hidden pt-24">
-          <img
+          <ClickableImage
             src={heroImage}
             alt="Environmental stewardship at Minera Marte"
-            className="topic-hero__image absolute inset-0 h-full w-full object-cover"
+            className="topic-hero__image absolute inset-0 h-full w-full"
+            imageClassName="h-full w-full object-cover"
           />
           <div className="hero-readable-overlay absolute inset-0" />
           <div className="relative z-10 mx-auto w-full max-w-7xl px-6 pb-16 pt-20">
@@ -68,6 +70,27 @@ export function ResponsibleMiningPage() {
           </div>
         </section>
 
+        <section className="bg-[#10252d] text-white">
+          <div className="mx-auto grid max-w-7xl gap-6 px-6 py-10 md:grid-cols-3">
+            {responsibleMiningPillars.map((pillar, index) => (
+              <Link
+                key={pillar.title}
+                to={pillarRoutes[index]}
+                className="group border-l-2 border-white/18 pl-5 transition hover:border-[#d4a574]"
+              >
+                <p className="text-xs font-bold uppercase tracking-[0.18em] text-[#f2c879]">
+                  Pillar 0{index + 1}
+                </p>
+                <p className="mt-2 text-2xl font-bold text-white">{pillar.title}</p>
+                <span className="mt-3 inline-flex items-center gap-2 text-sm font-bold text-white/58 transition group-hover:text-[#f2c879]">
+                  View Detail
+                  <ArrowRight className="h-4 w-4 transition group-hover:translate-x-1" />
+                </span>
+              </Link>
+            ))}
+          </div>
+        </section>
+
         <section className="scroll-reveal py-20">
           <div className="mx-auto max-w-7xl px-6">
             <div className="mx-auto mb-12 max-w-3xl text-center">
@@ -83,9 +106,9 @@ export function ResponsibleMiningPage() {
                 <Link
                   key={pillar.title}
                   to={pillarRoutes[index]}
-                  className="motion-card group rounded-xl border border-[#dbe5e7] bg-white p-7 shadow-sm transition hover:border-[#0a4d68]/35 hover:shadow-xl"
+                  className="motion-card group border border-[#dbe5e7] bg-white p-7 shadow-sm transition hover:border-[#0a4d68]/35 hover:shadow-xl"
                 >
-                  <div className="mb-6 flex h-14 w-14 items-center justify-center rounded-xl bg-[#0a4d68] text-white">
+                  <div className="mb-6 flex h-14 w-14 items-center justify-center bg-[#0a4d68] text-white">
                     <pillar.icon className="h-7 w-7" />
                   </div>
                   <h3 className="mb-3 text-2xl font-bold">{pillar.title}</h3>
@@ -123,11 +146,12 @@ export function ResponsibleMiningPage() {
             </div>
             <div className="responsible-photo-grid grid gap-4 sm:grid-cols-3">
               {safetyGallery.map((image, index) => (
-                <img
+                <ClickableImage
                   key={image}
                   src={image}
                   alt={`Safety practice ${index + 1}`}
-                  className="image-lift h-full min-h-[320px] w-full rounded-xl object-cover shadow-xl"
+                  className="image-lift relative h-full min-h-[320px] w-full shadow-xl"
+                  imageClassName="h-full min-h-[320px] w-full object-cover"
                 />
               ))}
             </div>
@@ -149,11 +173,12 @@ export function ResponsibleMiningPage() {
               </div>
               <div className="responsible-environment-strip grid gap-4 sm:grid-cols-2">
                 {environmentGallery.map((image, index) => (
-                  <img
+                  <ClickableImage
                     key={image}
                     src={image}
                     alt={`Environmental management ${index + 1}`}
-                    className="image-lift h-64 w-full rounded-xl object-cover shadow-lg"
+                    className="image-lift relative h-64 w-full shadow-lg"
+                    imageClassName="h-64 w-full object-cover"
                   />
                 ))}
               </div>
@@ -161,8 +186,8 @@ export function ResponsibleMiningPage() {
 
             <div className="responsible-programs grid gap-5 md:grid-cols-2 lg:grid-cols-4">
               {environmentPrograms.map((program) => (
-                <article key={program.title} className="rounded-xl border border-[#dbe5e7] bg-white p-6 shadow-sm">
-                  <div className="mb-5 flex h-12 w-12 items-center justify-center rounded-lg bg-[#d4a574]/18 text-[#9f6d33]">
+                <article key={program.title} className="border border-[#dbe5e7] bg-white p-6 shadow-sm transition hover:-translate-y-1 hover:shadow-xl">
+                  <div className="mb-5 flex h-12 w-12 items-center justify-center bg-[#d4a574]/18 text-[#9f6d33]">
                     <program.icon className="h-6 w-6" />
                   </div>
                   <h3 className="mb-4 text-xl font-bold">{program.title}</h3>
@@ -193,7 +218,7 @@ export function ResponsibleMiningPage() {
             </div>
             <div className="grid gap-3 sm:grid-cols-2">
               {communityCommitments.map((commitment) => (
-                <div key={commitment} className="rounded-xl border border-white/12 bg-white/8 p-5">
+                <div key={commitment} className="border border-white/12 bg-white/8 p-5">
                   <CheckCircle2 className="mb-3 h-5 w-5 text-[#d4a574]" />
                   <p className="leading-relaxed text-white/82">{commitment}</p>
                 </div>

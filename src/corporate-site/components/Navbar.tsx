@@ -46,19 +46,19 @@ export default function Navbar() {
 
   return (
     <nav
-      className={`fixed top-0 left-0 right-0 z-50 border-b border-[#e2e8f0] bg-white/95 shadow-sm backdrop-blur-sm transition-transform duration-500 ease-out ${
+      className={`fixed top-0 left-0 right-0 z-50 border-b border-[#0f6f8a] bg-[#0a4d68] shadow-xl transition-transform duration-500 ease-out ${
         isVisible ? 'translate-y-0' : '-translate-y-full'
       }`}
     >
       <div className="max-w-7xl mx-auto px-6">
         <div className="flex items-center justify-between h-20">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 bg-gradient-to-br from-[#0a4d68] to-[#088395] rounded-lg flex items-center justify-center">
-              <Mountain className="w-6 h-6 text-white" />
+            <div className="w-10 h-10 bg-[#f0b35f] flex items-center justify-center shadow-lg">
+              <Mountain className="w-6 h-6 text-[#0a4d68]" />
             </div>
             <div>
-              <div className="font-bold text-xl text-[#0f1419]">Minera Marte S.R.L.</div>
-              <div className="text-xs text-[#64748b]">Bolivian Private Mining Company</div>
+              <div className="font-bold text-xl text-white">Minera Marte S.R.L.</div>
+              <div className="text-xs text-white">Bolivian Private Mining Company</div>
             </div>
           </div>
 
@@ -67,8 +67,8 @@ export default function Navbar() {
               <Link
                 key={item.label}
                 to={item.to}
-                className={`text-[#64748b] hover:text-[#0a4d68] transition-colors duration-200 font-medium ${
-                  isActiveRoute(item.to) ? 'text-[#0a4d68]' : ''
+                className={`text-white/70 hover:text-[#f2c879] transition-colors duration-200 font-semibold ${
+                  isActiveRoute(item.to) ? 'text-[#f2c879]' : ''
                 }`}
               >
                 {item.label}
@@ -77,11 +77,11 @@ export default function Navbar() {
             <div className="nav-dropdown group relative">
               <Link
                 to="/mineria-responsable"
-                className={`inline-flex items-center gap-1.5 text-[#64748b] transition-colors duration-200 hover:text-[#0a4d68] font-medium ${
+                className={`inline-flex items-center gap-1.5 text-white/70 transition-colors duration-200 hover:text-[#f2c879] font-semibold ${
                   location.pathname === '/mineria-responsable' ||
                   location.pathname === '/medio-ambiente' ||
                   location.pathname === '/seguridad-industrial'
-                    ? 'text-[#0a4d68]'
+                    ? 'text-[#f2c879]'
                     : ''
                 }`}
               >
@@ -108,14 +108,14 @@ export default function Navbar() {
             </div>
             {isAuthenticated ? (
               <UserRouteMenu
-                buttonClassName="inline-flex items-center gap-2 rounded-lg bg-[#0a4d68] px-4 py-2.5 font-medium text-white transition-all duration-300 hover:bg-[#083d54]"
+                buttonClassName="inline-flex items-center gap-2 bg-[#f0b35f] px-4 py-2.5 font-bold text-[#10252d] transition-all duration-300 hover:bg-[#ffd08a]"
                 menuClassName="absolute right-0 top-full z-50 mt-2 w-72 overflow-hidden rounded-lg border border-[#e2e8f0] bg-white shadow-2xl"
                 logoutClassName="flex w-full items-center gap-2 border-t border-[#e2e8f0] px-4 py-3 text-left text-sm font-bold text-[#b91c1c] transition hover:bg-[#f8fafc]"
               />
             ) : (
               <Link
                 to="/login"
-                className="px-6 py-2.5 bg-[#0a4d68] hover:bg-[#083d54] text-white rounded-lg transition-all duration-300 font-medium"
+                className="px-6 py-2.5 bg-[#f0b35f] hover:bg-[#ffd08a] text-[#10252d] transition-all duration-300 font-bold shadow-lg"
               >
                 Log In
               </Link>
@@ -124,7 +124,7 @@ export default function Navbar() {
 
           <button
             onClick={() => setIsOpen(!isOpen)}
-            className="md:hidden p-2 text-[#0f1419]"
+            className="md:hidden p-2 text-white"
           >
             {isOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
           </button>
@@ -132,27 +132,27 @@ export default function Navbar() {
       </div>
 
       {isOpen && (
-        <div className="md:hidden bg-white border-t border-[#e2e8f0]">
+        <div className="md:hidden bg-[#0a4d68] border-t border-white/10">
           <div className="px-6 py-4 space-y-3">
             {navItems.map((item) => (
               <Link
                 key={item.label}
                 to={item.to}
-                className="block py-2 text-[#64748b] hover:text-[#0a4d68] transition-colors duration-200 font-medium"
+                className="block py-2 text-white/70 hover:text-[#f2c879] transition-colors duration-200 font-medium"
                 onClick={() => setIsOpen(false)}
               >
                 {item.label}
               </Link>
             ))}
-            <div className="border-t border-[#e2e8f0] pt-3">
-              <p className="px-1 pb-1 text-xs font-bold uppercase tracking-[0.16em] text-[#0a4d68]">
+            <div className="border-t border-white/10 pt-3">
+              <p className="px-1 pb-1 text-xs font-bold uppercase tracking-[0.16em] text-[#f2c879]">
                 Stewardship
               </p>
               {stewardshipItems.map((item) => (
                 <Link
                   key={item.to}
                   to={item.to}
-                  className="block rounded-lg px-1 py-2 text-[#64748b] transition-colors duration-200 hover:text-[#0a4d68] font-medium"
+                  className="block px-1 py-2 text-white/70 transition-colors duration-200 hover:text-[#f2c879] font-medium"
                   onClick={() => setIsOpen(false)}
                 >
                   {item.label}
@@ -163,14 +163,14 @@ export default function Navbar() {
               <UserRouteMenu
                 align="left"
                 onNavigate={() => setIsOpen(false)}
-                buttonClassName="inline-flex w-full items-center justify-center gap-2 rounded-lg bg-[#0a4d68] px-6 py-2.5 text-center font-medium text-white transition-all duration-300 hover:bg-[#083d54]"
+                buttonClassName="inline-flex w-full items-center justify-center gap-2 bg-[#f0b35f] px-6 py-2.5 text-center font-bold text-[#10252d] transition-all duration-300 hover:bg-[#ffd08a]"
                 menuClassName="relative left-0 top-auto z-50 mt-2 w-full overflow-hidden rounded-lg border border-[#e2e8f0] bg-white shadow-lg"
                 logoutClassName="flex w-full items-center justify-center gap-2 border-t border-[#e2e8f0] px-4 py-3 text-sm font-bold text-[#b91c1c] transition hover:bg-[#f8fafc]"
               />
             ) : (
               <Link
                 to="/login"
-                className="block w-full px-6 py-2.5 bg-[#0a4d68] hover:bg-[#083d54] text-white rounded-lg transition-all duration-300 font-medium text-center"
+                className="block w-full px-6 py-2.5 bg-[#f0b35f] hover:bg-[#ffd08a] text-[#10252d] transition-all duration-300 font-bold text-center"
               >
                 Log In
               </Link>

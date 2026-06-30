@@ -3,11 +3,11 @@ import presentationDeck from "@/assets/docs/Lipena_Presentation_PRELIMINAR.pdf";
 
 export default function PresentationDocument() {
   return (
-    <section className="py-20 bg-gradient-to-b from-[#f8fbff] to-white" id="presentation-doc">
+    <section className="py-20 bg-white" id="presentation-doc">
       <div className="max-w-7xl mx-auto px-6">
-        <div className="rounded-3xl border border-[#d7e1ea] bg-white p-8 shadow-2xl md:p-12">
+        <div className="overflow-hidden border border-[#d7e1ea] bg-white shadow-2xl">
           <div className="grid gap-8 md:grid-cols-[1.2fr_0.8fr] md:items-center">
-            <div>
+            <div className="p-8 md:p-12">
               <p className="text-xs font-semibold uppercase tracking-[0.2em] text-[#0a4d68]">
                 Corporate File
               </p>
@@ -24,7 +24,7 @@ export default function PresentationDocument() {
                   href={presentationDeck}
                   target="_blank"
                   rel="noreferrer"
-                  className="inline-flex items-center gap-2 rounded-lg bg-[#0a4d68] px-6 py-3 font-medium text-white transition-all duration-300 hover:bg-[#083d54]"
+                  className="inline-flex items-center gap-2 bg-[#0a4d68] px-6 py-3 font-bold text-white transition-all duration-300 hover:bg-[#083d54]"
                 >
                   Open Document
                   <ExternalLink className="h-4 w-4" />
@@ -32,7 +32,7 @@ export default function PresentationDocument() {
                 <a
                   href={presentationDeck}
                   download="Lipena_Presentation_PRELIMINAR.pdf"
-                  className="inline-flex items-center gap-2 rounded-lg border border-[#b6c7d8] bg-white px-6 py-3 font-medium text-[#0a4d68] transition-all duration-300 hover:border-[#0a4d68] hover:bg-[#f3f8fc]"
+                  className="inline-flex items-center gap-2 border border-[#b6c7d8] bg-white px-6 py-3 font-bold text-[#0a4d68] transition-all duration-300 hover:border-[#0a4d68] hover:bg-[#f3f8fc]"
                 >
                   Download
                   <Download className="h-4 w-4" />
@@ -40,18 +40,28 @@ export default function PresentationDocument() {
               </div>
             </div>
 
-            <div className="rounded-2xl border border-[#d8e2ec] bg-gradient-to-br from-[#f4f8fc] to-[#eaf1f8] p-6">
+            <div className="h-full bg-[#10252d] p-8 text-white md:p-10">
               <div className="flex items-start gap-4">
-                <div className="rounded-xl bg-[#0a4d68] p-3 text-white">
+                <div className="bg-[#d4a574] p-3 text-[#10252d]">
                   <FileText className="h-6 w-6" />
                 </div>
                 <div>
-                  <h3 className="text-lg font-semibold text-[#0f1419]">Presentation Format</h3>
-                  <p className="mt-1 text-sm text-[#5f7387]">Portable Document Format (.pdf)</p>
+                  <h3 className="text-lg font-semibold text-white">Presentation Format</h3>
+                  <p className="mt-1 text-sm text-white/62">Portable Document Format (.pdf)</p>
                 </div>
               </div>
-              <div className="mt-5 rounded-xl border border-[#cfdae6] bg-white/80 p-4 text-sm text-[#4f6478]">
+              <div className="mt-8 border-l-2 border-[#d4a574] bg-white/[0.06] p-5 text-sm leading-relaxed text-white/72">
                 Recommended for institutional and executive reviews.
+              </div>
+              <div className="mt-8 grid grid-cols-2 gap-3 text-center">
+                <div className="border border-white/12 p-4">
+                  <p className="text-2xl font-bold text-[#f2c879]">PDF</p>
+                  <p className="mt-1 text-xs uppercase tracking-[0.16em] text-white/52">Format</p>
+                </div>
+                <div className="border border-white/12 p-4">
+                  <p className="text-2xl font-bold text-[#f2c879]">IR</p>
+                  <p className="mt-1 text-xs uppercase tracking-[0.16em] text-white/52">Review</p>
+                </div>
               </div>
             </div>
           </div>

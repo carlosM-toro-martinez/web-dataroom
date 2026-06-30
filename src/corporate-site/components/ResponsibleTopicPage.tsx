@@ -3,6 +3,7 @@ import type { ComponentType } from "react";
 import { Link } from "react-router-dom";
 import Navbar from "@/corporate-site/components/Navbar";
 import Footer from "@/corporate-site/components/Footer";
+import ClickableImage from "./ClickableImage";
 
 interface ResponsibleTopicProgram {
   title: string;
@@ -43,7 +44,12 @@ export function ResponsibleTopicPage({
       <main>
         <section className="topic-hero relative flex min-h-[86vh] items-end overflow-hidden pt-24">
           <img src={heroImage} alt="" aria-hidden="true" className="topic-hero__backdrop absolute inset-0 h-full w-full object-cover" />
-          <img src={heroImage} alt={title} className="topic-hero__image absolute inset-0 h-full w-full object-cover" />
+          <ClickableImage
+            src={heroImage}
+            alt={title}
+            className="topic-hero__image absolute inset-0 h-full w-full"
+            imageClassName="h-full w-full object-cover"
+          />
           <div className="hero-readable-overlay absolute inset-0" />
           <div className="relative z-10 mx-auto w-full max-w-7xl px-6 pb-16 pt-20">
             <Link
@@ -67,6 +73,29 @@ export function ResponsibleTopicPage({
           </div>
         </section>
 
+        <section className="topic-impact-strip bg-[#10252d] text-white">
+          <div className="mx-auto grid max-w-7xl gap-6 px-6 py-10 md:grid-cols-3">
+            <div className="border-l-2 border-[#d4a574] pl-5">
+              <p className="text-xs font-bold uppercase tracking-[0.18em] text-[#f2c879]">
+                Management Scope
+              </p>
+              <p className="mt-2 text-2xl font-bold">{programs.length} Programs</p>
+            </div>
+            <div className="border-l-2 border-white/18 pl-5">
+              <p className="text-xs font-bold uppercase tracking-[0.18em] text-white/50">
+                Operating Standard
+              </p>
+              <p className="mt-2 text-2xl font-bold">Monitoring + Controls</p>
+            </div>
+            <div className="border-l-2 border-white/18 pl-5">
+              <p className="text-xs font-bold uppercase tracking-[0.18em] text-white/50">
+                Improvement Culture
+              </p>
+              <p className="mt-2 text-2xl font-bold">Continuous Follow-Up</p>
+            </div>
+          </div>
+        </section>
+
         <section className="scroll-reveal py-20">
           <div className="mx-auto grid max-w-7xl gap-12 px-6 lg:grid-cols-[0.88fr_1.12fr] lg:items-center">
             <div className="reveal-up">
@@ -75,11 +104,12 @@ export function ResponsibleTopicPage({
             </div>
             <div className="topic-gallery grid gap-4 sm:grid-cols-3">
               {gallery.map((image, index) => (
-                <img
+                <ClickableImage
                   key={image}
                   src={image}
                   alt={`${title} ${index + 1}`}
-                  className="reveal-up h-full min-h-[320px] w-full rounded-xl object-cover shadow-xl"
+                  className="reveal-up relative h-full min-h-[320px] w-full shadow-xl"
+                  imageClassName="h-full min-h-[320px] w-full object-cover"
                   style={{ animationDelay: `${160 + index * 110}ms` }}
                 />
               ))}
@@ -87,7 +117,7 @@ export function ResponsibleTopicPage({
           </div>
         </section>
 
-        <section className="scroll-reveal bg-white py-20">
+        <section className="scroll-reveal bg-[#edf2f1] py-20">
           <div className="mx-auto max-w-7xl px-6">
             <div className="reveal-up mx-auto mb-12 max-w-3xl text-center">
               <h2 className="mb-4 text-4xl font-bold md:text-5xl">Action Lines</h2>
@@ -101,11 +131,11 @@ export function ResponsibleTopicPage({
                 return (
                   <article
                     key={program.title}
-                    className="reveal-up topic-program rounded-xl border border-[#dbe5e7] bg-[#f8fafc] p-6 shadow-sm"
+                    className="reveal-up topic-program border border-[#dbe5e7] bg-white p-6 shadow-sm transition hover:-translate-y-1 hover:shadow-xl"
                     style={{ animationDelay: `${index * 90}ms` }}
                   >
                     {Icon ? (
-                      <div className="topic-program__icon mb-5 flex h-12 w-12 items-center justify-center rounded-lg">
+                      <div className="topic-program__icon mb-5 flex h-12 w-12 items-center justify-center">
                         <Icon className="h-6 w-6" />
                       </div>
                     ) : null}

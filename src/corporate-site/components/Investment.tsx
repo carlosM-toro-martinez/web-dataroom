@@ -33,37 +33,39 @@ export default function Investment() {
   ];
 
   return (
-    <section className="py-24 bg-gradient-to-b from-[#f5f7fa] to-white" id="investment">
+    <section className="relative overflow-hidden bg-[#0f232c] py-24 text-white" id="investment">
+      <div className="absolute inset-y-0 right-0 w-1/2 bg-[linear-gradient(135deg,rgba(212,165,116,0.22),rgba(10,77,104,0))]" />
       <div className="max-w-7xl mx-auto px-6">
-        <div className="text-center mb-16">
-          <h2 className="text-4xl md:text-5xl font-bold text-[#0f1419] mb-4">
-            Vision & <span className="text-[#0a4d68]">Mission</span>
-          </h2>
-          <p className="text-lg text-[#64748b] max-w-3xl mx-auto">
+        <div className="relative mb-14 grid gap-8 md:grid-cols-[0.9fr_1.1fr] md:items-end">
+          <div>
+            <p className="mb-4 text-xs font-bold uppercase tracking-[0.22em] text-[#f2c879]">
+              Strategic Direction
+            </p>
+            <h2 className="section-heading text-4xl md:text-5xl font-bold leading-tight">
+              Vision & <span className="text-[#f2c879]">Mission</span>
+            </h2>
+          </div>
+          <p className="max-w-2xl text-lg leading-relaxed text-white/72">
             Minera Marte aligns operational growth with safety, sustainability and long-term regional development.
           </p>
         </div>
 
-        <div className="grid md:grid-cols-2 gap-8 mb-16">
+        <div className="relative grid md:grid-cols-2 gap-5">
           {blocks.map((item, idx) => (
             <div
               key={idx}
-              className="bg-white p-8 rounded-xl shadow-lg border border-[#e2e8f0] hover:border-[#0a4d68] transition-all duration-300"
+              className="group border border-white/12 bg-white/[0.06] p-7 backdrop-blur-sm transition-all duration-300 hover:-translate-y-1 hover:border-[#d4a574]/50 hover:bg-white/[0.09]"
             >
-              <div className="flex items-start gap-6">
-                <div className="w-16 h-16 bg-gradient-to-br from-[#0a4d68] to-[#088395] rounded-xl flex items-center justify-center flex-shrink-0">
-                  <item.icon className="w-8 h-8 text-white" />
+              <div className="mb-8 flex items-center justify-between gap-4">
+                <div className="flex h-14 w-14 items-center justify-center bg-[#d4a574] text-[#0f232c]">
+                  <item.icon className="w-7 h-7" />
                 </div>
-                <div className="flex-1">
-                  <div className="flex items-start justify-between mb-3 gap-3">
-                    <h3 className="text-xl font-bold text-[#0f1419]">{item.title}</h3>
-                    <span className="px-3 py-1 bg-[#d4a574]/20 text-[#b27d42] rounded-full text-sm font-semibold whitespace-nowrap">
-                      {item.highlight}
-                    </span>
-                  </div>
-                  <p className="text-[#64748b] leading-relaxed">{item.description}</p>
-                </div>
+                <span className="border border-white/15 px-3 py-1 text-xs font-bold uppercase tracking-[0.14em] text-white/58">
+                  {item.highlight}
+                </span>
               </div>
+              <h3 className="mb-3 text-2xl font-bold text-white">{item.title}</h3>
+              <p className="leading-relaxed text-white/68">{item.description}</p>
             </div>
           ))}
         </div>

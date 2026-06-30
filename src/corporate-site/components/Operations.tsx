@@ -1,4 +1,5 @@
 import { MapPin, Pickaxe, Layers, ArrowDownToLine } from 'lucide-react';
+import ClickableImage from './ClickableImage';
 
 export default function Operations() {
   const sites = [
@@ -44,10 +45,11 @@ export default function Operations() {
               className="group bg-white rounded-2xl overflow-hidden shadow-lg hover:shadow-2xl transition-all duration-300 border border-[#e2e8f0]"
             >
               <div className="relative h-64 overflow-hidden">
-                <img
+                <ClickableImage
                   src={site.image}
                   alt={site.name}
-                  className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500"
+                  className="relative h-full w-full"
+                  imageClassName="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500"
                 />
                 <div className="absolute inset-0 bg-gradient-to-t from-[#0f1419]/80 to-transparent"></div>
                 <div className="absolute bottom-4 left-4 right-4">

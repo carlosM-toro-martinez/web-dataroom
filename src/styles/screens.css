@@ -117,13 +117,75 @@
   margin-top: 0.5rem;
 }
 
+.corporate-signal {
+  box-shadow: inset 0 1px rgba(255, 255, 255, 0.08);
+}
+
+.corporate-section {
+  position: relative;
+}
+
+.corporate-section::before {
+  background: linear-gradient(90deg, #10252d 0%, #b77b38 38%, #5b6d72 70%, #d5dadd 100%);
+  content: "";
+  height: 0.36rem;
+  left: 0;
+  position: absolute;
+  right: 0;
+  top: 0;
+}
+
+.section-heading {
+  letter-spacing: 0;
+}
+
+.corporate-feature-card {
+  border-radius: 0;
+}
+
+.about-carousel {
+  height: 520px;
+}
+
+.about-carousel .clickable-image img {
+  object-position: center 58%;
+}
+
+.clickable-image {
+  cursor: zoom-in;
+}
+
+.clickable-image img {
+  display: block;
+}
+
+.image-lightbox {
+  cursor: zoom-out;
+  isolation: isolate;
+}
+
+.image-lightbox__image {
+  cursor: default;
+  display: block;
+  height: auto !important;
+  min-height: 0 !important;
+  transform: none !important;
+  width: auto !important;
+}
+
+.responsible-preview__visual .clickable-image {
+  background: #10252d;
+}
+
 .hero-slide {
+  backface-visibility: hidden;
   transform: scale(1.08);
   transform-origin: center;
 }
 
 .hero-slide--active {
   animation: hero-zoom 5.4s ease-in-out both;
+  will-change: transform, opacity;
 }
 
 .hero-readable-overlay {
@@ -196,6 +258,10 @@
   color: var(--topic-accent);
 }
 
+.topic-impact-strip {
+  box-shadow: inset 0 1px rgba(255, 255, 255, 0.08), inset 0 -1px rgba(255, 255, 255, 0.08);
+}
+
 .topic-hero__backdrop {
   filter: blur(18px) saturate(1.08);
   opacity: 0;
@@ -205,7 +271,8 @@
 .topic-hero__image {
   max-width: none;
   object-position: center;
-  animation: image-breathe 9s ease-in-out infinite alternate;
+  animation: image-breathe 12s ease-in-out infinite alternate;
+  backface-visibility: hidden;
   transform-origin: center;
 }
 
@@ -258,15 +325,15 @@ section[id="contact"] {
 
 @keyframes hero-zoom {
   0% {
-    transform: scale(1.08) translate3d(0, 0, 0);
+    transform: scale(1.04) translate3d(0, 0, 0);
   }
 
   50% {
-    transform: scale(1.17) translate3d(-1.2%, -0.8%, 0);
+    transform: scale(1.09) translate3d(-0.7%, -0.4%, 0);
   }
 
   100% {
-    transform: scale(1.11) translate3d(0.8%, 0.5%, 0);
+    transform: scale(1.06) translate3d(0.4%, 0.3%, 0);
   }
 }
 
@@ -306,8 +373,10 @@ section[id="contact"] {
 
   .motion-card,
   .motion-button,
-  .image-lift {
+  .image-lift,
+  .hero-slide--active {
     transition: none !important;
+    will-change: auto !important;
   }
 }
 
@@ -364,6 +433,19 @@ section[id="contact"] {
     max-width: 36rem;
   }
 
+  .corporate-signal .grid:first-child > div {
+    padding-left: 1.25rem;
+    padding-right: 1.25rem;
+  }
+
+  .about-carousel {
+    height: 440px;
+  }
+
+  .about-carousel .clickable-image img {
+    object-position: center;
+  }
+
   .hero-readable-overlay {
     background:
       linear-gradient(180deg, rgba(5, 13, 18, 0.42) 0%, rgba(5, 13, 18, 0.18) 42%, rgba(5, 13, 18, 0.52) 100%),
@@ -414,6 +496,14 @@ section[id="contact"] {
   .responsible-preview__visual img,
   .topic-gallery img {
     min-height: 240px !important;
+  }
+
+  .responsible-preview__visual .clickable-image {
+    min-height: 260px !important;
+  }
+
+  .responsible-preview__visual .clickable-image img {
+    min-height: 260px !important;
   }
 
   .app-shell main {
@@ -546,6 +636,14 @@ section[id="contact"] {
     font-size: 0.78rem;
   }
 
+  .sticky-panel {
+    position: static !important;
+  }
+
+  .about-carousel {
+    height: 420px;
+  }
+
   .responsible-hero {
     min-height: auto;
   }
@@ -662,6 +760,10 @@ section[id="contact"] {
 
   .corporate-hero__copy {
     font-size: 0.92rem;
+  }
+
+  .about-carousel {
+    height: 380px;
   }
 
   .responsible-hero h1,

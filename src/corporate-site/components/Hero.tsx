@@ -1,31 +1,52 @@
 import { ArrowRight, TrendingUp } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import campamentoLaLipena from "@/assets/images/imagesCorp/CAMPAMENTO LA LIPEÑA.jpeg";
 import personalMiner from "@/assets/images/imagesCorp/personal minero nivel0.jpg";
 import nevadoNocturno from "@/assets/images/imagesCorp/NEVADO NOCTURNO.jpeg";
-import imagen1 from "@/assets/images/imagesCorp/area tecnica.jpg";
+import nuevaBocamina from "@/assets/images/imagesCorp/NUEVA BOCAMINA.jpeg";
 
 export default function Hero() {
-  const heroImages = [campamentoLaLipena, personalMiner, nevadoNocturno, imagen1];
+  const heroImages = [campamentoLaLipena, personalMiner, nevadoNocturno, nuevaBocamina];
   const [activeImageIndex, setActiveImageIndex] = useState(0);
+  const [isHeroVisible, setIsHeroVisible] = useState(true);
+  const heroRef = useRef<HTMLElement | null>(null);
 
   useEffect(() => {
+    const heroElement = heroRef.current;
+    if (!heroElement || !("IntersectionObserver" in window)) {
+      return;
+    }
+
+    const observer = new IntersectionObserver(
+      ([entry]) => setIsHeroVisible(entry.isIntersecting),
+      { threshold: 0.12 }
+    );
+
+    observer.observe(heroElement);
+    return () => observer.disconnect();
+  }, []);
+
+  useEffect(() => {
+    if (!isHeroVisible) {
+      return;
+    }
+
     const intervalId = window.setInterval(() => {
       setActiveImageIndex((current) => (current + 1) % heroImages.length);
     }, 4500);
 
     return () => window.clearInterval(intervalId);
-  }, [heroImages.length]);
+  }, [heroImages.length, isHeroVisible]);
 
   return (
-    <section className="corporate-hero relative flex items-center justify-center overflow-hidden">
+    <section ref={heroRef} className="corporate-hero relative flex items-center justify-center overflow-hidden">
       <div className="absolute inset-0 z-0">
         {heroImages.map((imageUrl, index) => (
           <div
             key={imageUrl}
             className={`hero-slide absolute inset-0 bg-cover bg-center transition-opacity duration-1000 ${
-              index === activeImageIndex ? "hero-slide--active opacity-100" : "opacity-0"
+              index === activeImageIndex && isHeroVisible ? "hero-slide--active opacity-100" : "opacity-0"
             }`}
             style={{ backgroundImage: `url(${imageUrl})` }}
           />
@@ -80,7 +101,7 @@ export default function Hero() {
               className="rounded-lg border border-white/25 bg-black/24 p-4 backdrop-blur-md"
             >
               <div className="corporate-hero__stat-value font-bold text-[#d4a574]">{stat.value}</div>
-              <div className="text-sm text-white/88">{stat.label}</div>
+              <div className="text-sm text-white">{stat.label}</div>
             </div>
           ))}
         </div>
