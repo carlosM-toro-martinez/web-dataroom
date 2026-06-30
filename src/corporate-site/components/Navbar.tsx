@@ -1,23 +1,29 @@
-import { Menu, Mountain, X } from 'lucide-react';
+import { ChevronDown, Leaf, Menu, Mountain, ShieldCheck, X } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useLocation } from 'react-router-dom';
 import { useAuth } from '@/features/auth/context/AuthContext';
 import { UserRouteMenu } from '@/shared/ui/UserRouteMenu';
 
 export default function Navbar() {
   const { isAuthenticated } = useAuth();
+  const location = useLocation();
   const [isOpen, setIsOpen] = useState(false);
   const [isVisible, setIsVisible] = useState(true);
   const lastScrollYRef = useRef(0);
 
   const navItems = [
-    { label: 'About', href: '#about' },
-    { label: 'Presentation', href: '#presentation-doc' },
-    { label: 'Operations', href: '#operations' },
-    { label: 'Vision & Mission', href: '#investment' },
-    { label: 'Values', href: '#sustainability' },
-    { label: 'Contact', href: '#contact' }
+    { label: 'Overview', to: '/#about' },
+    { label: 'Presentation', to: '/#presentation-doc' },
+    { label: 'Vision & Mission', to: '/#investment' },
+    { label: 'Contact', to: '/#contact' }
   ];
+  const stewardshipItems = [
+    { label: 'Sustainability Stewardship', description: 'Our integrated operating principles', to: '/mineria-responsable', icon: Mountain },
+    { label: 'Environmental Management', description: 'Water, air, soil and waste programs', to: '/medio-ambiente', icon: Leaf },
+    { label: 'Industrial Safety', description: 'Prevention, training and risk control', to: '/seguridad-industrial', icon: ShieldCheck }
+  ];
+  const isActiveRoute = (to: string) =>
+    to.includes('#') ? `${location.pathname}${location.hash}` === to : location.pathname === to;
 
   useEffect(() => {
     const onScroll = () => {
@@ -56,16 +62,50 @@ export default function Navbar() {
             </div>
           </div>
 
-          <div className="hidden md:flex items-center gap-8">
+          <div className="hidden md:flex items-center gap-6">
             {navItems.map((item) => (
-              <a
+              <Link
                 key={item.label}
-                href={item.href}
-                className="text-[#64748b] hover:text-[#0a4d68] transition-colors duration-200 font-medium"
+                to={item.to}
+                className={`text-[#64748b] hover:text-[#0a4d68] transition-colors duration-200 font-medium ${
+                  isActiveRoute(item.to) ? 'text-[#0a4d68]' : ''
+                }`}
               >
                 {item.label}
-              </a>
+              </Link>
             ))}
+            <div className="nav-dropdown group relative">
+              <Link
+                to="/mineria-responsable"
+                className={`inline-flex items-center gap-1.5 text-[#64748b] transition-colors duration-200 hover:text-[#0a4d68] font-medium ${
+                  location.pathname === '/mineria-responsable' ||
+                  location.pathname === '/medio-ambiente' ||
+                  location.pathname === '/seguridad-industrial'
+                    ? 'text-[#0a4d68]'
+                    : ''
+                }`}
+              >
+                Stewardship
+                <ChevronDown className="h-4 w-4 transition group-hover:rotate-180" />
+              </Link>
+              <div className="nav-dropdown__menu pointer-events-none absolute left-1/2 top-full z-50 mt-4 w-80 -translate-x-1/2 rounded-xl border border-[#dce6ea] bg-white p-2 opacity-0 shadow-2xl transition duration-200 group-hover:pointer-events-auto group-hover:translate-y-0 group-hover:opacity-100">
+                {stewardshipItems.map((item) => (
+                  <Link
+                    key={item.to}
+                    to={item.to}
+                    className="flex gap-3 rounded-lg px-3 py-3 text-left transition hover:bg-[#f4f8f8]"
+                  >
+                    <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-[#0a4d68]/10 text-[#0a4d68]">
+                      <item.icon className="h-5 w-5" />
+                    </span>
+                    <span>
+                      <span className="block text-sm font-bold text-[#0f1419]">{item.label}</span>
+                      <span className="mt-0.5 block text-xs leading-relaxed text-[#64748b]">{item.description}</span>
+                    </span>
+                  </Link>
+                ))}
+              </div>
+            </div>
             {isAuthenticated ? (
               <UserRouteMenu
                 buttonClassName="inline-flex items-center gap-2 rounded-lg bg-[#0a4d68] px-4 py-2.5 font-medium text-white transition-all duration-300 hover:bg-[#083d54]"
@@ -95,15 +135,30 @@ export default function Navbar() {
         <div className="md:hidden bg-white border-t border-[#e2e8f0]">
           <div className="px-6 py-4 space-y-3">
             {navItems.map((item) => (
-              <a
+              <Link
                 key={item.label}
-                href={item.href}
+                to={item.to}
                 className="block py-2 text-[#64748b] hover:text-[#0a4d68] transition-colors duration-200 font-medium"
                 onClick={() => setIsOpen(false)}
               >
                 {item.label}
-              </a>
+              </Link>
             ))}
+            <div className="border-t border-[#e2e8f0] pt-3">
+              <p className="px-1 pb-1 text-xs font-bold uppercase tracking-[0.16em] text-[#0a4d68]">
+                Stewardship
+              </p>
+              {stewardshipItems.map((item) => (
+                <Link
+                  key={item.to}
+                  to={item.to}
+                  className="block rounded-lg px-1 py-2 text-[#64748b] transition-colors duration-200 hover:text-[#0a4d68] font-medium"
+                  onClick={() => setIsOpen(false)}
+                >
+                  {item.label}
+                </Link>
+              ))}
+            </div>
             {isAuthenticated ? (
               <UserRouteMenu
                 align="left"

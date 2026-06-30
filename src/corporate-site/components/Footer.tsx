@@ -1,4 +1,5 @@
 import { Globe, MessageCircle, Mountain, Share2 } from 'lucide-react';
+import { Link } from 'react-router-dom';
 
 export default function Footer() {
   return (
@@ -16,7 +17,7 @@ export default function Footer() {
               </div>
             </div>
             <p className="text-white/70 leading-relaxed mb-6">
-              Technical excellence, responsible mining development and long-term commitment to workers,
+              Technical excellence, sustainable mining development and long-term commitment to workers,
               communities and the natural environment of the Lipez region.
             </p>
             <div className="flex gap-4">
@@ -35,19 +36,21 @@ export default function Footer() {
           <div>
             <h4 className="font-bold mb-4">Company</h4>
             <ul className="space-y-3">
-              <li><a href="#about" className="text-white/70 hover:text-[#d4a574] transition-colors">Overview</a></li>
-              <li><a href="#operations" className="text-white/70 hover:text-[#d4a574] transition-colors">Operations</a></li>
-              <li><a href="#investment" className="text-white/70 hover:text-[#d4a574] transition-colors">Vision & Mission</a></li>
-              <li><a href="#sustainability" className="text-white/70 hover:text-[#d4a574] transition-colors">Values</a></li>
+              <li><Link to="/#about" className="text-white/70 hover:text-[#d4a574] transition-colors">Overview</Link></li>
+              <li><Link to="/#presentation-doc" className="text-white/70 hover:text-[#d4a574] transition-colors">Presentation</Link></li>
+              <li><Link to="/#investment" className="text-white/70 hover:text-[#d4a574] transition-colors">Vision & Mission</Link></li>
+              <li><Link to="/mineria-responsable" className="text-white/70 hover:text-[#d4a574] transition-colors">Sustainability Stewardship</Link></li>
+              <li><Link to="/medio-ambiente" className="text-white/70 hover:text-[#d4a574] transition-colors">Environmental Management</Link></li>
+              <li><Link to="/seguridad-industrial" className="text-white/70 hover:text-[#d4a574] transition-colors">Industrial Safety</Link></li>
             </ul>
           </div>
 
           <div>
             <h4 className="font-bold mb-4">Access</h4>
             <ul className="space-y-3">
-              <li><a href="/login" className="text-white/70 hover:text-[#d4a574] transition-colors">Data Room Login</a></li>
-              <li><a href="/exploraciones-data-room" className="text-white/70 hover:text-[#d4a574] transition-colors">Exploration Portal</a></li>
-              <li><a href="#contact" className="text-white/70 hover:text-[#d4a574] transition-colors">Corporate Contact</a></li>
+              <li><Link to="/login" className="text-white/70 hover:text-[#d4a574] transition-colors">Data Room Login</Link></li>
+              <li><Link to="/exploraciones-data-room" className="text-white/70 hover:text-[#d4a574] transition-colors">Exploration Portal</Link></li>
+              <li><Link to="/#contact" className="text-white/70 hover:text-[#d4a574] transition-colors">Corporate Contact</Link></li>
             </ul>
           </div>
         </div>

@@ -2,9 +2,8 @@ import Navbar from "./components/Navbar";
 import Hero from "./components/Hero";
 import About from "./components/About";
 import PresentationDocument from "./components/PresentationDocument";
-import Operations from "./components/Operations";
 import Investment from "./components/Investment";
-import Sustainability from "./components/Sustainability";
+import ResponsibleMiningPreview from "./components/ResponsibleMiningPreview";
 import Contact from "./components/Contact";
 import Footer from "./components/Footer";
 
@@ -15,9 +14,8 @@ export function CorporateSitePage() {
       <Hero />
       <About />
       <PresentationDocument />
-      {/* <Operations /> */}
       <Investment />
-      {/* <Sustainability /> */}
+      <ResponsibleMiningPreview />
       <Contact />
       <Footer />
     </div>
