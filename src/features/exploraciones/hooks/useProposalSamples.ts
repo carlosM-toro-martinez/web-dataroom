@@ -41,7 +41,10 @@ import {
   type ProposalModule,
   type ProposalPayload
 } from "@/features/exploraciones/db/exploracionesDb";
-import { syncPendingProposalSamples } from "@/features/exploraciones/services/proposalSamplesSync.service";
+import {
+  syncPendingProposalSamples,
+  type SyncProposalSamplesOptions
+} from "@/features/exploraciones/services/proposalSamplesSync.service";
 import type {
   InteriorSampleWithResultsPayload,
   SamplePriority,
@@ -71,7 +74,14 @@ export function useOfflineProposalSamplesQuery() {
 
 export function useSyncProposalSamplesMutation() {
   const invalidate = useInvalidateProposalSamples();
-  return useMutation({ mutationFn: syncPendingProposalSamples, onSuccess: invalidate });
+  return useMutation({
+    mutationFn: (options?: SyncProposalSamplesOptions) => syncPendingProposalSamples(options),
+    onSuccess: (result) => {
+      if (result.synced > 0 || result.failed > 0) {
+        void invalidate();
+      }
+    }
+  });
 }
 
 export function useQueueProposalCatalogMutation() {

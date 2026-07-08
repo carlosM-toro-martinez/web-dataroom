@@ -1,4 +1,4 @@
-import { FormEvent, useEffect, useMemo, useState } from "react";
+import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import L from "leaflet";
 import {
   Beaker,
@@ -480,6 +480,8 @@ export function ExploracionesPage() {
   const [geoPoint, setGeoPoint] = useState<GeoPoint | null>(null);
   const [geoStatus, setGeoStatus] = useState<string>("");
   const [isLocating, setIsLocating] = useState(false);
+  const syncInFlightRef = useRef(false);
+  const lastSilentSyncAtRef = useRef(0);
 
   const remoteElements = useSharedElementsQuery();
   const remoteInteriorAreas = useInteriorAreasQuery();
@@ -521,10 +523,16 @@ export function ExploracionesPage() {
     localSamples.filter((item) => !item.synced).length;
 
   const runSync = async (options: { silent?: boolean } = {}) => {
-    if (syncMutation.isPending) return;
+    if (syncInFlightRef.current) return;
+
+    const now = Date.now();
+    if (options.silent && now - lastSilentSyncAtRef.current < 45_000) return;
 
     try {
-      const result = await syncMutation.mutateAsync();
+      syncInFlightRef.current = true;
+      if (options.silent) lastSilentSyncAtRef.current = now;
+
+      const result = await syncMutation.mutateAsync({ retryFailed: !options.silent });
       const remaining = Math.max(result.total - result.synced - result.failed, 0);
 
       if (!options.silent) {
@@ -546,6 +554,8 @@ export function ExploracionesPage() {
         showError(error instanceof Error ? error.message : "No se pudo sincronizar.");
       }
       return undefined;
+    } finally {
+      syncInFlightRef.current = false;
     }
   };
 
@@ -891,7 +901,7 @@ export function ExploracionesPage() {
     const onVisibilityChange = () => {
       if (!document.hidden) syncSilently();
     };
-    const intervalId = window.setInterval(syncSilently, 30_000);
+    const intervalId = window.setInterval(syncSilently, 60_000);
 
     window.addEventListener("online", syncSilently);
     document.addEventListener("visibilitychange", onVisibilityChange);
@@ -902,7 +912,7 @@ export function ExploracionesPage() {
       window.removeEventListener("online", syncSilently);
       document.removeEventListener("visibilitychange", onVisibilityChange);
     };
-  }, [pendingOfflineItems, syncMutation.isPending]);
+  }, [pendingOfflineItems]);
 
   useEffect(() => {
     const items: Array<Omit<OfflineProposalCatalog, "id" | "createdAt" | "updatedAt" | "synced">> = [

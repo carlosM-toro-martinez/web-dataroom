@@ -36,6 +36,10 @@ export interface SyncProposalSamplesResult {
   failed: number;
 }
 
+export interface SyncProposalSamplesOptions {
+  retryFailed?: boolean;
+}
+
 function isConnectivityIssue(error: unknown) {
   if (typeof navigator !== "undefined" && !navigator.onLine) return true;
   if (error instanceof ApiError) {
@@ -194,8 +198,12 @@ async function runCreate(action: OfflineProposalAction, payload: ProposalPayload
   throw new Error(`Accion offline no soportada: ${action.module}/${action.entity}`);
 }
 
-export async function syncPendingProposalSamples(): Promise<SyncProposalSamplesResult> {
-  const pending = await getPendingProposalActions(500);
+export async function syncPendingProposalSamples(
+  options: SyncProposalSamplesOptions = {}
+): Promise<SyncProposalSamplesResult> {
+  const pending = (await getPendingProposalActions(500)).filter(
+    (action) => options.retryFailed || !action.syncError
+  );
   const catalogs = await getProposalCatalogs();
   const idMap = new Map<string, string>();
   catalogs.forEach((item) => {
