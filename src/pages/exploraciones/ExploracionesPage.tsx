@@ -518,9 +518,7 @@ export function ExploracionesPage() {
 
   const localCatalogs = offlineCatalogs.data ?? [];
   const localSamples = offlineSamples.data ?? [];
-  const pendingOfflineItems =
-    localCatalogs.filter((item) => !item.synced).length +
-    localSamples.filter((item) => !item.synced).length;
+  const pendingOfflineSamples = localSamples.filter((item) => !item.synced).length;
 
   const runSync = async (options: { silent?: boolean } = {}) => {
     if (syncInFlightRef.current) return;
@@ -533,19 +531,24 @@ export function ExploracionesPage() {
       if (options.silent) lastSilentSyncAtRef.current = now;
 
       const result = await syncMutation.mutateAsync({ retryFailed: !options.silent });
-      const remaining = Math.max(result.total - result.synced - result.failed, 0);
+      const remainingSamples = Math.max(
+        result.sampleTotal - result.sampleSynced - result.sampleFailed,
+        0
+      );
 
       if (!options.silent) {
-        if (result.synced > 0) {
-          showSuccess(`${result.synced} registro(s) offline sincronizado(s).`);
-        } else if (remaining > 0) {
+        if (result.sampleSynced > 0) {
+          showSuccess(`${result.sampleSynced} muestra(s) offline sincronizada(s).`);
+        } else if (remainingSamples > 0) {
           showError(
-            `${remaining} registro(s) siguen pendientes. Verifica conexión o vuelve a intentar.`
+            `${remainingSamples} muestra(s) siguen pendientes. Verifica conexión o vuelve a intentar.`
           );
-        } else if (result.failed > 0) {
-          showError(`${result.failed} registro(s) no pudieron sincronizarse.`);
+        } else if (result.sampleFailed > 0) {
+          showError(`${result.sampleFailed} muestra(s) no pudieron sincronizarse.`);
+        } else if (result.catalogFailed > 0) {
+          showSuccess("La muestra no tiene pendientes visibles. Hay catálogos auxiliares por revisar.");
         } else {
-          showSuccess("No hay registros offline pendientes.");
+          showSuccess("No hay muestras offline pendientes.");
         }
       }
       return result;
@@ -893,7 +896,7 @@ export function ExploracionesPage() {
   ]);
 
   useEffect(() => {
-    if (pendingOfflineItems === 0) return;
+    if (pendingOfflineSamples === 0) return;
 
     const syncSilently = () => {
       if (navigator.onLine) void runSync({ silent: true });
@@ -912,7 +915,7 @@ export function ExploracionesPage() {
       window.removeEventListener("online", syncSilently);
       document.removeEventListener("visibilitychange", onVisibilityChange);
     };
-  }, [pendingOfflineItems]);
+  }, [pendingOfflineSamples]);
 
   useEffect(() => {
     const items: Array<Omit<OfflineProposalCatalog, "id" | "createdAt" | "updatedAt" | "synced">> = [
@@ -1334,7 +1337,7 @@ export function ExploracionesPage() {
         await updateQueuedSample.mutateAsync({ localId: editTarget.localId, payload });
         if (navigator.onLine) {
           const result = await runSync({ silent: true });
-          showSuccess(result?.synced ? "Muestra actualizada y sincronizada." : "Muestra actualizada en la cola local.");
+          showSuccess(result?.sampleSynced ? "Muestra actualizada y sincronizada." : "Muestra actualizada en la cola local.");
         } else {
           showSuccess("Muestra actualizada en la cola local.");
         }
@@ -1396,7 +1399,7 @@ export function ExploracionesPage() {
       await queueSample.mutateAsync({ module: registerType, payload });
       if (navigator.onLine) {
         const result = await runSync({ silent: true });
-        showSuccess(result?.synced ? "Muestra guardada y sincronizada." : "Muestra guardada en cola local.");
+        showSuccess(result?.sampleSynced ? "Muestra guardada y sincronizada." : "Muestra guardada en cola local.");
       } else {
         showSuccess("Muestra guardada localmente. Se sincronizará cuando haya conexión.");
       }
@@ -1667,8 +1670,8 @@ export function ExploracionesPage() {
               disabled={syncMutation.isPending}
             >
               <RefreshCw size={14} className={syncMutation.isPending ? "animate-spin" : ""} />
-              {pendingOfflineItems > 0
-                ? `Sincronizar (${pendingOfflineItems})`
+              {pendingOfflineSamples > 0
+                ? `Sincronizar (${pendingOfflineSamples})`
                 : "Sincronizar"}
             </button>
           </div>

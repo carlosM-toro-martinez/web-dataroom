@@ -34,6 +34,12 @@ export interface SyncProposalSamplesResult {
   total: number;
   synced: number;
   failed: number;
+  sampleTotal: number;
+  sampleSynced: number;
+  sampleFailed: number;
+  catalogTotal: number;
+  catalogSynced: number;
+  catalogFailed: number;
 }
 
 export interface SyncProposalSamplesOptions {
@@ -138,6 +144,54 @@ function findExistingCatalog(
   });
 }
 
+function findExistingCatalogForLocalCatalog(
+  localCatalog: OfflineProposalCatalog,
+  catalogs: OfflineProposalCatalog[],
+  idMap: Map<string, string>
+) {
+  return findExistingCatalog(
+    {
+      localId: localCatalog.localId,
+      module: localCatalog.module,
+      entity: localCatalog.entity,
+      payload: {
+        name: localCatalog.name,
+        abbreviation: localCatalog.abbreviation,
+        symbol: localCatalog.symbol,
+        interiorAreaId: localCatalog.parentLocalId ?? localCatalog.parentRemoteId,
+        interiorLevelId: localCatalog.parentLocalId ?? localCatalog.parentRemoteId
+      },
+      synced: false,
+      createdAt: localCatalog.createdAt,
+      updatedAt: localCatalog.updatedAt
+    },
+    {
+      name: localCatalog.name,
+      abbreviation: localCatalog.abbreviation,
+      symbol: localCatalog.symbol,
+      interiorAreaId: localCatalog.parentLocalId ?? localCatalog.parentRemoteId,
+      interiorLevelId: localCatalog.parentLocalId ?? localCatalog.parentRemoteId
+    },
+    catalogs,
+    idMap
+  );
+}
+
+function hydrateCatalogIdMap(catalogs: OfflineProposalCatalog[], idMap: Map<string, string>) {
+  let changed = true;
+  while (changed) {
+    changed = false;
+    for (const catalog of catalogs) {
+      if (catalog.remoteId || idMap.has(catalog.localId)) continue;
+      const existing = findExistingCatalogForLocalCatalog(catalog, catalogs, idMap);
+      if (existing?.remoteId) {
+        idMap.set(catalog.localId, existing.remoteId);
+        changed = true;
+      }
+    }
+  }
+}
+
 async function runCreate(action: OfflineProposalAction, payload: ProposalPayload) {
   if (action.module === "shared" && action.entity === "element") {
     return createSharedElement(payload as { name: string; symbol: string; defaultUnit?: string; description?: string });
@@ -209,9 +263,14 @@ export async function syncPendingProposalSamples(
   catalogs.forEach((item) => {
     if (item.remoteId) idMap.set(item.localId, item.remoteId);
   });
+  hydrateCatalogIdMap(catalogs, idMap);
 
   let synced = 0;
   let failed = 0;
+  let sampleSynced = 0;
+  let sampleFailed = 0;
+  let catalogSynced = 0;
+  let catalogFailed = 0;
 
   for (const action of pending) {
     if (!action.id) continue;
@@ -223,6 +282,7 @@ export async function syncPendingProposalSamples(
         await markProposalCatalogAsSynced(action.localId, existingCatalog.remoteId);
         idMap.set(action.localId, existingCatalog.remoteId);
         synced += 1;
+        catalogSynced += 1;
         continue;
       }
 
@@ -235,16 +295,33 @@ export async function syncPendingProposalSamples(
 
       if (action.entity === "sample") {
         await markProposalSampleAsSynced(action.localId, remoteId, code);
+        sampleSynced += 1;
       } else {
         await markProposalCatalogAsSynced(action.localId, remoteId);
+        catalogSynced += 1;
       }
       synced += 1;
     } catch (error) {
       if (isConnectivityIssue(error)) continue;
       failed += 1;
+      if (action.entity === "sample") {
+        sampleFailed += 1;
+      } else {
+        catalogFailed += 1;
+      }
       await markProposalActionSyncError(action.id, toErrorMessage(error));
     }
   }
 
-  return { total: pending.length, synced, failed };
+  return {
+    total: pending.length,
+    synced,
+    failed,
+    sampleTotal: pending.filter((action) => action.entity === "sample").length,
+    sampleSynced,
+    sampleFailed,
+    catalogTotal: pending.filter((action) => action.entity !== "sample").length,
+    catalogSynced,
+    catalogFailed
+  };
 }
