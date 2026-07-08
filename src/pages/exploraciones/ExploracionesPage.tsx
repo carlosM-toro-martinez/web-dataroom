@@ -516,6 +516,38 @@ export function ExploracionesPage() {
 
   const localCatalogs = offlineCatalogs.data ?? [];
   const localSamples = offlineSamples.data ?? [];
+  const pendingOfflineItems =
+    localCatalogs.filter((item) => !item.synced).length +
+    localSamples.filter((item) => !item.synced).length;
+
+  const runSync = async (options: { silent?: boolean } = {}) => {
+    if (syncMutation.isPending) return;
+
+    try {
+      const result = await syncMutation.mutateAsync();
+      const remaining = Math.max(result.total - result.synced - result.failed, 0);
+
+      if (!options.silent) {
+        if (result.synced > 0) {
+          showSuccess(`${result.synced} registro(s) offline sincronizado(s).`);
+        } else if (remaining > 0) {
+          showError(
+            `${remaining} registro(s) siguen pendientes. Verifica conexión o vuelve a intentar.`
+          );
+        } else if (result.failed > 0) {
+          showError(`${result.failed} registro(s) no pudieron sincronizarse.`);
+        } else {
+          showSuccess("No hay registros offline pendientes.");
+        }
+      }
+      return result;
+    } catch (error) {
+      if (!options.silent) {
+        showError(error instanceof Error ? error.message : "No se pudo sincronizar.");
+      }
+      return undefined;
+    }
+  };
 
   useEffect(() => {
     if (!offlineCatalogs.data) return;
@@ -851,17 +883,26 @@ export function ExploracionesPage() {
   ]);
 
   useEffect(() => {
-    function onOnline() {
-      syncMutation.mutate(undefined, {
-        onSuccess: (result) => {
-          if (result.synced > 0) showSuccess(`${result.synced} registros offline sincronizados.`);
-        }
-      });
-    }
-    window.addEventListener("online", onOnline);
-    if (navigator.onLine) onOnline();
-    return () => window.removeEventListener("online", onOnline);
-  }, []);
+    if (pendingOfflineItems === 0) return;
+
+    const syncSilently = () => {
+      if (navigator.onLine) void runSync({ silent: true });
+    };
+    const onVisibilityChange = () => {
+      if (!document.hidden) syncSilently();
+    };
+    const intervalId = window.setInterval(syncSilently, 30_000);
+
+    window.addEventListener("online", syncSilently);
+    document.addEventListener("visibilitychange", onVisibilityChange);
+    syncSilently();
+
+    return () => {
+      window.clearInterval(intervalId);
+      window.removeEventListener("online", syncSilently);
+      document.removeEventListener("visibilitychange", onVisibilityChange);
+    };
+  }, [pendingOfflineItems, syncMutation.isPending]);
 
   useEffect(() => {
     const items: Array<Omit<OfflineProposalCatalog, "id" | "createdAt" | "updatedAt" | "synced">> = [
@@ -1282,8 +1323,8 @@ export function ExploracionesPage() {
       if (editTarget?.source === "local") {
         await updateQueuedSample.mutateAsync({ localId: editTarget.localId, payload });
         if (navigator.onLine) {
-          const result = await syncMutation.mutateAsync();
-          showSuccess(result.synced > 0 ? "Muestra actualizada y sincronizada." : "Muestra actualizada en la cola local.");
+          const result = await runSync({ silent: true });
+          showSuccess(result?.synced ? "Muestra actualizada y sincronizada." : "Muestra actualizada en la cola local.");
         } else {
           showSuccess("Muestra actualizada en la cola local.");
         }
@@ -1344,8 +1385,8 @@ export function ExploracionesPage() {
 
       await queueSample.mutateAsync({ module: registerType, payload });
       if (navigator.onLine) {
-        const result = await syncMutation.mutateAsync();
-        showSuccess(result.synced > 0 ? "Muestra guardada y sincronizada." : "Muestra guardada en cola local.");
+        const result = await runSync({ silent: true });
+        showSuccess(result?.synced ? "Muestra guardada y sincronizada." : "Muestra guardada en cola local.");
       } else {
         showSuccess("Muestra guardada localmente. Se sincronizará cuando haya conexión.");
       }
@@ -1505,7 +1546,7 @@ export function ExploracionesPage() {
 
       showSuccess("Registro guardado localmente.");
       closeModal();
-      if (navigator.onLine) syncMutation.mutate();
+      if (navigator.onLine) void runSync({ silent: true });
     } catch (error) {
       showError(error instanceof Error ? error.message : "No se pudo guardar el catálogo.");
     }
@@ -1611,11 +1652,14 @@ export function ExploracionesPage() {
             </CatalogButton>
             <button
               type="button"
-              onClick={() => syncMutation.mutate(undefined, { onSuccess: () => showSuccess("Sincronización revisada.") })}
+              onClick={() => void runSync()}
               className={secondaryButton}
+              disabled={syncMutation.isPending}
             >
-              <RefreshCw size={14} />
-              Sincronizar
+              <RefreshCw size={14} className={syncMutation.isPending ? "animate-spin" : ""} />
+              {pendingOfflineItems > 0
+                ? `Sincronizar (${pendingOfflineItems})`
+                : "Sincronizar"}
             </button>
           </div>
         </div>
