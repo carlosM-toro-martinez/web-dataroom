@@ -380,6 +380,26 @@ export async function getPendingProposalActions(limit = 500) {
   return exploracionesDb.proposalActions.filter((item) => !item.synced).limit(limit).toArray();
 }
 
+export async function markSeedProposalCatalogActionsAsSynced() {
+  const now = new Date().toISOString();
+  const seedActions = await exploracionesDb.proposalActions
+    .filter((item) => !item.synced && item.entity !== "sample" && item.localId.startsWith("seed-"))
+    .toArray();
+
+  await Promise.all(
+    seedActions
+      .filter((item) => item.id)
+      .map((item) =>
+        exploracionesDb.proposalActions.update(item.id as number, {
+          synced: true,
+          syncedAt: now,
+          syncError: undefined,
+          updatedAt: now
+        })
+      )
+  );
+}
+
 export async function markProposalActionAsSynced(id: number, remoteId?: string) {
   await exploracionesDb.proposalActions.update(id, {
     remoteId,

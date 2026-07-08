@@ -17,6 +17,7 @@ import {
 import {
   getPendingProposalActions,
   getProposalCatalogs,
+  markSeedProposalCatalogActionsAsSynced,
   markProposalActionAsSynced,
   markProposalActionSyncError,
   markProposalCatalogAsSynced,
@@ -255,6 +256,7 @@ async function runCreate(action: OfflineProposalAction, payload: ProposalPayload
 export async function syncPendingProposalSamples(
   options: SyncProposalSamplesOptions = {}
 ): Promise<SyncProposalSamplesResult> {
+  await markSeedProposalCatalogActionsAsSynced();
   const pending = (await getPendingProposalActions(500)).filter(
     (action) => options.retryFailed || !action.syncError
   );

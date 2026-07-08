@@ -91,6 +91,7 @@ export function useQueueProposalCatalogMutation() {
       module: ProposalModule;
       entity: Exclude<ProposalEntity, "sample">;
       payload: Record<string, unknown>;
+      queueAction?: boolean;
       catalog: Omit<OfflineProposalCatalog, "id" | "createdAt" | "updatedAt" | "synced" | "localId"> & {
         localId?: string;
         synced?: boolean;
@@ -102,12 +103,14 @@ export function useQueueProposalCatalogMutation() {
         localId,
         synced: input.catalog.synced ?? false
       });
-      await saveProposalAction({
-        localId,
-        module: input.module,
-        entity: input.entity,
-        payload: input.payload as ProposalPayload
-      });
+      if (input.queueAction !== false) {
+        await saveProposalAction({
+          localId,
+          module: input.module,
+          entity: input.entity,
+          payload: input.payload as ProposalPayload
+        });
+      }
       return localId;
     },
     onSuccess: invalidate

@@ -576,12 +576,14 @@ export function ExploracionesPage() {
           module: "interior",
           entity: "area",
           payload: { name: area.name, abbreviation: area.abbreviation },
+          queueAction: false,
           catalog: {
             localId: area.localId,
             module: "interior",
             entity: "area",
             name: area.name,
-            abbreviation: area.abbreviation
+            abbreviation: area.abbreviation,
+            synced: true
           }
         });
       }
@@ -596,13 +598,15 @@ export function ExploracionesPage() {
             name: level.name,
             abbreviation: level.abbreviation
           },
+          queueAction: false,
           catalog: {
             localId: level.localId,
             module: "interior",
             entity: "level",
             name: level.name,
             abbreviation: level.abbreviation,
-            parentLocalId: level.areaLocalId
+            parentLocalId: level.areaLocalId,
+            synced: true
           }
         });
       }
@@ -617,13 +621,15 @@ export function ExploracionesPage() {
             name: labor.name,
             abbreviation: labor.abbreviation
           },
+          queueAction: false,
           catalog: {
             localId: labor.localId,
             module: "interior",
             entity: "labor",
             name: labor.name,
             abbreviation: labor.abbreviation,
-            parentLocalId: labor.levelLocalId
+            parentLocalId: labor.levelLocalId,
+            synced: true
           }
         });
       }
@@ -633,11 +639,13 @@ export function ExploracionesPage() {
           module: "interior",
           entity: "objective",
           payload: { name: INTERIOR_OBJECTIVE.name },
+          queueAction: false,
           catalog: {
             localId: INTERIOR_OBJECTIVE.localId,
             module: "interior",
             entity: "objective",
-            name: INTERIOR_OBJECTIVE.name
+            name: INTERIOR_OBJECTIVE.name,
+            synced: true
           }
         });
       }
@@ -648,12 +656,14 @@ export function ExploracionesPage() {
           module: "surface",
           entity: "area",
           payload: { name: area.name, abbreviation: area.abbreviation },
+          queueAction: false,
           catalog: {
             localId: area.localId,
             module: "surface",
             entity: "area",
             name: area.name,
-            abbreviation: area.abbreviation
+            abbreviation: area.abbreviation,
+            synced: true
           }
         });
       }
@@ -663,11 +673,13 @@ export function ExploracionesPage() {
           module: "surface",
           entity: "objective",
           payload: { name: SURFACE_OBJECTIVE.name },
+          queueAction: false,
           catalog: {
             localId: SURFACE_OBJECTIVE.localId,
             module: "surface",
             entity: "objective",
-            name: SURFACE_OBJECTIVE.name
+            name: SURFACE_OBJECTIVE.name,
+            synced: true
           }
         });
       }
@@ -680,12 +692,14 @@ export function ExploracionesPage() {
             module,
             entity: "laboratory",
             payload: { name: lab.name, abbreviation: lab.abbreviation },
+            queueAction: false,
             catalog: {
               localId,
               module,
               entity: "laboratory",
               name: lab.name,
-              abbreviation: lab.abbreviation
+              abbreviation: lab.abbreviation,
+              synced: true
             }
           });
         }
