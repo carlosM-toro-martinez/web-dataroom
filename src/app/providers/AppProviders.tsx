@@ -1,4 +1,4 @@
-import { useEffect, type PropsWithChildren } from "react";
+import { useEffect, useRef, type PropsWithChildren } from "react";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter } from "react-router-dom";
 import {
@@ -11,8 +11,13 @@ import { ToastProvider } from "@/shared/ui/toast/ToastProvider";
 import { ThemeProvider } from "@/shared/theme/ThemeProvider";
 
 export function AppProviders({ children }: PropsWithChildren) {
-  useEffect(() => {
+  const cacheRestoredRef = useRef(false);
+  if (!cacheRestoredRef.current) {
     restoreQueryCacheFromStorage();
+    cacheRestoredRef.current = true;
+  }
+
+  useEffect(() => {
     const stopPersist = startPersistingQueryCache();
     return () => {
       stopPersist();

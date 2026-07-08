@@ -101,31 +101,7 @@ import type {
 export function useExplorationHierarchyQuery(params: { search?: string; page?: number; limit?: number }) {
   return useQuery({
     queryKey: queryKeys.exploraciones.hierarchy(params),
-    queryFn: async () => {
-      try {
-        return await getExplorationHierarchy(params);
-      } catch {
-        return {
-          projects: [],
-          zones: [],
-          drillHoles: [],
-          intervals: [],
-          assays: [],
-          lithologies: [],
-          qaqc: [],
-          resources: [],
-          drillHoleSurveys: [],
-          assayValues: [],
-          alterations: [],
-          mineralizations: [],
-          geologicalStructures: [],
-          recoveries: [],
-          densities: [],
-          magneticSusceptibilities: [],
-          significantIntercepts: []
-        };
-      }
-    },
+    queryFn: () => getExplorationHierarchy(params),
     retry: false,
     refetchOnWindowFocus: false
   });

@@ -31,6 +31,18 @@ export function normalizeApiError(error: unknown): ApiError {
   });
 }
 
+export function isTransientNetworkError(error: unknown): boolean {
+  if (error instanceof ApiError) {
+    return !error.statusCode || error.statusCode >= 500;
+  }
+
+  if (!axios.isAxiosError(error)) {
+    return false;
+  }
+
+  return !error.response || (error.response.status >= 500);
+}
+
 function parseMaybeJson(value: unknown): unknown {
   if (typeof value !== "string") {
     return value;

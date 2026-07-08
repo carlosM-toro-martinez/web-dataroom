@@ -4,7 +4,7 @@ export const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
       staleTime: 60_000,
-      gcTime: 5 * 60_000,
+      gcTime: 24 * 60 * 60_000,
       refetchOnWindowFocus: false,
       refetchOnReconnect: true,
       retry: 1,
@@ -18,6 +18,7 @@ export const queryClient = new QueryClient({
 });
 
 const QUERY_CACHE_KEY = "rq-cache-v1";
+const PERSISTED_QUERY_ROOTS = ["productos", "proveedores", "contabilidad", "exploraciones"];
 
 export function restoreQueryCacheFromStorage() {
   if (typeof window === "undefined") return;
@@ -42,11 +43,9 @@ export function startPersistingQueryCache() {
       const dehydrated = dehydrate(queryClient, {
         shouldDehydrateQuery: (query) => {
           const topLevelKey = String(query.queryKey[0] ?? "");
-          // Only persist reference/catalog data. Transactional data (compras, vales)
-          // must NOT be persisted: stale localStorage state causes list pages to
-          // appear empty or outdated on laptops that had an old cache hydrated
-          // within the 60 s staleTime window, especially with refetchOnWindowFocus off.
-          return ["productos", "proveedores", "contabilidad"].includes(topLevelKey);
+          // Keep reference data and exploration data usable across reloads while offline.
+          // Transactional inventory data (compras, vales) intentionally stays out.
+          return PERSISTED_QUERY_ROOTS.includes(topLevelKey);
         }
       });
       window.localStorage.setItem(QUERY_CACHE_KEY, JSON.stringify(dehydrated));

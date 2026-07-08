@@ -1,5 +1,26 @@
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import { resolve } from "node:path";
+
+function versionServiceWorkerPlugin() {
+  return {
+    name: "version-service-worker",
+    apply: "build" as const,
+    closeBundle() {
+      const serviceWorkerPath = resolve(__dirname, "dist", "sw.js");
+      if (!existsSync(serviceWorkerPath)) return;
+
+      const source = readFileSync(serviceWorkerPath, "utf8");
+      const buildVersion = `${Date.now()}`;
+      writeFileSync(
+        serviceWorkerPath,
+        source.replaceAll("__BUILD_VERSION__", buildVersion),
+        "utf8"
+      );
+    }
+  };
+}
 
 export default defineConfig({
   build: {
@@ -13,7 +34,7 @@ export default defineConfig({
       }
     }
   },
-  plugins: [react()],
+  plugins: [react(), versionServiceWorkerPlugin()],
   resolve: {
     alias: {
       "@": "/src"

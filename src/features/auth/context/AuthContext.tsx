@@ -9,6 +9,7 @@ import {
 } from "react";
 import type { AuthSession, AuthUser } from "@/features/auth/model/auth.schema";
 import { logoutSession, refreshSession } from "@/features/auth/api/authApi";
+import { isTransientNetworkError } from "@/shared/api/core/apiError";
 import {
   clearStoredAuthSession,
   getStoredAuthSession,
@@ -74,7 +75,10 @@ export function AuthProvider({ children }: PropsWithChildren) {
           refreshToken: response.data.refreshToken ?? currentRefreshToken,
           user: session.user
         });
-      } catch {
+      } catch (error) {
+        if (isTransientNetworkError(error)) {
+          return;
+        }
         applySession(null);
       } finally {
         refreshPromiseRef.current = null;

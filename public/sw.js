@@ -1,5 +1,12 @@
-const CACHE_NAME = "minera-marte-pwa-v1";
+const APP_VERSION = "__BUILD_VERSION__";
+const CACHE_NAME = `minera-marte-pwa-${APP_VERSION}`;
 const APP_SHELL = ["/", "/manifest.webmanifest", "/icons/app-icon-192.png", "/icons/app-icon-512.png"];
+
+self.addEventListener("message", (event) => {
+  if (event.data?.type === "SKIP_WAITING") {
+    self.skipWaiting();
+  }
+});
 
 self.addEventListener("install", (event) => {
   event.waitUntil(
