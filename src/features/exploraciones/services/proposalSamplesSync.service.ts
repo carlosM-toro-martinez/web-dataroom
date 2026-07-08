@@ -22,6 +22,7 @@ import {
   markProposalActionSyncError,
   markProposalCatalogAsSynced,
   markProposalSampleAsSynced,
+  markProposalSampleSyncError,
   type OfflineProposalAction,
   type OfflineProposalCatalog,
   type ProposalPayload
@@ -41,6 +42,7 @@ export interface SyncProposalSamplesResult {
   catalogTotal: number;
   catalogSynced: number;
   catalogFailed: number;
+  sampleErrors: string[];
 }
 
 export interface SyncProposalSamplesOptions {
@@ -273,6 +275,7 @@ export async function syncPendingProposalSamples(
   let sampleFailed = 0;
   let catalogSynced = 0;
   let catalogFailed = 0;
+  const sampleErrors: string[] = [];
 
   for (const action of pending) {
     if (!action.id) continue;
@@ -306,12 +309,15 @@ export async function syncPendingProposalSamples(
     } catch (error) {
       if (isConnectivityIssue(error)) continue;
       failed += 1;
+      const message = toErrorMessage(error);
       if (action.entity === "sample") {
         sampleFailed += 1;
+        sampleErrors.push(message);
+        await markProposalSampleSyncError(action.localId, message);
       } else {
         catalogFailed += 1;
       }
-      await markProposalActionSyncError(action.id, toErrorMessage(error));
+      await markProposalActionSyncError(action.id, message);
     }
   }
 
@@ -324,6 +330,7 @@ export async function syncPendingProposalSamples(
     sampleFailed,
     catalogTotal: pending.filter((action) => action.entity !== "sample").length,
     catalogSynced,
-    catalogFailed
+    catalogFailed,
+    sampleErrors
   };
 }

@@ -431,6 +431,11 @@ function stringifyDetail(value: unknown) {
   return JSON.stringify(value, null, 2);
 }
 
+function getRowSyncError(row: SampleTableRow) {
+  if (row.source !== "local") return undefined;
+  return (row.raw as OfflineProposalSample).syncError;
+}
+
 function isConnectivityIssue(error: unknown) {
   if (!navigator.onLine) return true;
   if (error instanceof ApiError) return !error.statusCode;
@@ -544,7 +549,10 @@ export function ExploracionesPage() {
             `${remainingSamples} muestra(s) siguen pendientes. Verifica conexión o vuelve a intentar.`
           );
         } else if (result.sampleFailed > 0) {
-          showError(`${result.sampleFailed} muestra(s) no pudieron sincronizarse.`);
+          showError(
+            result.sampleErrors[0] ??
+              `${result.sampleFailed} muestra(s) no pudieron sincronizarse.`
+          );
         } else if (result.catalogFailed > 0) {
           showSuccess("La muestra no tiene pendientes visibles. Hay catálogos auxiliares por revisar.");
         } else {
@@ -2518,6 +2526,11 @@ function SamplesTable({
                   <td className="px-4 py-3 text-xs">{formatDate(row.sampledAt)}</td>
                   <td className="px-4 py-3 text-xs">
                     <ResultStatus results={row.results} />
+                    {getRowSyncError(row) ? (
+                      <p className="mt-2 max-w-xs text-xs font-semibold text-[var(--color-error)]">
+                        {getRowSyncError(row)}
+                      </p>
+                    ) : null}
                   </td>
                   <td className="px-4 py-3 text-xs">
                     <div className="flex flex-wrap gap-2">
@@ -2589,6 +2602,11 @@ function SamplesTable({
                   <span className="font-bold text-[var(--color-on-surface-variant)]">Resultados: </span>
                   <div className="mt-1">
                     <ResultStatus results={row.results} />
+                    {getRowSyncError(row) ? (
+                      <p className="mt-2 text-xs font-semibold text-[var(--color-error)]">
+                        {getRowSyncError(row)}
+                      </p>
+                    ) : null}
                   </div>
                 </div>
               </div>
@@ -2677,6 +2695,9 @@ function SampleDetailModal({ row, onClose }: { row: SampleTableRow; onClose: () 
           <div className="grid gap-4 md:grid-cols-2">
             <DetailSection title="Resumen">
               <DetailItem label="Estado" value={row.source === "local" ? "Pendiente local" : "Sincronizado"} />
+              {getRowSyncError(row) ? (
+                <DetailItem label="Error de sincronización" value={getRowSyncError(row)} />
+              ) : null}
               <DetailItem label="Tipo" value={isInterior ? "Interior Mina" : "Superficie"} />
               <DetailItem label="Nombre" value={row.name ?? "-"} />
               <DetailItem label="Talón" value={formatVoucherNumber(row.voucherNumber)} />

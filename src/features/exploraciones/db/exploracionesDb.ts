@@ -438,3 +438,12 @@ export async function markProposalSampleAsSynced(localId: string, remoteId?: str
     updatedAt: new Date().toISOString()
   });
 }
+
+export async function markProposalSampleSyncError(localId: string, message: string) {
+  const item = await exploracionesDb.proposalSamples.where("localId").equals(localId).first();
+  if (!item?.id) return;
+  await exploracionesDb.proposalSamples.update(item.id, {
+    syncError: message,
+    updatedAt: new Date().toISOString()
+  });
+}
