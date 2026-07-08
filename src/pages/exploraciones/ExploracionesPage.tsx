@@ -162,6 +162,7 @@ const PRIORITY_OPTIONS: Array<{ id: SamplePriority; label: string }> = [
   { id: "URGENT", label: "Urgente" },
   { id: "LOW", label: "Baja" }
 ];
+const PRIORITY_VALUES = new Set<SamplePriority>(PRIORITY_OPTIONS.map((option) => option.id));
 
 const PRIORITY_LABELS: Record<SamplePriority, string> = {
   URGENT: "Urgente",
@@ -295,16 +296,22 @@ function initialResult(): ResultRow {
   };
 }
 
-function toNumber(value: string) {
+function toNumber(value: string, label = "valor") {
   if (!value.trim()) return undefined;
   const parsed = Number(value.trim().replace(",", "."));
-  return Number.isFinite(parsed) ? parsed : undefined;
+  if (!Number.isFinite(parsed)) {
+    throw new Error(`${label} debe ser un numero valido.`);
+  }
+  return parsed;
 }
 
 function toIso(value: string) {
   if (!value.trim()) return undefined;
   const date = new Date(value);
-  return Number.isNaN(date.getTime()) ? undefined : date.toISOString();
+  if (Number.isNaN(date.getTime())) {
+    throw new Error("La fecha de muestreo no es valida.");
+  }
+  return date.toISOString();
 }
 
 function formatDate(value?: string | null) {
@@ -1249,7 +1256,7 @@ export function ExploracionesPage() {
   function buildResultPayload(row: ResultRow) {
     return {
       elementId: row.elementId,
-      value: toNumber(row.value),
+      value: toNumber(row.value, "El valor del resultado"),
       unit: row.unit.trim() || undefined,
       qualifier: row.qualifier.trim() || undefined
     };
@@ -1305,17 +1312,66 @@ export function ExploracionesPage() {
     }));
   }
 
+  function validateInteriorLocationSelection() {
+    if (
+      !sampleForm.interiorAreaId ||
+      !sampleForm.interiorLevelId ||
+      !sampleForm.interiorLaborId ||
+      !sampleForm.interiorObjectiveId
+    ) {
+      showError("Selecciona area, nivel, labor y objetivo para Interior Mina.");
+      return false;
+    }
+
+    if (!selectedInteriorArea) {
+      showError("El area seleccionada ya no es valida. Vuelve a seleccionar el area.");
+      return false;
+    }
+
+    if (!selectedInteriorLevelOption || !selectedInteriorAreaIds.has(selectedInteriorLevelOption.interiorAreaId ?? "")) {
+      showError("El nivel no corresponde al area seleccionada. Vuelve a seleccionar nivel.");
+      setSampleForm((current) => ({ ...current, interiorLevelId: "", interiorLaborId: "" }));
+      return false;
+    }
+
+    if (!selectedInteriorLaborOption || !selectedInteriorLevelIds.has(selectedInteriorLaborOption.interiorLevelId ?? "")) {
+      showError("La labor no corresponde al nivel seleccionado. Vuelve a seleccionar labor.");
+      setSampleForm((current) => ({ ...current, interiorLaborId: "" }));
+      return false;
+    }
+
+    return true;
+  }
+
+  function validateSurfaceLocationSelection() {
+    if (!sampleForm.surfaceAreaId || !sampleForm.surfaceObjectiveId) {
+      showError("Selecciona area y objetivo para Superficie.");
+      return false;
+    }
+
+    if (!selectedSurfaceAreaOption) {
+      showError("El area seleccionada ya no es valida. Vuelve a seleccionar el area.");
+      return false;
+    }
+
+    return true;
+  }
+
   async function onSubmitSample(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     try {
+      if (!PRIORITY_VALUES.has(sampleForm.priority)) {
+        showError("Selecciona una prioridad valida.");
+        return;
+      }
       const sampledAt = toIso(sampleForm.sampledAt) ?? new Date().toISOString();
       const normalizedSampleName = sampleName.trim() || undefined;
       const common = {
         name: normalizedSampleName,
         priority: sampleForm.priority,
-        east: toNumber(sampleForm.east),
-        north: toNumber(sampleForm.north),
-        elevation: toNumber(sampleForm.elevation),
+        east: toNumber(sampleForm.east, "Este"),
+        north: toNumber(sampleForm.north, "Norte"),
+        elevation: toNumber(sampleForm.elevation, "Elevacion"),
         sampledAt
       };
       let payload:
@@ -1331,10 +1387,7 @@ export function ExploracionesPage() {
           });
 
       if (registerType === "interior") {
-        if (!sampleForm.interiorLaborId || !sampleForm.interiorObjectiveId) {
-          showError("Selecciona labor y objetivo para Interior Mina.");
-          return;
-        }
+        if (!validateInteriorLocationSelection()) return;
         const labAssignments = buildInteriorLabAssignmentsPayload();
         payload = {
           ...common,
@@ -1343,10 +1396,7 @@ export function ExploracionesPage() {
           labAssignments
         };
       } else {
-        if (!sampleForm.surfaceAreaId || !sampleForm.surfaceObjectiveId) {
-          showError("Selecciona área y objetivo para Superficie.");
-          return;
-        }
+        if (!validateSurfaceLocationSelection()) return;
         payload = {
           ...common,
           surfaceAreaId: sampleForm.surfaceAreaId,
@@ -1477,7 +1527,7 @@ export function ExploracionesPage() {
       const name = catalogForm.name.trim();
       const abbreviation = catalogForm.abbreviation.trim() || undefined;
       const description = catalogForm.description.trim() || undefined;
-      const elevation = toNumber(catalogForm.elevation);
+      const elevation = toNumber(catalogForm.elevation, "Elevacion");
 
       if (modalKind === "element") {
         await queueCatalog.mutateAsync({

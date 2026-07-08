@@ -29,6 +29,8 @@ import {
 } from "@/features/exploraciones/db/exploracionesDb";
 import type {
   InteriorSampleWithResultsPayload,
+  SamplePriority,
+  SampleResultPayload,
   SurfaceSampleWithResultsPayload
 } from "@/features/exploraciones/model/proposalSamples.schema";
 
@@ -108,6 +110,227 @@ function resolvePayloadIds(payload: ProposalPayload, idMap: Map<string, string>)
   }
 
   return next as ProposalPayload;
+}
+
+const localIdPrefixes = [
+  "seed-",
+  "element-",
+  "interior-area-",
+  "interior-level-",
+  "interior-labor-",
+  "interior-objective-",
+  "interior-laboratory-",
+  "surface-area-",
+  "surface-objective-",
+  "surface-laboratory-"
+];
+
+function isLocalOnlyId(value: unknown) {
+  return (
+    typeof value === "string" &&
+    (value.includes("-local-") || localIdPrefixes.some((prefix) => value.startsWith(prefix)))
+  );
+}
+
+function getFieldLabel(field: string) {
+  const labels: Record<string, string> = {
+    elementId: "elemento",
+    interiorAreaId: "area",
+    interiorLevelId: "nivel",
+    interiorLaborId: "labor",
+    interiorObjectiveId: "objetivo",
+    interiorLaboratoryId: "laboratorio",
+    surfaceAreaId: "area",
+    surfaceObjectiveId: "objetivo",
+    surfaceLaboratoryId: "laboratorio"
+  };
+  return labels[field] ?? field;
+}
+
+function findUnresolvedLocalId(payload: unknown): string | undefined {
+  if (!payload || typeof payload !== "object") return undefined;
+  if (Array.isArray(payload)) {
+    for (const item of payload) {
+      const unresolved = findUnresolvedLocalId(item);
+      if (unresolved) return unresolved;
+    }
+    return undefined;
+  }
+
+  for (const [key, value] of Object.entries(payload as Record<string, unknown>)) {
+    if (key.endsWith("Id") && isLocalOnlyId(value)) return getFieldLabel(key);
+    const unresolved = findUnresolvedLocalId(value);
+    if (unresolved) return unresolved;
+  }
+
+  return undefined;
+}
+
+const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const samplePriorities = new Set(["URGENT", "HIGH", "NORMAL", "LOW"]);
+const labSlots = new Set(["L1", "L2", "L3"]);
+
+function isUuid(value: unknown) {
+  return typeof value === "string" && uuidPattern.test(value);
+}
+
+function assertUuid(value: unknown, field: string) {
+  if (!isUuid(value)) {
+    throw new Error(`No se pudo sincronizar la muestra porque ${getFieldLabel(field)} no tiene un UUID valido.`);
+  }
+}
+
+function normalizeOptionalNumber(value: unknown, field: string) {
+  if (value === undefined || value === null || value === "") return undefined;
+  const parsed = typeof value === "number" ? value : Number(String(value).trim().replace(",", "."));
+  if (!Number.isFinite(parsed)) {
+    throw new Error(`No se pudo sincronizar la muestra porque ${field} debe ser numerico.`);
+  }
+  return parsed;
+}
+
+function normalizeOptionalDate(value: unknown) {
+  if (value === undefined || value === null || value === "") return undefined;
+  if (typeof value !== "string") {
+    throw new Error("No se pudo sincronizar la muestra porque la fecha de muestreo no es valida.");
+  }
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    throw new Error("No se pudo sincronizar la muestra porque la fecha de muestreo no es valida.");
+  }
+  return date.toISOString();
+}
+
+function normalizeLaboratory(value: unknown) {
+  if (!value || typeof value !== "object") return undefined;
+  const source = value as Record<string, unknown>;
+  const name = typeof source.name === "string" ? source.name.trim() : "";
+  if (!name) return undefined;
+  return {
+    name,
+    abbreviation: typeof source.abbreviation === "string" && source.abbreviation.trim()
+      ? source.abbreviation.trim()
+      : undefined,
+    description: typeof source.description === "string" && source.description.trim()
+      ? source.description.trim()
+      : undefined
+  };
+}
+
+function normalizeResults(value: unknown) {
+  if (!Array.isArray(value)) return [];
+  return value
+    .map((item) => {
+      if (!item || typeof item !== "object") return undefined;
+      const source = item as Record<string, unknown>;
+      assertUuid(source.elementId, "elementId");
+      return {
+        elementId: source.elementId as string,
+        value: normalizeOptionalNumber(source.value, "valor del resultado"),
+        unit: typeof source.unit === "string" && source.unit.trim() ? source.unit.trim() : undefined,
+        qualifier: typeof source.qualifier === "string" && source.qualifier.trim() ? source.qualifier.trim() : undefined,
+        comments: typeof source.comments === "string" && source.comments.trim() ? source.comments.trim() : undefined
+      };
+    })
+    .filter(Boolean) as SampleResultPayload[];
+}
+
+function sanitizeInteriorAssignments(value: unknown) {
+  if (!Array.isArray(value)) return [];
+  return value.map((item) => {
+    if (!item || typeof item !== "object") {
+      throw new Error("No se pudo sincronizar la muestra porque un laboratorio asignado no es valido.");
+    }
+    const source = item as Record<string, unknown>;
+    if (typeof source.slot !== "string" || !labSlots.has(source.slot)) {
+      throw new Error("No se pudo sincronizar la muestra porque cada laboratorio interior debe tener slot L1, L2 o L3.");
+    }
+    const laboratory = normalizeLaboratory(source.laboratory);
+    if (source.interiorLaboratoryId) assertUuid(source.interiorLaboratoryId, "interiorLaboratoryId");
+    if (!source.interiorLaboratoryId && !laboratory?.name) {
+      throw new Error("No se pudo sincronizar la muestra porque cada laboratorio asignado requiere laboratorio o nombre nuevo.");
+    }
+    return {
+      slot: source.slot,
+      interiorLaboratoryId: source.interiorLaboratoryId as string | undefined,
+      laboratory,
+      results: normalizeResults(source.results)
+    };
+  });
+}
+
+function sanitizeSurfaceAssignments(value: unknown) {
+  if (!Array.isArray(value)) return [];
+  return value.map((item) => {
+    if (!item || typeof item !== "object") {
+      throw new Error("No se pudo sincronizar la muestra porque un laboratorio asignado no es valido.");
+    }
+    const source = item as Record<string, unknown>;
+    const laboratory = normalizeLaboratory(source.laboratory);
+    if (source.surfaceLaboratoryId) assertUuid(source.surfaceLaboratoryId, "surfaceLaboratoryId");
+    if (!source.surfaceLaboratoryId && !laboratory?.name) {
+      throw new Error("No se pudo sincronizar la muestra porque cada laboratorio asignado requiere laboratorio o nombre nuevo.");
+    }
+    return {
+      surfaceLaboratoryId: source.surfaceLaboratoryId as string | undefined,
+      laboratory,
+      results: normalizeResults(source.results)
+    };
+  });
+}
+
+function sanitizeSamplePayload(action: OfflineProposalAction, payload: ProposalPayload) {
+  const source = payload as Record<string, unknown>;
+  if (source.priority !== undefined && !samplePriorities.has(String(source.priority))) {
+    throw new Error("No se pudo sincronizar la muestra porque la prioridad no es valida.");
+  }
+
+  const common = {
+    name: typeof source.name === "string" && source.name.trim() ? source.name.trim() : undefined,
+    priority: source.priority as SamplePriority | undefined,
+    voucherNumber: normalizeOptionalNumber(source.voucherNumber, "talon"),
+    east: normalizeOptionalNumber(source.east, "este"),
+    north: normalizeOptionalNumber(source.north, "norte"),
+    elevation: normalizeOptionalNumber(source.elevation, "elevacion"),
+    sampledAt: normalizeOptionalDate(source.sampledAt)
+  };
+
+  if (action.module === "interior") {
+    assertUuid(source.interiorLaborId, "interiorLaborId");
+    assertUuid(source.interiorObjectiveId, "interiorObjectiveId");
+    return {
+      ...common,
+      interiorLaborId: source.interiorLaborId,
+      interiorObjectiveId: source.interiorObjectiveId,
+      labAssignments: sanitizeInteriorAssignments(source.labAssignments)
+    } as ProposalPayload;
+  }
+
+  if (action.module === "surface") {
+    assertUuid(source.surfaceAreaId, "surfaceAreaId");
+    assertUuid(source.surfaceObjectiveId, "surfaceObjectiveId");
+    return {
+      ...common,
+      surfaceAreaId: source.surfaceAreaId,
+      surfaceObjectiveId: source.surfaceObjectiveId,
+      labAssignments: sanitizeSurfaceAssignments(source.labAssignments)
+    } as ProposalPayload;
+  }
+
+  return payload;
+}
+
+function preparePayloadForSync(action: OfflineProposalAction, payload: ProposalPayload) {
+  if (action.entity !== "sample") return payload;
+
+  const unresolvedField = findUnresolvedLocalId(payload);
+  if (unresolvedField) {
+    throw new Error(
+      `No se pudo sincronizar la muestra porque el ${unresolvedField} aun es local. Con internet, vuelve a seleccionar ese catalogo y guarda la muestra.`
+    );
+  }
+
+  return sanitizeSamplePayload(action, payload);
 }
 
 function findExistingCatalog(
@@ -280,7 +503,7 @@ export async function syncPendingProposalSamples(
   for (const action of pending) {
     if (!action.id) continue;
     try {
-      const payload = resolvePayloadIds(action.payload, idMap);
+      const payload = preparePayloadForSync(action, resolvePayloadIds(action.payload, idMap));
       const existingCatalog = findExistingCatalog(action, payload, catalogs, idMap);
       if (existingCatalog?.remoteId) {
         await markProposalActionAsSynced(action.id, existingCatalog.remoteId);
