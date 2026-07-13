@@ -10,6 +10,7 @@ import {
   surfaceAreaSchema,
   surfaceSampleSchema,
   type InteriorSampleWithResultsPayload,
+  type SampleCategory,
   type SamplePriority,
   type SurfaceSampleWithResultsPayload
 } from "@/features/exploraciones/model/proposalSamples.schema";
@@ -156,14 +157,22 @@ export async function createInteriorLaboratory(payload: {
 export async function getInteriorSamples(params?: {
   interiorLaborId?: string;
   interiorObjectiveId?: string;
+  category?: SampleCategory;
   createdById?: number | string;
   priority?: SamplePriority;
   search?: string;
   page?: number;
   limit?: number;
 }) {
-  const response = await httpClient.get(apiEndpoints.exploraciones.interiorSamples, {
-    params: buildParams(params)
+  const { category, ...restParams } = params ?? {};
+  const endpoint =
+    category === "EXPLORATION"
+      ? apiEndpoints.exploraciones.interiorSamplesExploration
+      : category === "PRODUCTION"
+        ? apiEndpoints.exploraciones.interiorSamplesProduction
+        : apiEndpoints.exploraciones.interiorSamples;
+  const response = await httpClient.get(endpoint, {
+    params: buildParams(restParams)
   });
   return parseList(response.data, (item) => interiorSampleSchema.parse(item));
 }
@@ -233,14 +242,22 @@ export async function createSurfaceLaboratory(payload: {
 export async function getSurfaceSamples(params?: {
   surfaceAreaId?: string;
   surfaceObjectiveId?: string;
+  category?: SampleCategory;
   createdById?: number | string;
   priority?: SamplePriority;
   search?: string;
   page?: number;
   limit?: number;
 }) {
-  const response = await httpClient.get(apiEndpoints.exploraciones.surfaceProposalSamples, {
-    params: buildParams(params)
+  const { category, ...restParams } = params ?? {};
+  const endpoint =
+    category === "EXPLORATION"
+      ? apiEndpoints.exploraciones.surfaceProposalSamplesExploration
+      : category === "PRODUCTION"
+        ? apiEndpoints.exploraciones.surfaceProposalSamplesProduction
+        : apiEndpoints.exploraciones.surfaceProposalSamples;
+  const response = await httpClient.get(endpoint, {
+    params: buildParams(restParams)
   });
   return parseList(response.data, (item) => surfaceSampleSchema.parse(item));
 }

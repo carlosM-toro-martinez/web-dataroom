@@ -69,6 +69,8 @@ export const exploracionesEndpoints = {
   interiorLaboratories: "/api/interior/laboratories",
   interiorLaboratoryById: (id: string) => `/api/interior/laboratories/${id}`,
   interiorSamples: "/api/interior/samples",
+  interiorSamplesExploration: "/api/interior/samples/exploration",
+  interiorSamplesProduction: "/api/interior/samples/production",
   interiorSamplesWithResults: "/api/interior/samples/with-results",
   interiorSampleById: (id: string) => `/api/interior/samples/${id}`,
   interiorSampleAssignVoucherById: (id: string) => `/api/interior/samples/${id}/assign-voucher`,
@@ -82,6 +84,8 @@ export const exploracionesEndpoints = {
   surfaceSampleLaboratories: "/api/surface-sample/laboratories",
   surfaceSampleLaboratoryById: (id: string) => `/api/surface-sample/laboratories/${id}`,
   surfaceProposalSamples: "/api/surface-sample/samples",
+  surfaceProposalSamplesExploration: "/api/surface-sample/samples/exploration",
+  surfaceProposalSamplesProduction: "/api/surface-sample/samples/production",
   surfaceProposalSamplesWithResults: "/api/surface-sample/samples/with-results",
   surfaceProposalSampleById: (id: string) => `/api/surface-sample/samples/${id}`,
   surfaceProposalSampleAssignVoucherById: (id: string) =>

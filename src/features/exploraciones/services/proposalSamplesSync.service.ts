@@ -29,6 +29,7 @@ import {
 } from "@/features/exploraciones/db/exploracionesDb";
 import type {
   InteriorSampleWithResultsPayload,
+  SampleCategory,
   SamplePriority,
   SampleResultPayload,
   SurfaceSampleWithResultsPayload
@@ -168,6 +169,7 @@ function findUnresolvedLocalId(payload: unknown): string | undefined {
 
 const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const samplePriorities = new Set(["URGENT", "HIGH", "NORMAL", "LOW"]);
+const sampleCategories = new Set(["EXPLORATION", "PRODUCTION"]);
 const labSlots = new Set(["L1", "L2", "L3"]);
 
 function isUuid(value: unknown) {
@@ -284,9 +286,13 @@ function sanitizeSamplePayload(action: OfflineProposalAction, payload: ProposalP
   if (source.priority !== undefined && !samplePriorities.has(String(source.priority))) {
     throw new Error("No se pudo sincronizar la muestra porque la prioridad no es valida.");
   }
+  if (source.category !== undefined && !sampleCategories.has(String(source.category))) {
+    throw new Error("No se pudo sincronizar la muestra porque la categoria no es valida.");
+  }
 
   const common = {
     name: typeof source.name === "string" && source.name.trim() ? source.name.trim() : undefined,
+    category: (source.category as SampleCategory | undefined) ?? "EXPLORATION",
     priority: source.priority as SamplePriority | undefined,
     voucherNumber: normalizeOptionalNumber(source.voucherNumber, "talon"),
     east: normalizeOptionalNumber(source.east, "este"),

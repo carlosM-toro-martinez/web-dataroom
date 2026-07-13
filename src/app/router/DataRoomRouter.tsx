@@ -54,6 +54,8 @@ export function DataRoomRouter() {
 
           <Route element={<ExploracionesAdminRoute />}>
             <Route path="/exploraciones" element={<ExploracionesPage />} />
+            <Route path="/exploraciones/exploracion" element={<ExploracionesPage category="EXPLORATION" />} />
+            <Route path="/exploraciones/produccion" element={<ExploracionesPage category="PRODUCTION" />} />
           </Route>
           <Route path="/exploraciones/elementos" element={<ExploracionesElementosPage />} />
           <Route path="/exploraciones/reportes" element={<ExploracionesReportesPage />} />

@@ -1,4 +1,5 @@
 import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
+import { Link } from "react-router-dom";
 import L from "leaflet";
 import {
   Beaker,
@@ -54,6 +55,7 @@ import type {
   InteriorLabor,
   InteriorSample,
   LaboratorySlot,
+  SampleCategory,
   SamplePriority,
   SurfaceSample
 } from "@/features/exploraciones/model/proposalSamples.schema";
@@ -139,6 +141,7 @@ type SampleTableRow = {
   code: string;
   name?: string | null;
   voucherNumber?: number | null;
+  category: SampleCategory;
   priority: SamplePriority;
   sampledAt?: string | null;
   objectiveName: string;
@@ -163,6 +166,17 @@ const PRIORITY_OPTIONS: Array<{ id: SamplePriority; label: string }> = [
   { id: "LOW", label: "Baja" }
 ];
 const PRIORITY_VALUES = new Set<SamplePriority>(PRIORITY_OPTIONS.map((option) => option.id));
+
+const CATEGORY_OPTIONS: Array<{ id: SampleCategory; label: string }> = [
+  { id: "EXPLORATION", label: "Exploración" },
+  { id: "PRODUCTION", label: "Producción" }
+];
+const CATEGORY_VALUES = new Set<SampleCategory>(CATEGORY_OPTIONS.map((option) => option.id));
+
+const CATEGORY_LABELS: Record<SampleCategory, string> = {
+  EXPLORATION: "Exploración",
+  PRODUCTION: "Producción"
+};
 
 const PRIORITY_LABELS: Record<SamplePriority, string> = {
   URGENT: "Urgente",
@@ -475,7 +489,62 @@ function FieldLabel({ children }: { children: React.ReactNode }) {
   );
 }
 
-export function ExploracionesPage() {
+export function ExploracionesPage({ category }: { category?: SampleCategory }) {
+  if (!category) return <ExploracionesCategoryLanding />;
+  return <ExploracionesRegisterPage sampleCategory={category} />;
+}
+
+function ExploracionesCategoryLanding() {
+  return (
+    <div className={pageShell}>
+      <InternalHeader
+        eyebrow="Exploraciones"
+        title="Registro de muestras"
+        description="Selecciona una categoría para continuar al registro de muestras."
+      />
+
+      <section className={`${panelClass} exploraciones-panel p-5`}>
+        <div className="grid gap-3 md:grid-cols-2">
+          <Link
+            to="/exploraciones/exploracion"
+            className="group rounded-xl border border-[var(--color-border-soft)] bg-[var(--color-surface-container-high)] p-5 transition hover:border-[var(--color-primary)]"
+          >
+            <div className="flex items-center gap-3">
+              <span className="inline-flex h-11 w-11 items-center justify-center rounded-lg bg-[var(--color-primary)] text-[var(--color-on-primary)]">
+                <Target size={20} />
+              </span>
+              <div>
+                <h2 className="text-lg font-bold">Exploración</h2>
+                <p className="mt-1 text-sm text-[var(--color-on-surface-variant)]">
+                  Registrar muestras de categoría EXPLORATION.
+                </p>
+              </div>
+            </div>
+          </Link>
+
+          <Link
+            to="/exploraciones/produccion"
+            className="group rounded-xl border border-[var(--color-border-soft)] bg-[var(--color-surface-container-high)] p-5 transition hover:border-[var(--color-primary)]"
+          >
+            <div className="flex items-center gap-3">
+              <span className="inline-flex h-11 w-11 items-center justify-center rounded-lg bg-[var(--color-primary)] text-[var(--color-on-primary)]">
+                <Landmark size={20} />
+              </span>
+              <div>
+                <h2 className="text-lg font-bold">Producción</h2>
+                <p className="mt-1 text-sm text-[var(--color-on-surface-variant)]">
+                  Registrar muestras de categoría PRODUCTION.
+                </p>
+              </div>
+            </div>
+          </Link>
+        </div>
+      </section>
+    </div>
+  );
+}
+
+function ExploracionesRegisterPage({ sampleCategory }: { sampleCategory: SampleCategory }) {
   const { showError, showSuccess } = useToast();
   const { user } = useAuth();
   const [registerType, setRegisterType] = useState<RegisterType>("interior");
@@ -492,6 +561,7 @@ export function ExploracionesPage() {
   const [geoPoint, setGeoPoint] = useState<GeoPoint | null>(null);
   const [geoStatus, setGeoStatus] = useState<string>("");
   const [isLocating, setIsLocating] = useState(false);
+  const [showGeoMap, setShowGeoMap] = useState(false);
   const syncInFlightRef = useRef(false);
   const lastSilentSyncAtRef = useRef(0);
 
@@ -503,6 +573,7 @@ export function ExploracionesPage() {
   const remoteInteriorLaboratories = useInteriorLaboratoriesQuery();
   const remoteInteriorSamples = useInteriorSamplesQuery({
     interiorLaborId: sampleForm.interiorLaborId || undefined,
+    category: sampleCategory,
     createdById: onlyMine ? user?.id : undefined,
     priority: priorityFilter || undefined,
     search: search || undefined
@@ -512,6 +583,7 @@ export function ExploracionesPage() {
   const remoteSurfaceLaboratories = useSurfaceLaboratoriesQuery();
   const remoteSurfaceSamples = useSurfaceSamplesQuery({
     surfaceAreaId: sampleForm.surfaceAreaId || undefined,
+    category: sampleCategory,
     createdById: onlyMine ? user?.id : undefined,
     priority: priorityFilter || undefined,
     search: search || undefined
@@ -840,7 +912,12 @@ export function ExploracionesPage() {
 
   const activeObjectives = registerType === "interior" ? interiorObjectives : surfaceObjectives;
   const activeLaboratories = registerType === "interior" ? interiorLaboratories : surfaceLaboratories;
-  const localVisibleSamples = localSamples.filter((item) => item.module === registerType && !item.synced);
+  const localVisibleSamples = localSamples.filter(
+    (item) =>
+      item.module === registerType &&
+      !item.synced &&
+      (((item.payload as any).category ?? "EXPLORATION") as SampleCategory) === sampleCategory
+  );
   const remoteVisibleSamples = registerType === "interior" ? remoteInteriorSamples.data ?? [] : remoteSurfaceSamples.data ?? [];
   const interiorNamePrefix = [
     normalizeNameToken(selectedInteriorArea?.abbreviation ?? selectedInteriorArea?.name),
@@ -863,6 +940,7 @@ export function ExploracionesPage() {
       code: item.synced ? item.code : `${item.code} (offline)`,
       name: (item.payload as any).name ?? null,
       voucherNumber: (item.payload as any).voucherNumber ?? null,
+      category: (((item.payload as any).category ?? "EXPLORATION") as SampleCategory),
       priority: ((item.payload as any).priority ?? "NORMAL") as SamplePriority,
       sampledAt: item.payload.sampledAt,
       objectiveName: "-",
@@ -885,6 +963,7 @@ export function ExploracionesPage() {
         code: sample.code,
         name: sample.name ?? null,
         voucherNumber: sample.voucherNumber ?? null,
+        category: sample.category ?? "EXPLORATION",
         priority: sample.priority ?? "NORMAL",
         sampledAt: sample.sampledAt,
         objectiveName: (isInterior ? interiorSample.objective?.name : surfaceSample.objective?.name) ?? "-",
@@ -920,6 +999,7 @@ export function ExploracionesPage() {
     registerType,
     remoteVisibleSamples,
     resultStatusFilter,
+    sampleCategory,
     search,
     user?.nombre
   ]);
@@ -1084,6 +1164,7 @@ export function ExploracionesPage() {
     setEditTarget(null);
     setGeoPoint(null);
     setGeoStatus("");
+    setShowGeoMap(false);
   }
 
   function mapResultRows(rawResults?: any[]): ResultRow[] {
@@ -1200,6 +1281,38 @@ export function ExploracionesPage() {
     setModalKind(kind);
   }
 
+  function applyGeoCoordinates(input: {
+    latitude: number;
+    longitude: number;
+    altitude?: number | null;
+    accuracy?: number | null;
+  }) {
+    const utm = latLonToUtm(input.latitude, input.longitude);
+    setSampleForm((current) => ({
+      ...current,
+      east: String(utm.east),
+      north: String(utm.north),
+      elevation:
+        current.elevation.trim() ||
+        input.altitude === null ||
+        input.altitude === undefined ||
+        Number.isNaN(input.altitude)
+          ? current.elevation
+          : String(Number(input.altitude.toFixed(2)))
+    }));
+    setGeoPoint({
+      latitude: input.latitude,
+      longitude: input.longitude,
+      accuracy: input.accuracy ?? undefined
+    });
+    return utm;
+  }
+
+  function adjustGeoMarker(latitude: number, longitude: number) {
+    const utm = applyGeoCoordinates({ latitude, longitude });
+    setGeoStatus(`Ubicación ajustada. UTM zona ${utm.zoneNumber}`);
+  }
+
   function fillFromCurrentLocation() {
     if (!("geolocation" in navigator)) {
       showError("Este dispositivo no soporta geolocalización.");
@@ -1212,21 +1325,9 @@ export function ExploracionesPage() {
     navigator.geolocation.getCurrentPosition(
       (position) => {
         const { latitude, longitude, accuracy, altitude } = position.coords;
-        const utm = latLonToUtm(latitude, longitude);
-
-        setSampleForm((current) => ({
-          ...current,
-          east: String(utm.east),
-          north: String(utm.north),
-          elevation:
-            current.elevation.trim() || altitude === null || altitude === undefined || Number.isNaN(altitude)
-              ? current.elevation
-              : String(Number(altitude.toFixed(2)))
-        }));
-        setGeoPoint({ latitude, longitude, accuracy });
-        setGeoStatus(
-          `Ubicación cargada. UTM zona ${utm.zoneNumber}${accuracy ? ` · precisión aprox. ${Math.round(accuracy)} m` : ""}`
-        );
+        const utm = applyGeoCoordinates({ latitude, longitude, altitude, accuracy });
+        setShowGeoMap(false);
+        setGeoStatus(`Ubicación cargada. UTM zona ${utm.zoneNumber}`);
         setIsLocating(false);
       },
       (error) => {
@@ -1364,10 +1465,15 @@ export function ExploracionesPage() {
         showError("Selecciona una prioridad valida.");
         return;
       }
+      if (!CATEGORY_VALUES.has(sampleCategory)) {
+        showError("Selecciona una categoria valida.");
+        return;
+      }
       const sampledAt = toIso(sampleForm.sampledAt) ?? new Date().toISOString();
       const normalizedSampleName = sampleName.trim() || undefined;
       const common = {
         name: normalizedSampleName,
+        category: sampleCategory,
         priority: sampleForm.priority,
         east: toNumber(sampleForm.east, "Este"),
         north: toNumber(sampleForm.north, "Norte"),
@@ -1667,10 +1773,24 @@ export function ExploracionesPage() {
       <InternalHeader
         eyebrow="Exploraciones"
         title="Registro de muestras"
-        description="Captura offline para Interior Mina y Superficie. Los registros se sincronizan al recuperar conexión."
+        description="Captura offline para exploración y producción en Interior Mina o Superficie. Los registros se sincronizan al recuperar conexión."
       />
 
+      <section className={`${panelClass} exploraciones-panel p-4`}>
+        <p className="text-xs font-bold uppercase tracking-wider text-[var(--color-on-surface-variant)]">
+          Categoría seleccionada
+        </p>
+        <h2 className="mt-1 text-2xl font-extrabold text-[var(--color-on-surface)]">
+          {CATEGORY_LABELS[sampleCategory]}
+        </h2>
+      </section>
+
       <section className={`${panelClass} exploraciones-panel p-3`}>
+        <div className="mb-3 px-1">
+          <h2 className="text-xs font-bold uppercase tracking-wider text-[var(--color-on-surface-variant)]">
+            Tipo de registro
+          </h2>
+        </div>
         <div className="exploraciones-mode-grid grid grid-cols-2 gap-2">
           <ModeButton
             active={registerType === "interior"}
@@ -1755,7 +1875,7 @@ export function ExploracionesPage() {
           <div className="flex items-center gap-2">
             <FlaskConical size={18} />
             <h2 className="text-lg font-bold">
-              {isEditing ? "Editar muestra" : "Nueva muestra"} de{" "}
+              {isEditing ? "Editar muestra" : "Nueva muestra"} de {CATEGORY_LABELS[sampleCategory]} en{" "}
               {registerType === "interior" ? "Interior Mina" : "Superficie"}
             </h2>
           </div>
@@ -1834,8 +1954,22 @@ export function ExploracionesPage() {
               <p className="mt-3 text-xs text-[var(--color-on-surface-variant)]">{geoStatus}</p>
             ) : null}
             {geoPoint ? (
-              <div className="mt-4 overflow-hidden rounded-xl border border-[var(--color-border-soft)]">
-                {navigator.onLine ? (
+              <div className="mt-4 overflow-hidden rounded-xl border border-[var(--color-border-soft)] bg-[var(--color-surface-container-low)]">
+                <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-3">
+                  <div className="grid gap-1 text-xs text-[var(--color-on-surface-variant)] md:grid-cols-2 md:gap-4">
+                    <p>Latitud: {geoPoint.latitude.toFixed(6)}</p>
+                    <p>Longitud: {geoPoint.longitude.toFixed(6)}</p>
+                  </div>
+                  <button
+                    type="button"
+                    className={secondaryButton}
+                    onClick={() => setShowGeoMap((current) => !current)}
+                  >
+                    <MapPinned size={14} />
+                    {showGeoMap ? "Ocultar mapa" : "Ver mapa"}
+                  </button>
+                </div>
+                {showGeoMap && navigator.onLine ? (
                   <div className="h-56 w-full">
                     <MapContainer
                       center={[geoPoint.latitude, geoPoint.longitude]}
@@ -1844,16 +1978,22 @@ export function ExploracionesPage() {
                       className="h-full w-full"
                     >
                       <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
-                      <Marker position={[geoPoint.latitude, geoPoint.longitude]} icon={geoMarkerIcon} />
+                      <Marker
+                        position={[geoPoint.latitude, geoPoint.longitude]}
+                        icon={geoMarkerIcon}
+                        draggable
+                        eventHandlers={{
+                          dragend: (event) => {
+                            const marker = event.target as L.Marker;
+                            const nextPosition = marker.getLatLng();
+                            adjustGeoMarker(nextPosition.lat, nextPosition.lng);
+                          }
+                        }}
+                      />
                     </MapContainer>
                   </div>
                 ) : null}
-                <div className="grid gap-2 bg-[var(--color-surface-container-low)] px-4 py-3 text-xs text-[var(--color-on-surface-variant)] md:grid-cols-3">
-                  <p>Latitud: {geoPoint.latitude.toFixed(6)}</p>
-                  <p>Longitud: {geoPoint.longitude.toFixed(6)}</p>
-                  <p>Precisión: {geoPoint.accuracy ? `${Math.round(geoPoint.accuracy)} m` : "-"}</p>
-                </div>
-                {!navigator.onLine ? (
+                {showGeoMap && !navigator.onLine ? (
                   <p className="border-t border-[var(--color-border-soft)] px-4 py-3 text-xs text-[var(--color-on-surface-variant)]">
                     Sin conexión: se muestran las coordenadas capturadas, pero no el mapa base.
                   </p>
@@ -2554,7 +2694,7 @@ function SamplesTable({
           <table className="w-full border-collapse text-left">
             <thead>
               <tr>
-                {["Código", "Nombre", "Talón", "Prioridad", "Ubicación", "Objetivo", "Registrado por", "Muestreo", "Resultados", "Acciones"].map((heading) => (
+                {["Código", "Nombre", "Categoría", "Talón", "Prioridad", "Ubicación", "Objetivo", "Registrado por", "Muestreo", "Resultados", "Acciones"].map((heading) => (
                   <th key={heading} className="px-4 py-3 text-[10px] font-bold uppercase tracking-widest text-[var(--color-on-surface-variant)]">
                     {heading}
                   </th>
@@ -2566,6 +2706,7 @@ function SamplesTable({
                 <tr key={row.id} className={`${priorityRowClass(row.priority)} transition hover:brightness-[0.98]`}>
                   <td className="px-4 py-3 text-sm font-bold">{row.code}</td>
                   <td className="px-4 py-3 text-xs">{row.name ?? "-"}</td>
+                  <td className="px-4 py-3 text-xs font-bold">{CATEGORY_LABELS[row.category]}</td>
                   <td className="px-4 py-3 text-xs font-bold">{formatVoucherNumber(row.voucherNumber)}</td>
                   <td className="px-4 py-3 text-xs">
                     <span className={priorityBadgeClass(row.priority)}>{PRIORITY_LABELS[row.priority]}</span>
@@ -2607,7 +2748,7 @@ function SamplesTable({
               ))}
               {rows.length === 0 ? (
                 <tr>
-                  <td colSpan={10} className="px-4 py-6 text-center text-sm text-[var(--color-on-surface-variant)]">
+                  <td colSpan={11} className="px-4 py-6 text-center text-sm text-[var(--color-on-surface-variant)]">
                     No hay muestras para mostrar.
                   </td>
                 </tr>
@@ -2625,6 +2766,7 @@ function SamplesTable({
                   </p>
                   <p className="mt-1 text-sm font-bold">{row.code}</p>
                   <p className="mt-1 text-xs text-[var(--color-on-surface-variant)]">{row.name ?? "-"}</p>
+                  <p className="mt-1 text-xs font-bold">{CATEGORY_LABELS[row.category]}</p>
                   <p className="mt-1 text-xs font-bold">Talón {formatVoucherNumber(row.voucherNumber)}</p>
                 </div>
                 <p className="shrink-0 text-xs text-[var(--color-on-surface-variant)]">
@@ -2749,6 +2891,7 @@ function SampleDetailModal({ row, onClose }: { row: SampleTableRow; onClose: () 
                 <DetailItem label="Error de sincronización" value={getRowSyncError(row)} />
               ) : null}
               <DetailItem label="Tipo" value={isInterior ? "Interior Mina" : "Superficie"} />
+              <DetailItem label="Categoría" value={CATEGORY_LABELS[(payload.category ?? "EXPLORATION") as SampleCategory]} />
               <DetailItem label="Nombre" value={row.name ?? "-"} />
               <DetailItem label="Talón" value={formatVoucherNumber(row.voucherNumber)} />
               <DetailItem label="Prioridad" value={PRIORITY_LABELS[row.priority]} />

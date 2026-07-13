@@ -6,6 +6,7 @@ const optionalNumber = z.coerce.number().nullable().optional();
 
 export const laboratorySlotSchema = z.enum(["L1", "L2", "L3"]);
 export const samplePrioritySchema = z.enum(["URGENT", "HIGH", "NORMAL", "LOW"]);
+export const sampleCategorySchema = z.enum(["EXPLORATION", "PRODUCTION"]);
 
 export const elementSchema = z
   .object({
@@ -82,6 +83,7 @@ export const interiorSampleSchema = z
     name: optionalText,
     sequentialNumber: z.number().nullable().optional(),
     voucherNumber: z.number().nullable().optional(),
+    category: sampleCategorySchema.optional().default("EXPLORATION"),
     priority: samplePrioritySchema.optional().default("NORMAL"),
     east: optionalNumber,
     north: optionalNumber,
@@ -107,6 +109,7 @@ export const surfaceSampleSchema = z
     name: optionalText,
     sequentialNumber: z.number().nullable().optional(),
     voucherNumber: z.number().nullable().optional(),
+    category: sampleCategorySchema.optional().default("EXPLORATION"),
     priority: samplePrioritySchema.optional().default("NORMAL"),
     east: optionalNumber,
     north: optionalNumber,
@@ -123,6 +126,7 @@ export const surfaceSampleSchema = z
 
 export type LaboratorySlot = z.infer<typeof laboratorySlotSchema>;
 export type SamplePriority = z.infer<typeof samplePrioritySchema>;
+export type SampleCategory = z.infer<typeof sampleCategorySchema>;
 export type ElementCatalogItem = z.infer<typeof elementSchema>;
 export type CatalogItem = z.infer<typeof catalogItemSchema>;
 export type SampleLabAssignment = z.infer<typeof sampleLabAssignmentSchema>;
@@ -158,6 +162,7 @@ export interface SurfaceLabAssignmentPayload {
 export interface InteriorSampleWithResultsPayload {
   interiorLaborId: string;
   interiorObjectiveId: string;
+  category?: SampleCategory;
   name?: string;
   priority?: SamplePriority;
   voucherNumber?: number;
@@ -171,6 +176,7 @@ export interface InteriorSampleWithResultsPayload {
 export interface SurfaceSampleWithResultsPayload {
   surfaceAreaId: string;
   surfaceObjectiveId: string;
+  category?: SampleCategory;
   name?: string;
   priority?: SamplePriority;
   voucherNumber?: number;

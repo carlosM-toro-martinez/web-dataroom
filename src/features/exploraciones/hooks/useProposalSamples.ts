@@ -47,6 +47,7 @@ import {
 } from "@/features/exploraciones/services/proposalSamplesSync.service";
 import type {
   InteriorSampleWithResultsPayload,
+  SampleCategory,
   SamplePriority,
   SurfaceSampleWithResultsPayload
 } from "@/features/exploraciones/model/proposalSamples.schema";
@@ -225,6 +226,7 @@ export function useInteriorLaboratoriesQuery() {
 export function useInteriorSamplesQuery(params: {
   interiorLaborId?: string;
   createdById?: number;
+  category?: SampleCategory;
   priority?: SamplePriority;
   search?: string;
 }) {
@@ -258,6 +260,7 @@ export function useSurfaceLaboratoriesQuery() {
 export function useSurfaceSamplesQuery(params: {
   surfaceAreaId?: string;
   createdById?: number;
+  category?: SampleCategory;
   priority?: SamplePriority;
   search?: string;
 }) {
