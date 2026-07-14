@@ -141,6 +141,7 @@ type SampleTableRow = {
   code: string;
   name?: string | null;
   voucherNumber?: number | null;
+  voucherCode?: string | null;
   category: SampleCategory;
   priority: SamplePriority;
   sampledAt?: string | null;
@@ -562,6 +563,8 @@ function ExploracionesRegisterPage({ sampleCategory }: { sampleCategory: SampleC
   const [geoStatus, setGeoStatus] = useState<string>("");
   const [isLocating, setIsLocating] = useState(false);
   const [showGeoMap, setShowGeoMap] = useState(false);
+  const autoLocationRequestedRef = useRef(false);
+  const sampleFormRef = useRef<HTMLElement | null>(null);
   const syncInFlightRef = useRef(false);
   const lastSilentSyncAtRef = useRef(0);
 
@@ -576,7 +579,7 @@ function ExploracionesRegisterPage({ sampleCategory }: { sampleCategory: SampleC
     category: sampleCategory,
     createdById: onlyMine ? user?.id : undefined,
     priority: priorityFilter || undefined,
-    search: search || undefined
+    search: search.trim() && !/^\d+$/.test(search.trim()) ? search : undefined
   });
   const remoteSurfaceAreas = useSurfaceAreasQuery();
   const remoteSurfaceObjectives = useSurfaceObjectivesQuery();
@@ -586,7 +589,7 @@ function ExploracionesRegisterPage({ sampleCategory }: { sampleCategory: SampleC
     category: sampleCategory,
     createdById: onlyMine ? user?.id : undefined,
     priority: priorityFilter || undefined,
-    search: search || undefined
+    search: search.trim() && !/^\d+$/.test(search.trim()) ? search : undefined
   });
   const offlineCatalogs = useOfflineProposalCatalogsQuery();
   const offlineSamples = useOfflineProposalSamplesQuery();
@@ -940,6 +943,7 @@ function ExploracionesRegisterPage({ sampleCategory }: { sampleCategory: SampleC
       code: item.synced ? item.code : `${item.code} (offline)`,
       name: (item.payload as any).name ?? null,
       voucherNumber: (item.payload as any).voucherNumber ?? null,
+      voucherCode: (item.payload as any).voucherCode ?? null,
       category: (((item.payload as any).category ?? "EXPLORATION") as SampleCategory),
       priority: ((item.payload as any).priority ?? "NORMAL") as SamplePriority,
       sampledAt: item.payload.sampledAt,
@@ -963,6 +967,7 @@ function ExploracionesRegisterPage({ sampleCategory }: { sampleCategory: SampleC
         code: sample.code,
         name: sample.name ?? null,
         voucherNumber: sample.voucherNumber ?? null,
+        voucherCode: sample.voucherCode ?? null,
         category: sample.category ?? "EXPLORATION",
         priority: sample.priority ?? "NORMAL",
         sampledAt: sample.sampledAt,
@@ -984,7 +989,20 @@ function ExploracionesRegisterPage({ sampleCategory }: { sampleCategory: SampleC
         const rowHasResults = hasResults(row.results);
         return resultStatusFilter === "with" ? rowHasResults : !rowHasResults;
       })
-      .filter((row) => (!query ? true : row.code.toLowerCase().includes(query)))
+      .filter((row) => {
+        if (!query) return true;
+        const voucher = row.voucherNumber === null || row.voucherNumber === undefined
+          ? ""
+          : String(row.voucherNumber);
+        const voucherCode = row.voucherCode?.toLowerCase() ?? "";
+        const formattedVoucher = formatVoucherLabel(row).toLowerCase();
+        return (
+          row.code.toLowerCase().includes(query) ||
+          voucher.includes(query) ||
+          voucherCode.includes(query) ||
+          formattedVoucher.includes(query)
+        );
+      })
       .sort((left, right) => {
         const priorityDiff = PRIORITY_WEIGHT[right.priority] - PRIORITY_WEIGHT[left.priority];
         if (priorityDiff !== 0) return priorityDiff;
@@ -1162,8 +1180,6 @@ function ExploracionesRegisterPage({ sampleCategory }: { sampleCategory: SampleC
     setSampleForm(initialSampleForm());
     setResults([]);
     setEditTarget(null);
-    setGeoPoint(null);
-    setGeoStatus("");
     setShowGeoMap(false);
   }
 
@@ -1227,6 +1243,9 @@ function ExploracionesRegisterPage({ sampleCategory }: { sampleCategory: SampleC
       }
       setResults(mapResultRows(flattenAssignmentResults((sample.payload as any).labAssignments, (sample.payload as any).results)));
       setEditTarget({ source: "local", module: sample.module, localId: sample.localId });
+      window.setTimeout(() => {
+        sampleFormRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+      }, 0);
       return;
     }
 
@@ -1270,6 +1289,9 @@ function ExploracionesRegisterPage({ sampleCategory }: { sampleCategory: SampleC
     }
     setResults(mapResultRows(flattenAssignmentResults(sample.labAssignments, sample.results)));
     setEditTarget({ source: "remote", module, remoteId: sample.id });
+    window.setTimeout(() => {
+      sampleFormRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+    }, 0);
   }
 
   function setCatalogField(field: keyof CatalogForm, value: string) {
@@ -1348,6 +1370,12 @@ function ExploracionesRegisterPage({ sampleCategory }: { sampleCategory: SampleC
       }
     );
   }
+
+  useEffect(() => {
+    if (autoLocationRequestedRef.current) return;
+    autoLocationRequestedRef.current = true;
+    fillFromCurrentLocation();
+  }, []);
 
   function closeModal() {
     setModalKind(null);
@@ -1615,6 +1643,7 @@ function ExploracionesRegisterPage({ sampleCategory }: { sampleCategory: SampleC
         ...row,
         raw: assigned as InteriorSample | SurfaceSample,
         voucherNumber: (assigned as InteriorSample | SurfaceSample).voucherNumber ?? row.voucherNumber,
+        voucherCode: (assigned as InteriorSample | SurfaceSample).voucherCode ?? row.voucherCode,
         priority: (assigned as InteriorSample | SurfaceSample).priority ?? row.priority
       };
       writeVoucherPrintDocument(printWindow, nextRow);
@@ -1870,14 +1899,24 @@ function ExploracionesRegisterPage({ sampleCategory }: { sampleCategory: SampleC
         </div>
       </section>
 
-      <section className={`${panelClass} exploraciones-panel p-5`}>
+      <section ref={sampleFormRef} className={`${panelClass} exploraciones-panel scroll-mt-4 p-5`}>
         <form onSubmit={onSubmitSample} className="space-y-5">
-          <div className="flex items-center gap-2">
-            <FlaskConical size={18} />
-            <h2 className="text-lg font-bold">
-              {isEditing ? "Editar muestra" : "Nueva muestra"} de {CATEGORY_LABELS[sampleCategory]} en{" "}
-              {registerType === "interior" ? "Interior Mina" : "Superficie"}
-            </h2>
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div className="flex items-center gap-2">
+              <FlaskConical size={18} />
+              <h2 className="text-lg font-bold">
+                {isEditing ? "Editar muestra" : "Nueva muestra"} de {CATEGORY_LABELS[sampleCategory]} en{" "}
+                {registerType === "interior" ? "Interior Mina" : "Superficie"}
+              </h2>
+            </div>
+            <div className="rounded-lg border border-[var(--color-border-soft)] bg-[var(--color-surface-container-high)] px-3 py-2 text-right">
+              <p className="text-[10px] font-bold uppercase tracking-wider text-[var(--color-on-surface-variant)]">
+                Fecha y hora
+              </p>
+              <p className="mt-0.5 text-sm font-semibold text-[var(--color-on-surface)]">
+                {formatDate(toIso(sampleForm.sampledAt) ?? new Date().toISOString())}
+              </p>
+            </div>
           </div>
 
           {registerType === "interior" ? (
@@ -1919,14 +1958,7 @@ function ExploracionesRegisterPage({ sampleCategory }: { sampleCategory: SampleC
             Base automática: {sampleNamePrefix || "Completa área, nivel y labor para generar la base."}
           </p>
 
-          <div className="exploraciones-main-grid grid gap-3 md:grid-cols-4">
-            <TextField
-              label="Fecha de muestreo"
-              type="datetime-local"
-              value={sampleForm.sampledAt}
-              onChange={(value) => setSampleField("sampledAt", value)}
-              disabled
-            />
+          <div className="exploraciones-main-grid grid gap-3 md:grid-cols-3">
             <TextField label="Este" value={sampleForm.east} onChange={(value) => setSampleField("east", value)} />
             <TextField label="Norte" value={sampleForm.north} onChange={(value) => setSampleField("north", value)} />
             <TextField label="Elevación" value={sampleForm.elevation} onChange={(value) => setSampleField("elevation", value)} />
@@ -2371,6 +2403,10 @@ function formatVoucherNumber(value?: number | null) {
   return typeof value === "number" && Number.isFinite(value) ? `N° ${String(value).padStart(5, "0")}` : "-";
 }
 
+function formatVoucherLabel(row: Pick<SampleTableRow, "voucherCode" | "voucherNumber">) {
+  return row.voucherCode?.trim() || formatVoucherNumber(row.voucherNumber);
+}
+
 function priorityRowClass(priority: SamplePriority) {
   const classes: Record<SamplePriority, string> = {
     URGENT: "bg-red-50/90 hover:bg-red-100/80",
@@ -2509,7 +2545,7 @@ function compactValue(value: unknown, maxLength = 26) {
 function writeVoucherPrintDocument(printWindow: Window, row: SampleTableRow) {
   const raw = row.raw as any;
   const payload = row.source === "local" ? raw.payload ?? {} : raw;
-  const voucher = formatVoucherNumber(row.voucherNumber).replace("N° ", "");
+  const voucher = formatVoucherLabel(row).replace(/^N°\s*/, "");
   const sampleId = row.code || row.name || "";
   const east = compactValue(payload.east, 12);
   const north = compactValue(payload.north, 12);
@@ -2646,26 +2682,38 @@ function SamplesTable({
   onPrintVoucher: (row: SampleTableRow) => void;
 }) {
   const [detailRow, setDetailRow] = useState<SampleTableRow | null>(null);
+  const [voucherConfirmRow, setVoucherConfirmRow] = useState<SampleTableRow | null>(null);
+  const confirmVoucherPrint = () => {
+    if (!voucherConfirmRow) return;
+    const row = voucherConfirmRow;
+    setVoucherConfirmRow(null);
+    onPrintVoucher(row);
+  };
 
   return (
     <>
       <article className={`${panelClass} exploraciones-panel overflow-hidden`}>
         <div className="border-b border-[var(--color-border-soft)] bg-[var(--color-surface-container-high)] px-5 py-3">
-          <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="flex flex-wrap items-center gap-2">
             <h2 className="flex items-center gap-2 text-sm font-bold uppercase tracking-wider text-[var(--color-on-surface-variant)]">
               <FlaskConical size={14} />
               Registros recientes
             </h2>
-            <label className="exploraciones-search relative min-w-64">
+            <label className="exploraciones-search relative ml-auto w-full sm:w-56">
               <Search size={14} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[var(--color-on-surface-variant)]" />
-              <input className={`${fieldClass} pl-9`} value={search} onChange={(event) => onSearch(event.target.value)} placeholder="Buscar por código" />
+              <input
+                className={`${fieldClass} py-2 pl-9`}
+                value={search}
+                onChange={(event) => onSearch(event.target.value)}
+                placeholder="Código o talón"
+              />
             </label>
             <select
-              className={`${fieldClass} w-auto min-w-40`}
+              className={`${fieldClass} w-full py-2 sm:w-36`}
               value={priorityFilter}
               onChange={(event) => onPriorityFilterChange(event.target.value as SamplePriority | "")}
             >
-              <option value="">Todas las prioridades</option>
+              <option value="">Prioridad</option>
               {PRIORITY_OPTIONS.map((option) => (
                 <option key={option.id} value={option.id}>
                   {option.label}
@@ -2673,17 +2721,17 @@ function SamplesTable({
               ))}
             </select>
             <select
-              className={`${fieldClass} w-auto min-w-40`}
+              className={`${fieldClass} w-full py-2 sm:w-36`}
               value={resultStatusFilter}
               onChange={(event) => onResultStatusFilterChange(event.target.value as ResultStatusFilter)}
             >
-              <option value="all">Todos los resultados</option>
-              <option value="with">Con resultados</option>
-              <option value="without">Sin resultados</option>
+              <option value="all">Resultados</option>
+              <option value="with">Con resultado</option>
+              <option value="without">Sin resultado</option>
             </select>
             <button
               type="button"
-              className={onlyMine ? primaryButton : secondaryButton}
+              className={`${onlyMine ? primaryButton : secondaryButton} px-3 py-2`}
               onClick={() => onOnlyMineChange(!onlyMine)}
             >
               Mis registros
@@ -2694,7 +2742,7 @@ function SamplesTable({
           <table className="w-full border-collapse text-left">
             <thead>
               <tr>
-                {["Código", "Nombre", "Categoría", "Talón", "Prioridad", "Ubicación", "Objetivo", "Registrado por", "Muestreo", "Resultados", "Acciones"].map((heading) => (
+                {["Nombre", "Talón", "Prioridad", "Ubicación", "Objetivo", "Registrado por", "Muestreo", "Resultados", "Acciones"].map((heading) => (
                   <th key={heading} className="px-4 py-3 text-[10px] font-bold uppercase tracking-widest text-[var(--color-on-surface-variant)]">
                     {heading}
                   </th>
@@ -2704,10 +2752,8 @@ function SamplesTable({
             <tbody className="divide-y divide-[var(--color-border-soft)]">
               {rows.map((row) => (
                 <tr key={row.id} className={`${priorityRowClass(row.priority)} transition hover:brightness-[0.98]`}>
-                  <td className="px-4 py-3 text-sm font-bold">{row.code}</td>
                   <td className="px-4 py-3 text-xs">{row.name ?? "-"}</td>
-                  <td className="px-4 py-3 text-xs font-bold">{CATEGORY_LABELS[row.category]}</td>
-                  <td className="px-4 py-3 text-xs font-bold">{formatVoucherNumber(row.voucherNumber)}</td>
+                  <td className="px-4 py-3 text-xs font-bold">{formatVoucherLabel(row)}</td>
                   <td className="px-4 py-3 text-xs">
                     <span className={priorityBadgeClass(row.priority)}>{PRIORITY_LABELS[row.priority]}</span>
                   </td>
@@ -2736,7 +2782,7 @@ function SamplesTable({
                       <button
                         type="button"
                         className={secondaryButton}
-                        onClick={() => onPrintVoucher(row)}
+                        onClick={() => setVoucherConfirmRow(row)}
                         disabled={row.source !== "remote"}
                       >
                         <Printer size={14} />
@@ -2748,7 +2794,7 @@ function SamplesTable({
               ))}
               {rows.length === 0 ? (
                 <tr>
-                  <td colSpan={11} className="px-4 py-6 text-center text-sm text-[var(--color-on-surface-variant)]">
+                  <td colSpan={9} className="px-4 py-6 text-center text-sm text-[var(--color-on-surface-variant)]">
                     No hay muestras para mostrar.
                   </td>
                 </tr>
@@ -2762,12 +2808,10 @@ function SamplesTable({
               <div className="flex items-start justify-between gap-3">
                 <div>
                   <p className="text-xs font-bold uppercase tracking-wider text-[var(--color-on-surface-variant)]">
-                    Código
+                    Nombre
                   </p>
-                  <p className="mt-1 text-sm font-bold">{row.code}</p>
-                  <p className="mt-1 text-xs text-[var(--color-on-surface-variant)]">{row.name ?? "-"}</p>
-                  <p className="mt-1 text-xs font-bold">{CATEGORY_LABELS[row.category]}</p>
-                  <p className="mt-1 text-xs font-bold">Talón {formatVoucherNumber(row.voucherNumber)}</p>
+                  <p className="mt-1 text-sm font-bold">{row.name ?? "-"}</p>
+                  <p className="mt-1 text-xs font-bold">Talón {formatVoucherLabel(row)}</p>
                 </div>
                 <p className="shrink-0 text-xs text-[var(--color-on-surface-variant)]">
                   {formatDate(row.sampledAt)}
@@ -2814,7 +2858,7 @@ function SamplesTable({
                 <button
                   type="button"
                   className={secondaryButton}
-                  onClick={() => onPrintVoucher(row)}
+                  onClick={() => setVoucherConfirmRow(row)}
                   disabled={row.source !== "remote"}
                 >
                   <Printer size={14} />
@@ -2832,6 +2876,13 @@ function SamplesTable({
       </article>
 
       {detailRow ? <SampleDetailModal row={detailRow} onClose={() => setDetailRow(null)} /> : null}
+      {voucherConfirmRow ? (
+        <ConfirmVoucherModal
+          row={voucherConfirmRow}
+          onCancel={() => setVoucherConfirmRow(null)}
+          onConfirm={confirmVoucherPrint}
+        />
+      ) : null}
     </>
   );
 }
@@ -2852,6 +2903,47 @@ function ResultStatus({ results }: { results: any[] }) {
       {hasAnyResults ? (
         <span className="text-xs text-[var(--color-on-surface-variant)]">{getResultText(results)}</span>
       ) : null}
+    </div>
+  );
+}
+
+function ConfirmVoucherModal({
+  row,
+  onCancel,
+  onConfirm
+}: {
+  row: SampleTableRow;
+  onCancel: () => void;
+  onConfirm: () => void;
+}) {
+  const willAssignVoucher = row.voucherNumber === null || row.voucherNumber === undefined;
+
+  return (
+    <div className="exploraciones-modal fixed inset-0 z-[100] flex items-center justify-center bg-black/55 p-4">
+      <section className="w-full max-w-sm rounded-2xl border border-[var(--color-border-soft)] bg-[var(--color-surface-container-low)] p-5 shadow-2xl">
+        <div className="flex items-start gap-3">
+          <span className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-[var(--color-primary)] text-[var(--color-on-primary)]">
+            <Printer size={18} />
+          </span>
+          <div>
+            <h3 className="text-lg font-bold">¿Imprimir talonario?</h3>
+            <p className="mt-1 text-sm text-[var(--color-on-surface-variant)]">
+              {willAssignVoucher
+                ? "Se asignará un número de talón a esta muestra antes de imprimir."
+                : "Esta muestra ya tiene talón asignado; se abrirá la impresión."}
+            </p>
+          </div>
+        </div>
+        <div className="mt-5 flex justify-end gap-2">
+          <button type="button" className={secondaryButton} onClick={onCancel}>
+            Cancelar
+          </button>
+          <button type="button" className={primaryButton} onClick={onConfirm}>
+            <Printer size={15} />
+            Imprimir
+          </button>
+        </div>
+      </section>
     </div>
   );
 }
@@ -2893,7 +2985,7 @@ function SampleDetailModal({ row, onClose }: { row: SampleTableRow; onClose: () 
               <DetailItem label="Tipo" value={isInterior ? "Interior Mina" : "Superficie"} />
               <DetailItem label="Categoría" value={CATEGORY_LABELS[(payload.category ?? "EXPLORATION") as SampleCategory]} />
               <DetailItem label="Nombre" value={row.name ?? "-"} />
-              <DetailItem label="Talón" value={formatVoucherNumber(row.voucherNumber)} />
+              <DetailItem label="Talón" value={formatVoucherLabel(row)} />
               <DetailItem label="Prioridad" value={PRIORITY_LABELS[row.priority]} />
               <DetailItem label="Ubicación" value={row.location} />
               <DetailItem label="Objetivo" value={row.objectiveName} />
