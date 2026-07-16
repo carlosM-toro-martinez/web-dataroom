@@ -7,11 +7,16 @@ import {
   interiorLaborSchema,
   interiorLevelSchema,
   interiorSampleSchema,
+  sampleDispatchSchema,
+  sampleResultSchema,
   surfaceAreaSchema,
   surfaceSampleSchema,
+  type CreateDispatchPayload,
+  type CreateSampleResultPayload,
   type InteriorSampleWithResultsPayload,
   type SampleCategory,
   type SamplePriority,
+  type SampleStatus,
   type SurfaceSampleWithResultsPayload
 } from "@/features/exploraciones/model/proposalSamples.schema";
 
@@ -158,6 +163,7 @@ export async function getInteriorSamples(params?: {
   interiorLaborId?: string;
   interiorObjectiveId?: string;
   category?: SampleCategory;
+  status?: SampleStatus;
   createdById?: number | string;
   priority?: SamplePriority;
   search?: string;
@@ -190,9 +196,53 @@ export async function updateInteriorSampleWithResults(
   return parseOne(response.data, (item) => interiorSampleSchema.parse(item));
 }
 
-export async function assignInteriorSampleVoucher(id: string) {
-  const response = await httpClient.post(apiEndpoints.exploraciones.interiorSampleAssignVoucherById(id));
-  return parseOne(response.data, (item) => interiorSampleSchema.parse(item));
+export async function createInteriorSampleResult(payload: CreateSampleResultPayload) {
+  const { sampleId, laboratoryId: interiorLaboratoryId, ...rest } = payload;
+  const response = await httpClient.post(apiEndpoints.exploraciones.interiorResults, {
+    interiorSampleId: sampleId,
+    interiorLaboratoryId,
+    ...rest
+  });
+  return parseOne(response.data, (item) => sampleResultSchema.parse(item));
+}
+
+export async function getInteriorDispatches(params?: {
+  interiorLaboratoryId?: string;
+  status?: "PENDING" | "COMPLETED";
+  page?: number;
+  limit?: number;
+}) {
+  const response = await httpClient.get(apiEndpoints.exploraciones.interiorDispatches, {
+    params: buildParams(params)
+  });
+  return parseList(response.data, (item) => sampleDispatchSchema.parse(item));
+}
+
+export async function createInteriorDispatch(payload: CreateDispatchPayload) {
+  const response = await httpClient.post(apiEndpoints.exploraciones.interiorDispatches, {
+    interiorLaboratoryId: payload.laboratoryId,
+    projectName: payload.projectName,
+    sentAt: payload.sentAt,
+    notes: payload.notes,
+    items: payload.items.map((item) => ({
+      interiorSampleId: item.sampleId,
+      elementIds: item.elementIds,
+      notes: item.notes
+    }))
+  });
+  return parseOne(response.data, (item) => sampleDispatchSchema.parse(item));
+}
+
+export async function updateInteriorDispatch(
+  id: string,
+  payload: { projectName?: string; sentAt?: string; notes?: string; status?: "PENDING" | "COMPLETED" }
+) {
+  const response = await httpClient.patch(apiEndpoints.exploraciones.interiorDispatchById(id), payload);
+  return parseOne(response.data, (item) => sampleDispatchSchema.parse(item));
+}
+
+export async function deleteInteriorDispatch(id: string) {
+  await httpClient.delete(apiEndpoints.exploraciones.interiorDispatchById(id));
 }
 
 export async function getSurfaceAreas(params?: { search?: string; page?: number; limit?: number }) {
@@ -243,6 +293,7 @@ export async function getSurfaceSamples(params?: {
   surfaceAreaId?: string;
   surfaceObjectiveId?: string;
   category?: SampleCategory;
+  status?: SampleStatus;
   createdById?: number | string;
   priority?: SamplePriority;
   search?: string;
@@ -281,9 +332,51 @@ export async function updateSurfaceSampleWithResults(
   return parseOne(response.data, (item) => surfaceSampleSchema.parse(item));
 }
 
-export async function assignSurfaceSampleVoucher(id: string) {
-  const response = await httpClient.post(
-    apiEndpoints.exploraciones.surfaceProposalSampleAssignVoucherById(id)
-  );
-  return parseOne(response.data, (item) => surfaceSampleSchema.parse(item));
+export async function createSurfaceSampleResult(payload: CreateSampleResultPayload) {
+  const { sampleId, laboratoryId: surfaceLaboratoryId, ...rest } = payload;
+  const response = await httpClient.post(apiEndpoints.exploraciones.surfaceProposalResults, {
+    surfaceSampleId: sampleId,
+    surfaceLaboratoryId,
+    ...rest
+  });
+  return parseOne(response.data, (item) => sampleResultSchema.parse(item));
+}
+
+export async function getSurfaceDispatches(params?: {
+  surfaceLaboratoryId?: string;
+  status?: "PENDING" | "COMPLETED";
+  page?: number;
+  limit?: number;
+}) {
+  const response = await httpClient.get(apiEndpoints.exploraciones.surfaceProposalDispatches, {
+    params: buildParams(params)
+  });
+  return parseList(response.data, (item) => sampleDispatchSchema.parse(item));
+}
+
+export async function createSurfaceDispatch(payload: CreateDispatchPayload) {
+  const response = await httpClient.post(apiEndpoints.exploraciones.surfaceProposalDispatches, {
+    surfaceLaboratoryId: payload.laboratoryId,
+    projectName: payload.projectName,
+    sentAt: payload.sentAt,
+    notes: payload.notes,
+    items: payload.items.map((item) => ({
+      surfaceSampleId: item.sampleId,
+      elementIds: item.elementIds,
+      notes: item.notes
+    }))
+  });
+  return parseOne(response.data, (item) => sampleDispatchSchema.parse(item));
+}
+
+export async function updateSurfaceDispatch(
+  id: string,
+  payload: { projectName?: string; sentAt?: string; notes?: string; status?: "PENDING" | "COMPLETED" }
+) {
+  const response = await httpClient.patch(apiEndpoints.exploraciones.surfaceProposalDispatchById(id), payload);
+  return parseOne(response.data, (item) => sampleDispatchSchema.parse(item));
+}
+
+export async function deleteSurfaceDispatch(id: string) {
+  await httpClient.delete(apiEndpoints.exploraciones.surfaceProposalDispatchById(id));
 }

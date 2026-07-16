@@ -1,4 +1,4 @@
-import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
+import { FormEvent, useEffect, useMemo, useRef, useState, type InputHTMLAttributes } from "react";
 import { Link } from "react-router-dom";
 import L from "leaflet";
 import {
@@ -15,6 +15,7 @@ import {
   RefreshCw,
   Save,
   Search,
+  Send,
   Target,
   Trash2,
   X
@@ -26,8 +27,13 @@ import { ApiError } from "@/shared/api/core/apiError";
 import { useAuth } from "@/features/auth/context/AuthContext";
 import { useToast } from "@/shared/ui/toast/ToastProvider";
 import {
-  useAssignInteriorSampleVoucherMutation,
-  useAssignSurfaceSampleVoucherMutation,
+  useCreateInteriorDispatchMutation,
+  useCreateInteriorSampleResultMutation,
+  useCreateSurfaceDispatchMutation,
+  useCreateSurfaceSampleResultMutation,
+  useDeleteInteriorDispatchMutation,
+  useDeleteSurfaceDispatchMutation,
+  useInteriorDispatchesQuery,
   useInteriorAreasQuery,
   useInteriorLaborsQuery,
   useInteriorLaboratoriesQuery,
@@ -40,6 +46,7 @@ import {
   useQueueRemoteProposalSampleEditMutation,
   useQueueProposalSampleMutation,
   useSharedElementsQuery,
+  useSurfaceDispatchesQuery,
   useSurfaceAreasQuery,
   useSurfaceLaboratoriesQuery,
   useSurfaceObjectivesQuery,
@@ -55,8 +62,10 @@ import type {
   InteriorLabor,
   InteriorSample,
   LaboratorySlot,
+  SampleDispatch,
   SampleCategory,
   SamplePriority,
+  SampleStatus,
   SurfaceSample
 } from "@/features/exploraciones/model/proposalSamples.schema";
 import type { OfflineProposalCatalog, OfflineProposalSample } from "@/features/exploraciones/db/exploracionesDb";
@@ -82,6 +91,7 @@ const geoMarkerIcon = L.divIcon({
 
 type RegisterType = "interior" | "surface";
 type ResultStatusFilter = "all" | "with" | "without";
+type SampleLifecycleFilter = "all" | SampleStatus;
 type ModalKind =
   | "element"
   | "interior-area"
@@ -110,7 +120,7 @@ interface SampleForm {
   interiorObjectiveId: string;
   surfaceAreaId: string;
   surfaceObjectiveId: string;
-  priority: SamplePriority;
+  priority: SamplePriority | "";
   sampleNameSuffix: string;
   sampledAt: string;
   east: string;
@@ -119,6 +129,24 @@ interface SampleForm {
   labL1: string;
   labL2: string;
   labL3: string;
+}
+
+interface DispatchForm {
+  laboratoryId: string;
+  projectName: string;
+  sentAt: string;
+  notes: string;
+}
+
+interface DispatchDraftItem {
+  sampleId: string;
+  elementIds: string[];
+  notes: string;
+}
+
+interface DispatchResultTarget {
+  dispatch: SampleDispatch;
+  item: NonNullable<SampleDispatch["items"]>[number];
 }
 
 interface CatalogForm {
@@ -143,6 +171,7 @@ type SampleTableRow = {
   voucherNumber?: number | null;
   voucherCode?: string | null;
   category: SampleCategory;
+  status: SampleStatus;
   priority: SamplePriority;
   sampledAt?: string | null;
   objectiveName: string;
@@ -184,6 +213,24 @@ const PRIORITY_LABELS: Record<SamplePriority, string> = {
   HIGH: "Alta",
   NORMAL: "Normal",
   LOW: "Baja"
+};
+
+const SAMPLE_STATUS_LABELS: Record<SampleStatus, string> = {
+  REGISTERED: "Registrada",
+  DISPATCHED: "Despachada",
+  COMPLETED: "Completada"
+};
+
+const SAMPLE_STATUS_OPTIONS: Array<{ id: SampleLifecycleFilter; label: string }> = [
+  { id: "all", label: "Todos los estados" },
+  { id: "REGISTERED", label: "Registradas" },
+  { id: "DISPATCHED", label: "Despachadas" },
+  { id: "COMPLETED", label: "Completadas" }
+];
+
+const DISPATCH_STATUS_LABELS: Record<"PENDING" | "COMPLETED", string> = {
+  PENDING: "Pendiente",
+  COMPLETED: "Completado"
 };
 
 const PRIORITY_WEIGHT: Record<SamplePriority, number> = {
@@ -275,7 +322,7 @@ function initialSampleForm(): SampleForm {
     interiorObjectiveId: "",
     surfaceAreaId: "",
     surfaceObjectiveId: "",
-    priority: "NORMAL",
+    priority: "",
     sampleNameSuffix: "",
     sampledAt: toLocalDatetimeInput(),
     east: "",
@@ -284,6 +331,15 @@ function initialSampleForm(): SampleForm {
     labL1: "",
     labL2: "",
     labL3: ""
+  };
+}
+
+function initialDispatchForm(): DispatchForm {
+  return {
+    laboratoryId: "",
+    projectName: "",
+    sentAt: toLocalDatetimeInput(),
+    notes: ""
   };
 }
 
@@ -453,6 +509,15 @@ function stringifyDetail(value: unknown) {
   return JSON.stringify(value, null, 2);
 }
 
+function findCatalogByText(items: CatalogItem[], text: string) {
+  const normalized = normalizeCatalogText(text);
+  return items.find(
+    (item) =>
+      normalizeCatalogText(item.name) === normalized ||
+      normalizeCatalogText(item.abbreviation) === normalized
+  );
+}
+
 function getRowSyncError(row: SampleTableRow) {
   if (row.source !== "local") return undefined;
   return (row.raw as OfflineProposalSample).syncError;
@@ -556,7 +621,11 @@ function ExploracionesRegisterPage({ sampleCategory }: { sampleCategory: SampleC
   const [search, setSearch] = useState("");
   const [priorityFilter, setPriorityFilter] = useState<SamplePriority | "">("");
   const [resultStatusFilter, setResultStatusFilter] = useState<ResultStatusFilter>("all");
+  const [sampleStatusFilter, setSampleStatusFilter] = useState<SampleLifecycleFilter>("all");
   const [onlyMine, setOnlyMine] = useState(false);
+  const [dispatchForm, setDispatchForm] = useState<DispatchForm>(() => initialDispatchForm());
+  const [dispatchItems, setDispatchItems] = useState<DispatchDraftItem[]>([]);
+  const [dispatchResultTarget, setDispatchResultTarget] = useState<DispatchResultTarget | null>(null);
   const [defaultsSeeded, setDefaultsSeeded] = useState(false);
   const [editTarget, setEditTarget] = useState<EditTarget>(null);
   const [geoPoint, setGeoPoint] = useState<GeoPoint | null>(null);
@@ -579,7 +648,13 @@ function ExploracionesRegisterPage({ sampleCategory }: { sampleCategory: SampleC
     category: sampleCategory,
     createdById: onlyMine ? user?.id : undefined,
     priority: priorityFilter || undefined,
+    status: sampleStatusFilter === "all" ? undefined : sampleStatusFilter,
     search: search.trim() && !/^\d+$/.test(search.trim()) ? search : undefined
+  });
+  const registeredInteriorSamples = useInteriorSamplesQuery({
+    interiorLaborId: sampleForm.interiorLaborId || undefined,
+    category: sampleCategory,
+    status: "REGISTERED"
   });
   const remoteSurfaceAreas = useSurfaceAreasQuery();
   const remoteSurfaceObjectives = useSurfaceObjectivesQuery();
@@ -589,7 +664,19 @@ function ExploracionesRegisterPage({ sampleCategory }: { sampleCategory: SampleC
     category: sampleCategory,
     createdById: onlyMine ? user?.id : undefined,
     priority: priorityFilter || undefined,
+    status: sampleStatusFilter === "all" ? undefined : sampleStatusFilter,
     search: search.trim() && !/^\d+$/.test(search.trim()) ? search : undefined
+  });
+  const registeredSurfaceSamples = useSurfaceSamplesQuery({
+    surfaceAreaId: sampleForm.surfaceAreaId || undefined,
+    category: sampleCategory,
+    status: "REGISTERED"
+  });
+  const remoteInteriorDispatches = useInteriorDispatchesQuery({
+    interiorLaboratoryId: registerType === "interior" ? dispatchForm.laboratoryId || undefined : undefined
+  });
+  const remoteSurfaceDispatches = useSurfaceDispatchesQuery({
+    surfaceLaboratoryId: registerType === "surface" ? dispatchForm.laboratoryId || undefined : undefined
   });
   const offlineCatalogs = useOfflineProposalCatalogsQuery();
   const offlineSamples = useOfflineProposalSamplesQuery();
@@ -599,8 +686,12 @@ function ExploracionesRegisterPage({ sampleCategory }: { sampleCategory: SampleC
   const queueRemoteEdit = useQueueRemoteProposalSampleEditMutation();
   const updateInteriorSample = useUpdateInteriorSampleWithResultsMutation();
   const updateSurfaceSample = useUpdateSurfaceSampleWithResultsMutation();
-  const assignInteriorVoucher = useAssignInteriorSampleVoucherMutation();
-  const assignSurfaceVoucher = useAssignSurfaceSampleVoucherMutation();
+  const createInteriorDispatch = useCreateInteriorDispatchMutation();
+  const createSurfaceDispatch = useCreateSurfaceDispatchMutation();
+  const deleteInteriorDispatch = useDeleteInteriorDispatchMutation();
+  const deleteSurfaceDispatch = useDeleteSurfaceDispatchMutation();
+  const createInteriorResult = useCreateInteriorSampleResultMutation();
+  const createSurfaceResult = useCreateSurfaceSampleResultMutation();
   const syncMutation = useSyncProposalSamplesMutation();
 
   const localCatalogs = offlineCatalogs.data ?? [];
@@ -913,7 +1004,6 @@ function ExploracionesRegisterPage({ sampleCategory }: { sampleCategory: SampleC
   );
   const selectedSurfaceAreaOption = surfaceAreas.find((item) => item.id === sampleForm.surfaceAreaId);
 
-  const activeObjectives = registerType === "interior" ? interiorObjectives : surfaceObjectives;
   const activeLaboratories = registerType === "interior" ? interiorLaboratories : surfaceLaboratories;
   const localVisibleSamples = localSamples.filter(
     (item) =>
@@ -945,6 +1035,7 @@ function ExploracionesRegisterPage({ sampleCategory }: { sampleCategory: SampleC
       voucherNumber: (item.payload as any).voucherNumber ?? null,
       voucherCode: (item.payload as any).voucherCode ?? null,
       category: (((item.payload as any).category ?? "EXPLORATION") as SampleCategory),
+      status: ((item.payload as any).status ?? "REGISTERED") as SampleStatus,
       priority: ((item.payload as any).priority ?? "NORMAL") as SamplePriority,
       sampledAt: item.payload.sampledAt,
       objectiveName: "-",
@@ -969,6 +1060,7 @@ function ExploracionesRegisterPage({ sampleCategory }: { sampleCategory: SampleC
         voucherNumber: sample.voucherNumber ?? null,
         voucherCode: sample.voucherCode ?? null,
         category: sample.category ?? "EXPLORATION",
+        status: sample.status ?? "REGISTERED",
         priority: sample.priority ?? "NORMAL",
         sampledAt: sample.sampledAt,
         objectiveName: (isInterior ? interiorSample.objective?.name : surfaceSample.objective?.name) ?? "-",
@@ -984,6 +1076,7 @@ function ExploracionesRegisterPage({ sampleCategory }: { sampleCategory: SampleC
     const query = search.trim().toLowerCase();
     return rows
       .filter((row) => (!priorityFilter ? true : row.priority === priorityFilter))
+      .filter((row) => (sampleStatusFilter === "all" ? true : row.status === sampleStatusFilter))
       .filter((row) => {
         if (resultStatusFilter === "all") return true;
         const rowHasResults = hasResults(row.results);
@@ -1017,6 +1110,7 @@ function ExploracionesRegisterPage({ sampleCategory }: { sampleCategory: SampleC
     registerType,
     remoteVisibleSamples,
     resultStatusFilter,
+    sampleStatusFilter,
     sampleCategory,
     search,
     user?.nombre
@@ -1200,6 +1294,12 @@ function ExploracionesRegisterPage({ sampleCategory }: { sampleCategory: SampleC
   }
 
   function startEdit(row: SampleTableRow) {
+    const objectiveTextFromId = (module: RegisterType, id?: string) => {
+      const objectives = module === "interior" ? interiorObjectives : surfaceObjectives;
+      const objective = objectives.find((item) => item.id === id);
+      return objective?.name ?? id ?? "";
+    };
+
     if (row.source === "local") {
       const sample = row.raw as OfflineProposalSample;
       setRegisterType(sample.module);
@@ -1215,7 +1315,7 @@ function ExploracionesRegisterPage({ sampleCategory }: { sampleCategory: SampleC
           interiorAreaId: areaId ?? "",
           interiorLevelId: levelId ?? "",
           interiorLaborId: payload.interiorLaborId ?? "",
-          interiorObjectiveId: payload.interiorObjectiveId ?? "",
+          interiorObjectiveId: objectiveTextFromId("interior", payload.interiorObjectiveId),
           priority: payload.priority ?? "NORMAL",
           sampleNameSuffix: extractEditableSuffix(payload.name, prefix),
           sampledAt: toLocalDatetimeInput(payload.sampledAt ? new Date(payload.sampledAt) : new Date()),
@@ -1232,7 +1332,7 @@ function ExploracionesRegisterPage({ sampleCategory }: { sampleCategory: SampleC
         setSampleForm({
           ...initialSampleForm(),
           surfaceAreaId: payload.surfaceAreaId ?? "",
-          surfaceObjectiveId: payload.surfaceObjectiveId ?? "",
+          surfaceObjectiveId: objectiveTextFromId("surface", payload.surfaceObjectiveId),
           priority: payload.priority ?? "NORMAL",
           sampleNameSuffix: extractEditableSuffix(payload.name, prefix),
           sampledAt: toLocalDatetimeInput(payload.sampledAt ? new Date(payload.sampledAt) : new Date()),
@@ -1262,7 +1362,7 @@ function ExploracionesRegisterPage({ sampleCategory }: { sampleCategory: SampleC
         interiorAreaId: sample.labor?.level?.area?.id ?? "",
         interiorLevelId: sample.labor?.level?.id ?? "",
         interiorLaborId: sample.labor?.id ?? "",
-        interiorObjectiveId: sample.objective?.id ?? "",
+        interiorObjectiveId: sample.objective?.name ?? "",
         priority: sample.priority ?? "NORMAL",
         sampleNameSuffix: extractEditableSuffix(sample.name, prefix),
         sampledAt: toLocalDatetimeInput(sample.sampledAt ? new Date(sample.sampledAt) : new Date()),
@@ -1278,7 +1378,7 @@ function ExploracionesRegisterPage({ sampleCategory }: { sampleCategory: SampleC
       setSampleForm({
         ...initialSampleForm(),
         surfaceAreaId: sample.area?.id ?? "",
-        surfaceObjectiveId: sample.objective?.id ?? "",
+        surfaceObjectiveId: sample.objective?.name ?? "",
         priority: sample.priority ?? "NORMAL",
         sampleNameSuffix: extractEditableSuffix(sample.name, prefix),
         sampledAt: toLocalDatetimeInput(sample.sampledAt ? new Date(sample.sampledAt) : new Date()),
@@ -1446,9 +1546,9 @@ function ExploracionesRegisterPage({ sampleCategory }: { sampleCategory: SampleC
       !sampleForm.interiorAreaId ||
       !sampleForm.interiorLevelId ||
       !sampleForm.interiorLaborId ||
-      !sampleForm.interiorObjectiveId
+      !sampleForm.interiorObjectiveId.trim()
     ) {
-      showError("Selecciona area, nivel, labor y objetivo para Interior Mina.");
+      showError("Completa area, nivel, labor y objetivo para Interior Mina.");
       return false;
     }
 
@@ -1473,8 +1573,8 @@ function ExploracionesRegisterPage({ sampleCategory }: { sampleCategory: SampleC
   }
 
   function validateSurfaceLocationSelection() {
-    if (!sampleForm.surfaceAreaId || !sampleForm.surfaceObjectiveId) {
-      showError("Selecciona area y objetivo para Superficie.");
+    if (!sampleForm.surfaceAreaId || !sampleForm.surfaceObjectiveId.trim()) {
+      showError("Completa area y objetivo para Superficie.");
       return false;
     }
 
@@ -1486,10 +1586,34 @@ function ExploracionesRegisterPage({ sampleCategory }: { sampleCategory: SampleC
     return true;
   }
 
+  async function resolveObjectiveId(module: RegisterType, objectiveText: string) {
+    const name = objectiveText.trim().toUpperCase();
+    if (!name) throw new Error("El objetivo es obligatorio.");
+
+    const objectives = module === "interior" ? interiorObjectives : surfaceObjectives;
+    const existing = findCatalogByText(objectives, name);
+    if (existing) return existing.id;
+
+    const localId = `${module}-objective-${newId()}`;
+    await queueCatalog.mutateAsync({
+      module,
+      entity: "objective",
+      payload: { name },
+      catalog: {
+        localId,
+        module,
+        entity: "objective",
+        name
+      }
+    });
+    return localId;
+  }
+
   async function onSubmitSample(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     try {
-      if (!PRIORITY_VALUES.has(sampleForm.priority)) {
+      const priority = sampleForm.priority || "NORMAL";
+      if (!PRIORITY_VALUES.has(priority)) {
         showError("Selecciona una prioridad valida.");
         return;
       }
@@ -1502,7 +1626,7 @@ function ExploracionesRegisterPage({ sampleCategory }: { sampleCategory: SampleC
       const common = {
         name: normalizedSampleName,
         category: sampleCategory,
-        priority: sampleForm.priority,
+        priority,
         east: toNumber(sampleForm.east, "Este"),
         north: toNumber(sampleForm.north, "Norte"),
         elevation: toNumber(sampleForm.elevation, "Elevacion"),
@@ -1523,18 +1647,20 @@ function ExploracionesRegisterPage({ sampleCategory }: { sampleCategory: SampleC
       if (registerType === "interior") {
         if (!validateInteriorLocationSelection()) return;
         const labAssignments = buildInteriorLabAssignmentsPayload();
+        const interiorObjectiveId = await resolveObjectiveId("interior", sampleForm.interiorObjectiveId);
         payload = {
           ...common,
           interiorLaborId: sampleForm.interiorLaborId,
-          interiorObjectiveId: sampleForm.interiorObjectiveId,
+          interiorObjectiveId,
           labAssignments
         };
       } else {
         if (!validateSurfaceLocationSelection()) return;
+        const surfaceObjectiveId = await resolveObjectiveId("surface", sampleForm.surfaceObjectiveId);
         payload = {
           ...common,
           surfaceAreaId: sampleForm.surfaceAreaId,
-          surfaceObjectiveId: sampleForm.surfaceObjectiveId,
+          surfaceObjectiveId,
           labAssignments: buildSurfaceLabAssignmentsPayload()
         };
       }
@@ -1621,7 +1747,6 @@ function ExploracionesRegisterPage({ sampleCategory }: { sampleCategory: SampleC
       return;
     }
 
-    const isInterior = registerType === "interior";
     const printWindow = window.open("", "_blank", "width=1280,height=560");
     if (!printWindow) {
       showError("El navegador bloqueó la ventana de impresión.");
@@ -1630,27 +1755,141 @@ function ExploracionesRegisterPage({ sampleCategory }: { sampleCategory: SampleC
 
     printWindow.document.write("<p style=\"font-family:Arial,sans-serif;padding:24px\">Preparando talón...</p>");
     printWindow.document.close();
+    writeVoucherPrintDocument(printWindow, row);
+  }
 
+  function setDispatchField(field: keyof DispatchForm, value: string) {
+    setDispatchForm((current) => ({ ...current, [field]: value }));
+  }
+
+  function toggleDispatchSample(sampleId: string) {
+    setDispatchItems((current) =>
+      current.some((item) => item.sampleId === sampleId)
+        ? current.filter((item) => item.sampleId !== sampleId)
+        : [...current, { sampleId, elementIds: [], notes: "" }]
+    );
+  }
+
+  function toggleDispatchElement(sampleId: string, elementId: string) {
+    setDispatchItems((current) =>
+      current.map((item) => {
+        if (item.sampleId !== sampleId) return item;
+        const hasElement = item.elementIds.includes(elementId);
+        return {
+          ...item,
+          elementIds: hasElement
+            ? item.elementIds.filter((id) => id !== elementId)
+            : [...item.elementIds, elementId]
+        };
+      })
+    );
+  }
+
+  function setDispatchItemNotes(sampleId: string, notes: string) {
+    setDispatchItems((current) =>
+      current.map((item) => (item.sampleId === sampleId ? { ...item, notes } : item))
+    );
+  }
+
+  async function submitDispatch(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
     try {
-      const assigned =
-        row.voucherNumber !== null && row.voucherNumber !== undefined
-          ? row.raw
-          : isInterior
-            ? await assignInteriorVoucher.mutateAsync(row.id)
-            : await assignSurfaceVoucher.mutateAsync(row.id);
-
-      const nextRow: SampleTableRow = {
-        ...row,
-        raw: assigned as InteriorSample | SurfaceSample,
-        voucherNumber: (assigned as InteriorSample | SurfaceSample).voucherNumber ?? row.voucherNumber,
-        voucherCode: (assigned as InteriorSample | SurfaceSample).voucherCode ?? row.voucherCode,
-        priority: (assigned as InteriorSample | SurfaceSample).priority ?? row.priority
+      if (!dispatchForm.laboratoryId) {
+        showError("Selecciona el laboratorio del lote.");
+        return;
+      }
+      if (dispatchItems.length === 0) {
+        showError("Selecciona al menos una muestra para el lote.");
+        return;
+      }
+      const emptyElements = dispatchItems.find((item) => item.elementIds.length === 0);
+      if (emptyElements) {
+        showError("Cada muestra del lote debe tener al menos un elemento solicitado.");
+        return;
+      }
+      const sentAt = toIso(dispatchForm.sentAt) ?? new Date().toISOString();
+      const payload = {
+        laboratoryId: dispatchForm.laboratoryId,
+        projectName: dispatchForm.projectName.trim() || undefined,
+        sentAt,
+        notes: dispatchForm.notes.trim() || undefined,
+        items: dispatchItems.map((item) => ({
+          sampleId: item.sampleId,
+          elementIds: item.elementIds,
+          notes: item.notes.trim() || undefined
+        }))
       };
-      writeVoucherPrintDocument(printWindow, nextRow);
+
+      if (registerType === "interior") {
+        await createInteriorDispatch.mutateAsync(payload);
+      } else {
+        await createSurfaceDispatch.mutateAsync(payload);
+      }
+      showSuccess("Lote enviado al laboratorio. Las muestras pasan a despachadas.");
+      setDispatchForm(initialDispatchForm());
+      setDispatchItems([]);
+      setSampleStatusFilter("DISPATCHED");
     } catch (error) {
-      printWindow.close();
-      showError(error instanceof Error ? error.message : "No se pudo asignar el número de talón.");
+      showError(error instanceof Error ? error.message : "No se pudo crear el lote.");
     }
+  }
+
+  async function deleteDispatch(dispatch: SampleDispatch) {
+    try {
+      if (dispatch.status === "COMPLETED") {
+        showError("No se puede eliminar un lote completado.");
+        return;
+      }
+      if (registerType === "interior") {
+        await deleteInteriorDispatch.mutateAsync(dispatch.id);
+      } else {
+        await deleteSurfaceDispatch.mutateAsync(dispatch.id);
+      }
+      showSuccess("Lote eliminado. El servidor ajustó el estado de las muestras según sus resultados.");
+    } catch (error) {
+      showError(error instanceof Error ? error.message : "No se pudo eliminar el lote.");
+    }
+  }
+
+  async function submitDispatchResults(input: {
+    sampleId: string;
+    laboratoryId?: string;
+    results: Array<{ elementId: string; value: number; unit?: string; qualifier?: string; comments?: string }>;
+  }) {
+    try {
+      if (input.results.length === 0) {
+        showError("Registra al menos un resultado.");
+        return;
+      }
+      for (const result of input.results) {
+        const payload = {
+          sampleId: input.sampleId,
+          laboratoryId: input.laboratoryId,
+          ...result
+        };
+        if (registerType === "interior") {
+          await createInteriorResult.mutateAsync(payload);
+        } else {
+          await createSurfaceResult.mutateAsync(payload);
+        }
+      }
+      showSuccess("Resultados registrados. El backend actualizará muestra, ítem y lote automáticamente.");
+      setDispatchResultTarget(null);
+      setSampleStatusFilter("COMPLETED");
+    } catch (error) {
+      showError(error instanceof Error ? error.message : "No se pudieron registrar los resultados.");
+    }
+  }
+
+  function printDispatchRemission(dispatch: SampleDispatch) {
+    const printWindow = window.open("", "_blank", "width=920,height=1100");
+    if (!printWindow) {
+      showError("El navegador bloqueó la ventana de impresión.");
+      return;
+    }
+    printWindow.document.write("<p style=\"font-family:Arial,sans-serif;padding:24px\">Preparando nota de remisión...</p>");
+    printWindow.document.close();
+    writeDispatchRemissionDocument(printWindow, dispatch);
   }
 
   async function onSubmitCatalog(event: FormEvent<HTMLFormElement>) {
@@ -1775,7 +2014,6 @@ function ExploracionesRegisterPage({ sampleCategory }: { sampleCategory: SampleC
   const areaOptions = registerType === "interior" ? labelOptions(interiorAreas) : labelOptions(surfaceAreas);
   const levelOptions = labelOptions(interiorLevels);
   const laborOptions = labelOptions(interiorLabors);
-  const objectiveOptions = labelOptions(activeObjectives);
   const laboratoryOptions = labelOptions(activeLaboratories);
   const selectedInteriorLabGroups = ([
     ["L1", sampleForm.labL1],
@@ -1789,6 +2027,14 @@ function ExploracionesRegisterPage({ sampleCategory }: { sampleCategory: SampleC
     });
   const isEditing = Boolean(editTarget);
   const isEditingRemote = editTarget?.source === "remote";
+  const registeredSamplesForDispatch =
+    registerType === "interior"
+      ? registeredInteriorSamples.data ?? []
+      : registeredSurfaceSamples.data ?? [];
+  const activeDispatches =
+    registerType === "interior"
+      ? remoteInteriorDispatches.data ?? []
+      : remoteSurfaceDispatches.data ?? [];
   const isSaving =
     queueSample.isPending ||
     updateQueuedSample.isPending ||
@@ -1796,6 +2042,13 @@ function ExploracionesRegisterPage({ sampleCategory }: { sampleCategory: SampleC
     updateInteriorSample.isPending ||
     updateSurfaceSample.isPending ||
     syncMutation.isPending;
+  const isDispatchSaving =
+    createInteriorDispatch.isPending ||
+    createSurfaceDispatch.isPending ||
+    deleteInteriorDispatch.isPending ||
+    deleteSurfaceDispatch.isPending ||
+    createInteriorResult.isPending ||
+    createSurfaceResult.isPending;
 
   return (
     <div className={pageShell}>
@@ -1924,12 +2177,12 @@ function ExploracionesRegisterPage({ sampleCategory }: { sampleCategory: SampleC
               <FormSelect label="Área" value={sampleForm.interiorAreaId} options={areaOptions} onChange={(value) => setSampleField("interiorAreaId", value)} disabled={isEditingRemote} />
               <FormSelect label="Nivel" value={sampleForm.interiorLevelId} options={levelOptions} onChange={(value) => setSampleField("interiorLevelId", value)} disabled={!sampleForm.interiorAreaId || isEditingRemote} />
               <FormSelect label="Labor" value={sampleForm.interiorLaborId} options={laborOptions} onChange={(value) => setSampleField("interiorLaborId", value)} disabled={!sampleForm.interiorLevelId || isEditingRemote} />
-              <FormSelect label="Objetivo" value={sampleForm.interiorObjectiveId} options={objectiveOptions} onChange={(value) => setSampleField("interiorObjectiveId", value)} />
+              <TextField label="Objetivo" value={sampleForm.interiorObjectiveId} onChange={(value) => setSampleField("interiorObjectiveId", value.toUpperCase())} placeholder="Escribe el objetivo" />
             </div>
           ) : (
             <div className="exploraciones-main-grid grid gap-3 md:grid-cols-2">
               <FormSelect label="Área" value={sampleForm.surfaceAreaId} options={areaOptions} onChange={(value) => setSampleField("surfaceAreaId", value)} disabled={isEditingRemote} />
-              <FormSelect label="Objetivo" value={sampleForm.surfaceObjectiveId} options={objectiveOptions} onChange={(value) => setSampleField("surfaceObjectiveId", value)} />
+              <TextField label="Objetivo" value={sampleForm.surfaceObjectiveId} onChange={(value) => setSampleField("surfaceObjectiveId", value.toUpperCase())} placeholder="Escribe el objetivo" />
             </div>
           )}
 
@@ -1950,8 +2203,8 @@ function ExploracionesRegisterPage({ sampleCategory }: { sampleCategory: SampleC
             <FormSelect
               label="Prioridad"
               value={sampleForm.priority}
-              options={PRIORITY_OPTIONS}
-              onChange={(value) => setSampleField("priority", value as SamplePriority)}
+              options={[{ id: "", label: "Sin prioridad" }, ...PRIORITY_OPTIONS]}
+              onChange={(value) => setSampleField("priority", value as SamplePriority | "")}
             />
           </div>
           <p className="text-xs text-[var(--color-on-surface-variant)]">
@@ -2095,15 +2348,36 @@ function ExploracionesRegisterPage({ sampleCategory }: { sampleCategory: SampleC
         </form>
       </section>
 
+      <DispatchPanel
+        registerType={registerType}
+        form={dispatchForm}
+        items={dispatchItems}
+        samples={registeredSamplesForDispatch}
+        elements={elements}
+        laboratories={activeLaboratories}
+        dispatches={activeDispatches}
+        isSaving={isDispatchSaving}
+        onFormChange={setDispatchField}
+        onToggleSample={toggleDispatchSample}
+        onToggleElement={toggleDispatchElement}
+        onItemNotesChange={setDispatchItemNotes}
+        onSubmit={submitDispatch}
+        onDeleteDispatch={deleteDispatch}
+        onRegisterResults={(dispatch, item) => setDispatchResultTarget({ dispatch, item })}
+        onPrintDispatch={printDispatchRemission}
+      />
+
       <SamplesTable
         rows={sampleRows}
         search={search}
         priorityFilter={priorityFilter}
         resultStatusFilter={resultStatusFilter}
+        sampleStatusFilter={sampleStatusFilter}
         onlyMine={onlyMine}
         onSearch={setSearch}
         onPriorityFilterChange={setPriorityFilter}
         onResultStatusFilterChange={setResultStatusFilter}
+        onSampleStatusFilterChange={setSampleStatusFilter}
         onOnlyMineChange={setOnlyMine}
         onEdit={startEdit}
         onPrintVoucher={handlePrintVoucher}
@@ -2118,6 +2392,19 @@ function ExploracionesRegisterPage({ sampleCategory }: { sampleCategory: SampleC
           onChange={setCatalogField}
           onClose={closeModal}
           onSubmit={onSubmitCatalog}
+        />
+      ) : null}
+      {dispatchResultTarget ? (
+        <DispatchResultsModal
+          target={dispatchResultTarget}
+          registerType={registerType}
+          laboratoryId={
+            registerType === "interior"
+              ? dispatchResultTarget.dispatch.interiorLaboratoryId ?? undefined
+              : dispatchResultTarget.dispatch.surfaceLaboratoryId ?? undefined
+          }
+          onClose={() => setDispatchResultTarget(null)}
+          onSubmit={submitDispatchResults}
         />
       ) : null}
     </div>
@@ -2202,7 +2489,8 @@ function TextField({
   onChange,
   type = "text",
   disabled = false,
-  placeholder
+  placeholder,
+  inputMode
 }: {
   label: string;
   value: string;
@@ -2210,13 +2498,14 @@ function TextField({
   type?: string;
   disabled?: boolean;
   placeholder?: string;
+  inputMode?: InputHTMLAttributes<HTMLInputElement>["inputMode"];
 }) {
   return (
     <div>
       <FieldLabel>{label}</FieldLabel>
       <input
         type={type}
-        inputMode={type === "text" ? "decimal" : undefined}
+        inputMode={inputMode}
         value={value}
         onChange={(event) => onChange(event.target.value)}
         disabled={disabled}
@@ -2403,28 +2692,30 @@ function formatVoucherNumber(value?: number | null) {
   return typeof value === "number" && Number.isFinite(value) ? `N° ${String(value).padStart(5, "0")}` : "-";
 }
 
-function formatVoucherLabel(row: Pick<SampleTableRow, "voucherCode" | "voucherNumber">) {
-  return row.voucherCode?.trim() || formatVoucherNumber(row.voucherNumber);
+function formatVoucherLabel(row: Pick<SampleTableRow, "code" | "voucherCode" | "voucherNumber">) {
+  return row.code?.trim() || row.voucherCode?.trim() || formatVoucherNumber(row.voucherNumber);
+}
+
+function sampleStatusBadgeClass(status: SampleStatus) {
+  const classes: Record<SampleStatus, string> = {
+    REGISTERED:
+      "inline-flex rounded-full bg-sky-600 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider text-white",
+    DISPATCHED:
+      "inline-flex rounded-full bg-amber-500 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider text-white",
+    COMPLETED:
+      "inline-flex rounded-full bg-emerald-600 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider text-white"
+  };
+  return classes[status];
 }
 
 function priorityRowClass(priority: SamplePriority) {
-  const classes: Record<SamplePriority, string> = {
-    URGENT: "bg-red-50/90 hover:bg-red-100/80",
-    HIGH: "bg-amber-50/90 hover:bg-amber-100/80",
-    NORMAL: "bg-emerald-50/70 hover:bg-emerald-100/70",
-    LOW: "bg-sky-50/70 hover:bg-sky-100/70"
-  };
-  return classes[priority];
+  void priority;
+  return "bg-[var(--color-surface-container-low)] text-[var(--color-on-surface)] hover:bg-[var(--color-surface-container)]";
 }
 
 function priorityMobileClass(priority: SamplePriority) {
-  const classes: Record<SamplePriority, string> = {
-    URGENT: "bg-red-50/90",
-    HIGH: "bg-amber-50/90",
-    NORMAL: "bg-emerald-50/70",
-    LOW: "bg-sky-50/70"
-  };
-  return classes[priority];
+  void priority;
+  return "bg-[var(--color-surface-container-low)] text-[var(--color-on-surface)]";
 }
 
 function priorityBadgeClass(priority: SamplePriority) {
@@ -2656,15 +2947,199 @@ function writeVoucherPrintDocument(printWindow: Window, row: SampleTableRow) {
   printWindow.document.close();
 }
 
+function formatRemissionDate(value?: string | null) {
+  if (!value) return "__ / __ / ____";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "__ / __ / ____";
+  const pad = (part: number) => String(part).padStart(2, "0");
+  return `${pad(date.getDate())} / ${pad(date.getMonth() + 1)} / ${date.getFullYear()}`;
+}
+
+function dispatchItemSampleCode(item: NonNullable<SampleDispatch["items"]>[number]) {
+  return item.sample?.code ?? item.interiorSampleId ?? item.surfaceSampleId ?? "-";
+}
+
+function dispatchItemSector(item: NonNullable<SampleDispatch["items"]>[number]) {
+  const sample = item.sample as any;
+  const candidates = [
+    sample?.sector,
+    sample?.labor?.level?.name,
+    sample?.labor?.level?.abbreviation,
+    sample?.area?.name,
+    sample?.area?.abbreviation
+  ];
+  const explicit = candidates.find((value) => typeof value === "string" && value.trim());
+  if (explicit) return String(explicit).trim().toUpperCase();
+
+  const code = dispatchItemSampleCode(item);
+  const parts = code.split(/[\/-]/).map((part) => part.trim()).filter(Boolean);
+  if (parts.length >= 2) return parts[parts.length - 2].toUpperCase();
+  return "";
+}
+
+function dispatchItemName(item: NonNullable<SampleDispatch["items"]>[number]) {
+  return item.sample?.name ?? dispatchItemSampleCode(item);
+}
+
+function dispatchItemAssays(item: NonNullable<SampleDispatch["items"]>[number]) {
+  return (item.requestedElements ?? [])
+    .map((requested) => requested.element?.symbol ?? requested.element?.name ?? requested.elementId)
+    .filter(Boolean)
+    .join("-");
+}
+
+function writeDispatchRemissionDocument(printWindow: Window, dispatch: SampleDispatch) {
+  const projectName = (dispatch.projectName || "LA LIPEÑA").toUpperCase();
+  const laboratory = dispatch.laboratory?.name ?? "________________";
+  const rows = dispatch.items.length > 0 ? dispatch.items : [];
+  const tableRows = rows
+    .map((item, index) => {
+      const assays = dispatchItemAssays(item);
+      return `
+        <tr>
+          <td class="number-cell">${index + 1}</td>
+          <td><mark>${escapeHtml(dispatchItemSampleCode(item))}</mark></td>
+          <td><mark>${escapeHtml(dispatchItemSector(item))}</mark></td>
+          <td><mark>${escapeHtml(dispatchItemName(item))}</mark></td>
+          <td class="assays"><mark>${escapeHtml(assays)}</mark></td>
+        </tr>`;
+    })
+    .join("");
+
+  const emptyRows = Array.from({ length: Math.max(0, 8 - rows.length) })
+    .map(
+      (_, index) => `
+        <tr>
+          <td class="number-cell">${rows.length + index + 1}</td>
+          <td></td>
+          <td></td>
+          <td></td>
+          <td></td>
+        </tr>`
+    )
+    .join("");
+
+  const html = `<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>Nota de remisión ${escapeHtml(projectName)}</title>
+  <style>
+    @page { size: letter portrait; margin: 10mm 13mm; }
+    * { box-sizing: border-box; }
+    body { margin: 0; background: #fff; color: #000; font-family: Arial, Helvetica, sans-serif; font-size: 12px; }
+    .sheet { width: 100%; max-width: 760px; margin: 0 auto; padding-top: 2px; }
+    .header { display: grid; grid-template-columns: 170px 1fr 120px; align-items: center; border-bottom: 1px solid #777; padding-bottom: 3px; }
+    .word-logo { color: #9a9a9a; line-height: .92; font-weight: 800; }
+    .word-logo .small { font-size: 14px; font-weight: 700; }
+    .word-logo .big { display: block; font-size: 30px; letter-spacing: -1px; }
+    .word-logo .srl { font-size: 17px; }
+    .center-title { text-align: center; color: #666; font-size: 11px; line-height: 1.35; }
+    .helmet-logo { justify-self: center; width: 82px; height: 58px; color: #8d8d8d; position: relative; text-align: center; font-weight: 900; }
+    .helmet-logo:before { content: "⚒"; display: block; font-size: 35px; line-height: 30px; transform: rotate(-12deg); }
+    .helmet-logo:after { content: "MARTE"; display: block; border-top: 2px solid #8d8d8d; border-bottom: 2px solid #8d8d8d; margin: 0 auto; width: 62px; font-size: 10px; }
+    .gray { background: #c6c6c6; }
+    .title-band { display: inline-flex; align-items: center; gap: 5px; margin: 10px 0 14px 32px; padding: 5px 8px; font-weight: 800; font-size: 12px; }
+    .meta { margin-left: 32px; line-height: 1.6; }
+    .meta b { font-weight: 800; }
+    .meta span { background: #d0d0d0; padding: 2px 4px; }
+    .rule { height: 1px; background: #777; margin: 10px 4px 14px 32px; }
+    .section-label { display: inline-flex; min-width: 220px; align-items: center; gap: 7px; margin-left: 32px; padding: 8px 10px 12px 7px; font-weight: 800; }
+    .project-name { width: 120px; margin-left: 80px; padding: 6px 4px 12px; background: #fff; }
+    .detail-label { display: inline-flex; align-items: center; gap: 7px; margin: 14px 0 0 32px; padding: 8px 10px; font-weight: 800; }
+    table { width: calc(100% - 18px); margin-top: -2px; border-collapse: separate; border-spacing: 0; table-layout: fixed; }
+    th, td { background: #c6c6c6; border-right: 2px solid #fff; border-bottom: 4px solid #fff; padding: 4px 3px; height: 38px; vertical-align: top; font-size: 12px; }
+    th { height: 34px; text-align: left; font-weight: 800; }
+    th:nth-child(1), td:nth-child(1) { width: 36px; }
+    th:nth-child(2), td:nth-child(2) { width: 138px; }
+    th:nth-child(3), td:nth-child(3) { width: 88px; }
+    th:nth-child(4), td:nth-child(4) { width: auto; }
+    th:nth-child(5), td:nth-child(5) { width: 136px; }
+    .number-cell { font-weight: 800; }
+    mark { background: #d6dd00; color: #000; padding: 0 1px; }
+    .assays { text-align: center; font-weight: 800; }
+    .signatures { display: grid; grid-template-columns: 1fr 1fr; gap: 72px; margin: 46px 68px 0; text-align: center; color: #111; }
+    .signature-line { border-top: 1px solid #333; padding-top: 6px; font-size: 11px; }
+    @media print {
+      body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+      .sheet { max-width: none; }
+    }
+  </style>
+</head>
+<body>
+  <main class="sheet">
+    <header class="header">
+      <div class="word-logo"><span class="small">Empresa Minera</span><span class="big">MARTE<span class="srl">S.R.L.</span></span></div>
+      <div class="center-title">
+        EMPRESA MINERA MARTE S.R.L.<br />
+        MINA LIPEÑA<br />
+        DEPARTAMENTO DE GEOLOGIA Y MINA
+      </div>
+      <div class="helmet-logo"></div>
+    </header>
+
+    <div class="title-band gray">⛰️ NOTA DE REMISIÓN DE MUESTRAS GEOLÓGICAS</div>
+
+    <div class="meta">
+      <div><b>EMPRESA / INSTITUCIÓN REMITENTE:</b> <span>EMPRESA MINERA MARTE S.R.L.</span></div>
+      <div><b>Laboratorio destinatario:</b> <span>${escapeHtml(laboratory)}</span></div>
+      <div><b>Fecha de envío:</b> <span>${escapeHtml(formatRemissionDate(dispatch.sentAt))}</span></div>
+    </div>
+
+    <div class="rule"></div>
+    <div class="section-label gray">📍 INFORMACIÓN DEL PROYECTO</div>
+    <div class="project-name">${escapeHtml(projectName)}</div>
+    <div class="rule"></div>
+    <div class="detail-label gray">🧪 DETALLE DE MUESTRAS ENVIADAS</div>
+
+    <table>
+      <thead>
+        <tr>
+          <th>Nº</th>
+          <th>Código de muestra</th>
+          <th>Sector</th>
+          <th>Nombre</th>
+          <th>Ensayos solicitados</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${tableRows}
+        ${emptyRows}
+      </tbody>
+    </table>
+
+    <section class="signatures">
+      <div class="signature-line">Entregué conforme</div>
+      <div class="signature-line">Recibí conforme</div>
+    </section>
+  </main>
+  <script>
+    window.addEventListener("load", () => {
+      setTimeout(() => {
+        window.focus();
+        window.print();
+      }, 160);
+    });
+  </script>
+</body>
+</html>`;
+
+  printWindow.document.open();
+  printWindow.document.write(html);
+  printWindow.document.close();
+}
+
 function SamplesTable({
   rows,
   search,
   priorityFilter,
   resultStatusFilter,
+  sampleStatusFilter,
   onlyMine,
   onSearch,
   onPriorityFilterChange,
   onResultStatusFilterChange,
+  onSampleStatusFilterChange,
   onOnlyMineChange,
   onEdit,
   onPrintVoucher
@@ -2673,10 +3148,12 @@ function SamplesTable({
   search: string;
   priorityFilter: SamplePriority | "";
   resultStatusFilter: ResultStatusFilter;
+  sampleStatusFilter: SampleLifecycleFilter;
   onlyMine: boolean;
   onSearch: (value: string) => void;
   onPriorityFilterChange: (value: SamplePriority | "") => void;
   onResultStatusFilterChange: (value: ResultStatusFilter) => void;
+  onSampleStatusFilterChange: (value: SampleLifecycleFilter) => void;
   onOnlyMineChange: (value: boolean) => void;
   onEdit: (row: SampleTableRow) => void;
   onPrintVoucher: (row: SampleTableRow) => void;
@@ -2705,9 +3182,20 @@ function SamplesTable({
                 className={`${fieldClass} py-2 pl-9`}
                 value={search}
                 onChange={(event) => onSearch(event.target.value)}
-                placeholder="Código o talón"
+                placeholder="Código / talón"
               />
             </label>
+            <select
+              className={`${fieldClass} w-full py-2 sm:w-44`}
+              value={sampleStatusFilter}
+              onChange={(event) => onSampleStatusFilterChange(event.target.value as SampleLifecycleFilter)}
+            >
+              {SAMPLE_STATUS_OPTIONS.map((option) => (
+                <option key={option.id} value={option.id}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
             <select
               className={`${fieldClass} w-full py-2 sm:w-36`}
               value={priorityFilter}
@@ -2742,7 +3230,7 @@ function SamplesTable({
           <table className="w-full border-collapse text-left">
             <thead>
               <tr>
-                {["Nombre", "Talón", "Prioridad", "Ubicación", "Objetivo", "Registrado por", "Muestreo", "Resultados", "Acciones"].map((heading) => (
+                {["Nombre", "Código / Talón", "Estado", "Prioridad", "Ubicación", "Objetivo", "Registrado por", "Muestreo", "Resultados", "Acciones"].map((heading) => (
                   <th key={heading} className="px-4 py-3 text-[10px] font-bold uppercase tracking-widest text-[var(--color-on-surface-variant)]">
                     {heading}
                   </th>
@@ -2754,6 +3242,9 @@ function SamplesTable({
                 <tr key={row.id} className={`${priorityRowClass(row.priority)} transition hover:brightness-[0.98]`}>
                   <td className="px-4 py-3 text-xs">{row.name ?? "-"}</td>
                   <td className="px-4 py-3 text-xs font-bold">{formatVoucherLabel(row)}</td>
+                  <td className="px-4 py-3 text-xs">
+                    <span className={sampleStatusBadgeClass(row.status)}>{SAMPLE_STATUS_LABELS[row.status]}</span>
+                  </td>
                   <td className="px-4 py-3 text-xs">
                     <span className={priorityBadgeClass(row.priority)}>{PRIORITY_LABELS[row.priority]}</span>
                   </td>
@@ -2794,7 +3285,7 @@ function SamplesTable({
               ))}
               {rows.length === 0 ? (
                 <tr>
-                  <td colSpan={9} className="px-4 py-6 text-center text-sm text-[var(--color-on-surface-variant)]">
+                  <td colSpan={10} className="px-4 py-6 text-center text-sm text-[var(--color-on-surface-variant)]">
                     No hay muestras para mostrar.
                   </td>
                 </tr>
@@ -2811,13 +3302,17 @@ function SamplesTable({
                     Nombre
                   </p>
                   <p className="mt-1 text-sm font-bold">{row.name ?? "-"}</p>
-                  <p className="mt-1 text-xs font-bold">Talón {formatVoucherLabel(row)}</p>
+                  <p className="mt-1 text-xs font-bold">Código / Talón {formatVoucherLabel(row)}</p>
                 </div>
                 <p className="shrink-0 text-xs text-[var(--color-on-surface-variant)]">
                   {formatDate(row.sampledAt)}
                 </p>
               </div>
               <div className="grid gap-2 text-xs">
+                <p>
+                  <span className="font-bold text-[var(--color-on-surface-variant)]">Estado: </span>
+                  <span className={sampleStatusBadgeClass(row.status)}>{SAMPLE_STATUS_LABELS[row.status]}</span>
+                </p>
                 <p>
                   <span className="font-bold text-[var(--color-on-surface-variant)]">Prioridad: </span>
                   <span className={priorityBadgeClass(row.priority)}>{PRIORITY_LABELS[row.priority]}</span>
@@ -2887,6 +3382,348 @@ function SamplesTable({
   );
 }
 
+function DispatchPanel({
+  registerType,
+  form,
+  items,
+  samples,
+  elements,
+  laboratories,
+  dispatches,
+  isSaving,
+  onFormChange,
+  onToggleSample,
+  onToggleElement,
+  onItemNotesChange,
+  onSubmit,
+  onDeleteDispatch,
+  onRegisterResults,
+  onPrintDispatch
+}: {
+  registerType: RegisterType;
+  form: DispatchForm;
+  items: DispatchDraftItem[];
+  samples: Array<InteriorSample | SurfaceSample>;
+  elements: ElementCatalogItem[];
+  laboratories: CatalogItem[];
+  dispatches: SampleDispatch[];
+  isSaving: boolean;
+  onFormChange: (field: keyof DispatchForm, value: string) => void;
+  onToggleSample: (sampleId: string) => void;
+  onToggleElement: (sampleId: string, elementId: string) => void;
+  onItemNotesChange: (sampleId: string, notes: string) => void;
+  onSubmit: (event: FormEvent<HTMLFormElement>) => void;
+  onDeleteDispatch: (dispatch: SampleDispatch) => void;
+  onRegisterResults: (dispatch: SampleDispatch, item: NonNullable<SampleDispatch["items"]>[number]) => void;
+  onPrintDispatch: (dispatch: SampleDispatch) => void;
+}) {
+  const selectedBySample = new Map(items.map((item) => [item.sampleId, item]));
+  const labOptions = labelOptions(laboratories);
+
+  return (
+    <section className={`${panelClass} exploraciones-panel p-5`}>
+      <form onSubmit={onSubmit} className="space-y-4">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <h2 className="flex items-center gap-2 text-lg font-bold">
+              <Send size={18} />
+              Lote / Nota de remisión
+            </h2>
+            <p className="mt-1 text-sm text-[var(--color-on-surface-variant)]">
+              Agrupa muestras registradas, elige laboratorio y solicita los elementos a analizar.
+            </p>
+          </div>
+          <button type="submit" className={primaryButton} disabled={isSaving}>
+            <Send size={15} />
+            Crear lote
+          </button>
+        </div>
+
+        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+          <FormSelect label="Laboratorio" value={form.laboratoryId} options={labOptions} onChange={(value) => onFormChange("laboratoryId", value)} />
+          <TextField label="Proyecto" value={form.projectName} onChange={(value) => onFormChange("projectName", value)} />
+          <TextField label="Fecha de envío" type="datetime-local" value={form.sentAt} onChange={(value) => onFormChange("sentAt", value)} />
+          <TextField label="Notas" value={form.notes} onChange={(value) => onFormChange("notes", value)} />
+        </div>
+
+        <div className="grid gap-3 lg:grid-cols-[0.9fr_1.1fr]">
+          <div className="rounded-xl border border-[var(--color-border-soft)] bg-[var(--color-surface-container-high)] p-3">
+            <h3 className="text-xs font-bold uppercase tracking-wider text-[var(--color-on-surface-variant)]">
+              Muestras registradas
+            </h3>
+            <div className="mt-3 max-h-72 space-y-2 overflow-y-auto pr-1">
+              {samples.map((sample) => {
+                const selected = selectedBySample.has(sample.id);
+                return (
+                  <label
+                    key={sample.id}
+                    className={`flex cursor-pointer items-start gap-2 rounded-lg border px-3 py-2 text-sm ${
+                      selected
+                        ? "border-[var(--color-primary)] bg-[var(--color-primary)]/10"
+                        : "border-[var(--color-border-soft)]"
+                    }`}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={selected}
+                      onChange={() => onToggleSample(sample.id)}
+                      className="mt-1"
+                    />
+                    <span>
+                      <span className="block font-bold">{sample.code}</span>
+                      <span className="block text-xs text-[var(--color-on-surface-variant)]">
+                        {sample.name ?? "-"} · {SAMPLE_STATUS_LABELS[sample.status ?? "REGISTERED"]}
+                      </span>
+                    </span>
+                  </label>
+                );
+              })}
+              {samples.length === 0 ? (
+                <p className="text-sm text-[var(--color-on-surface-variant)]">
+                  No hay muestras registradas disponibles para despachar en este filtro.
+                </p>
+              ) : null}
+            </div>
+          </div>
+
+          <div className="rounded-xl border border-[var(--color-border-soft)] bg-[var(--color-surface-container-high)] p-3">
+            <h3 className="text-xs font-bold uppercase tracking-wider text-[var(--color-on-surface-variant)]">
+              Elementos solicitados por muestra
+            </h3>
+            <div className="mt-3 max-h-72 space-y-3 overflow-y-auto pr-1">
+              {items.map((item) => {
+                const sample = samples.find((candidate) => candidate.id === item.sampleId);
+                return (
+                  <div key={item.sampleId} className="rounded-lg border border-[var(--color-border-soft)] p-3">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <p className="text-sm font-bold">{sample?.code ?? item.sampleId}</p>
+                      <button type="button" className={secondaryButton} onClick={() => onToggleSample(item.sampleId)}>
+                        <Trash2 size={13} />
+                        Quitar
+                      </button>
+                    </div>
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      {elements.map((element) => (
+                        <label key={element.id} className="inline-flex cursor-pointer items-center gap-1 rounded-lg border border-[var(--color-border-soft)] px-2 py-1 text-xs">
+                          <input
+                            type="checkbox"
+                            checked={item.elementIds.includes(element.id)}
+                            onChange={() => onToggleElement(item.sampleId, element.id)}
+                          />
+                          {element.symbol}
+                        </label>
+                      ))}
+                    </div>
+                    <input
+                      className={`${fieldClass} mt-3`}
+                      value={item.notes}
+                      onChange={(event) => onItemNotesChange(item.sampleId, event.target.value)}
+                      placeholder="Notas de la muestra en este lote"
+                    />
+                  </div>
+                );
+              })}
+              {items.length === 0 ? (
+                <p className="text-sm text-[var(--color-on-surface-variant)]">
+                  Selecciona muestras para indicar qué elementos debe revisar el laboratorio.
+                </p>
+              ) : null}
+            </div>
+          </div>
+        </div>
+      </form>
+
+      <div className="mt-5 border-t border-[var(--color-border-soft)] pt-4">
+        <h3 className="text-sm font-bold">Lotes enviados</h3>
+        <div className="mt-3 space-y-3">
+          {dispatches.map((dispatch) => (
+            <div key={dispatch.id} className="rounded-xl border border-[var(--color-border-soft)] bg-[var(--color-surface-container-high)] p-3">
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div>
+                  <p className="text-sm font-bold">
+                    {dispatch.projectName || "Sin proyecto"} · {dispatch.laboratory?.name ?? "Laboratorio"}
+                  </p>
+                  <p className="mt-1 text-xs text-[var(--color-on-surface-variant)]">
+                    Enviado: {formatDate(dispatch.sentAt)} · {DISPATCH_STATUS_LABELS[dispatch.status ?? "PENDING"]}
+                  </p>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  <button
+                    type="button"
+                    className={secondaryButton}
+                    onClick={() => onPrintDispatch(dispatch)}
+                  >
+                    <Printer size={14} />
+                    Imprimir nota
+                  </button>
+                  <button
+                    type="button"
+                    className={secondaryButton}
+                    disabled={dispatch.status === "COMPLETED" || isSaving}
+                    onClick={() => onDeleteDispatch(dispatch)}
+                  >
+                    <Trash2 size={14} />
+                    Eliminar
+                  </button>
+                </div>
+              </div>
+              <div className="mt-3 grid gap-2 md:grid-cols-2">
+                {dispatch.items.map((item) => (
+                  <div key={item.id} className="rounded-lg border border-[var(--color-border-soft)] p-3">
+                    <div className="flex flex-wrap items-start justify-between gap-2">
+                      <div>
+                        <p className="text-sm font-bold">{item.sample?.code ?? item.interiorSampleId ?? item.surfaceSampleId}</p>
+                        <p className="mt-1 text-xs text-[var(--color-on-surface-variant)]">
+                          {DISPATCH_STATUS_LABELS[item.status ?? "PENDING"]} · {(item.requestedElements ?? []).map((requested) => requested.element?.symbol ?? requested.elementId).join(", ")}
+                        </p>
+                      </div>
+                      <button
+                        type="button"
+                        className={secondaryButton}
+                        disabled={item.status === "COMPLETED"}
+                        onClick={() => onRegisterResults(dispatch, item)}
+                      >
+                        <Plus size={14} />
+                        Resultados
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ))}
+          {dispatches.length === 0 ? (
+            <p className="text-sm text-[var(--color-on-surface-variant)]">
+              Aún no hay lotes para {registerType === "interior" ? "Interior Mina" : "Superficie"}.
+            </p>
+          ) : null}
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function DispatchResultsModal({
+  target,
+  registerType,
+  laboratoryId,
+  onClose,
+  onSubmit
+}: {
+  target: DispatchResultTarget;
+  registerType: RegisterType;
+  laboratoryId?: string;
+  onClose: () => void;
+  onSubmit: (input: {
+    sampleId: string;
+    laboratoryId?: string;
+    results: Array<{ elementId: string; value: number; unit?: string; qualifier?: string; comments?: string }>;
+  }) => void;
+}) {
+  const sampleId =
+    registerType === "interior"
+      ? target.item.interiorSampleId
+      : target.item.surfaceSampleId;
+  const requestedElements = target.item.requestedElements ?? [];
+  const [values, setValues] = useState<Record<string, { value: string; unit: string; qualifier: string; comments: string }>>(
+    () =>
+      Object.fromEntries(
+        requestedElements.map((requested) => [
+          requested.elementId,
+          {
+            value: "",
+            unit: requested.element?.defaultUnit ?? "",
+            qualifier: "",
+            comments: ""
+          }
+        ])
+      )
+  );
+
+  const setField = (elementId: string, field: "value" | "unit" | "qualifier" | "comments", value: string) => {
+    setValues((current) => {
+      const previous = current[elementId] ?? { value: "", unit: "", qualifier: "", comments: "" };
+      return {
+        ...current,
+        [elementId]: {
+          ...previous,
+          [field]: value
+        }
+      };
+    });
+  };
+
+  const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!sampleId) return;
+    const results = requestedElements
+      .map((requested) => {
+        const row = values[requested.elementId];
+        if (!row?.value.trim()) return null;
+        return {
+          elementId: requested.elementId,
+          value: toNumber(row.value, `Resultado ${requested.element?.symbol ?? requested.elementId}`) as number,
+          unit: row.unit.trim() || undefined,
+          qualifier: row.qualifier.trim() || undefined,
+          comments: row.comments.trim() || undefined
+        };
+      })
+      .filter(Boolean) as Array<{ elementId: string; value: number; unit?: string; qualifier?: string; comments?: string }>;
+    onSubmit({ sampleId, laboratoryId, results });
+  };
+
+  return (
+    <div className="exploraciones-modal fixed inset-0 z-[100] flex items-center justify-center bg-black/55 p-4">
+      <form onSubmit={handleSubmit} className="exploraciones-modal-card flex max-h-[92vh] w-full max-w-3xl flex-col overflow-hidden rounded-2xl border border-[var(--color-border-soft)] bg-[var(--color-surface-container-low)] shadow-2xl">
+        <div className="flex items-start justify-between gap-3 border-b border-[var(--color-border-soft)] p-5">
+          <div>
+            <h3 className="text-xl font-bold">Registrar resultados</h3>
+            <p className="mt-1 text-sm text-[var(--color-on-surface-variant)]">
+              {target.item.sample?.code ?? sampleId}
+            </p>
+          </div>
+          <button type="button" onClick={onClose} className="rounded-lg border border-[var(--color-outline-variant)] p-2 text-[var(--color-on-surface-variant)]">
+            <X size={15} />
+          </button>
+        </div>
+        <div className="overflow-y-auto p-5">
+          <div className="space-y-3">
+            {requestedElements.map((requested) => {
+              const row = values[requested.elementId] ?? { value: "", unit: "", qualifier: "", comments: "" };
+              return (
+                <div key={requested.elementId} className="grid gap-3 rounded-xl border border-[var(--color-border-soft)] bg-[var(--color-surface-container-high)] p-3 md:grid-cols-[0.7fr_1fr_0.8fr_0.8fr]">
+                  <div>
+                    <p className="text-xs font-bold uppercase tracking-wider text-[var(--color-on-surface-variant)]">Elemento</p>
+                    <p className="mt-2 text-sm font-bold">{requested.element?.symbol ?? requested.elementId}</p>
+                  </div>
+                  <TextField label="Valor" value={row.value} onChange={(value) => setField(requested.elementId, "value", value)} />
+                  <TextField label="Unidad" value={row.unit} onChange={(value) => setField(requested.elementId, "unit", value)} />
+                  <TextField label="Calificador" value={row.qualifier} onChange={(value) => setField(requested.elementId, "qualifier", value)} />
+                  <div className="md:col-span-4">
+                    <TextField label="Comentario" value={row.comments} onChange={(value) => setField(requested.elementId, "comments", value)} />
+                  </div>
+                </div>
+              );
+            })}
+            {requestedElements.length === 0 ? (
+              <p className="text-sm text-[var(--color-on-surface-variant)]">
+                Este ítem no tiene elementos solicitados.
+              </p>
+            ) : null}
+          </div>
+        </div>
+        <div className="flex justify-end gap-2 border-t border-[var(--color-border-soft)] p-4">
+          <button type="button" className={secondaryButton} onClick={onClose}>Cancelar</button>
+          <button type="submit" className={primaryButton}>
+            <Save size={15} />
+            Guardar resultados
+          </button>
+        </div>
+      </form>
+    </div>
+  );
+}
+
 function ResultStatus({ results }: { results: any[] }) {
   const hasAnyResults = hasResults(results);
   return (
@@ -2916,8 +3753,6 @@ function ConfirmVoucherModal({
   onCancel: () => void;
   onConfirm: () => void;
 }) {
-  const willAssignVoucher = row.voucherNumber === null || row.voucherNumber === undefined;
-
   return (
     <div className="exploraciones-modal fixed inset-0 z-[100] flex items-center justify-center bg-black/55 p-4">
       <section className="w-full max-w-sm rounded-2xl border border-[var(--color-border-soft)] bg-[var(--color-surface-container-low)] p-5 shadow-2xl">
@@ -2928,9 +3763,7 @@ function ConfirmVoucherModal({
           <div>
             <h3 className="text-lg font-bold">¿Imprimir talonario?</h3>
             <p className="mt-1 text-sm text-[var(--color-on-surface-variant)]">
-              {willAssignVoucher
-                ? "Se asignará un número de talón a esta muestra antes de imprimir."
-                : "Esta muestra ya tiene talón asignado; se abrirá la impresión."}
+              Se imprimirá el talón con el código de la muestra: {formatVoucherLabel(row)}.
             </p>
           </div>
         </div>
@@ -2978,14 +3811,17 @@ function SampleDetailModal({ row, onClose }: { row: SampleTableRow; onClose: () 
         <div className="overflow-y-auto p-5">
           <div className="grid gap-4 md:grid-cols-2">
             <DetailSection title="Resumen">
-              <DetailItem label="Estado" value={row.source === "local" ? "Pendiente local" : "Sincronizado"} />
+              <DetailItem
+                label="Estado"
+                value={row.source === "local" ? "Pendiente local" : SAMPLE_STATUS_LABELS[row.status]}
+              />
               {getRowSyncError(row) ? (
                 <DetailItem label="Error de sincronización" value={getRowSyncError(row)} />
               ) : null}
               <DetailItem label="Tipo" value={isInterior ? "Interior Mina" : "Superficie"} />
               <DetailItem label="Categoría" value={CATEGORY_LABELS[(payload.category ?? "EXPLORATION") as SampleCategory]} />
               <DetailItem label="Nombre" value={row.name ?? "-"} />
-              <DetailItem label="Talón" value={formatVoucherLabel(row)} />
+              <DetailItem label="Código / Talón" value={formatVoucherLabel(row)} />
               <DetailItem label="Prioridad" value={PRIORITY_LABELS[row.priority]} />
               <DetailItem label="Ubicación" value={row.location} />
               <DetailItem label="Objetivo" value={row.objectiveName} />

@@ -1,18 +1,23 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
-  assignInteriorSampleVoucher,
-  assignSurfaceSampleVoucher,
+  createInteriorDispatch,
   createInteriorArea,
   createInteriorLabor,
   createInteriorLaboratory,
   createInteriorLevel,
   createInteriorObjective,
+  createInteriorSampleResult,
   createInteriorSampleWithResults,
+  createSurfaceDispatch,
   createSharedElement,
   createSurfaceArea,
   createSurfaceLaboratory,
   createSurfaceObjective,
+  createSurfaceSampleResult,
   createSurfaceSampleWithResults,
+  deleteInteriorDispatch,
+  deleteSurfaceDispatch,
+  getInteriorDispatches,
   getInteriorAreas,
   getInteriorLabors,
   getInteriorLaboratories,
@@ -20,11 +25,14 @@ import {
   getInteriorObjectives,
   getInteriorSamples,
   getSharedElements,
+  getSurfaceDispatches,
   getSurfaceAreas,
   getSurfaceLaboratories,
   getSurfaceObjectives,
   getSurfaceSamples,
+  updateInteriorDispatch,
   updateInteriorSampleWithResults,
+  updateSurfaceDispatch,
   updateSurfaceSampleWithResults
 } from "@/features/exploraciones/api/proposalSamplesApi";
 import {
@@ -47,8 +55,12 @@ import {
 } from "@/features/exploraciones/services/proposalSamplesSync.service";
 import type {
   InteriorSampleWithResultsPayload,
+  CreateDispatchPayload,
+  CreateSampleResultPayload,
+  DispatchStatus,
   SampleCategory,
   SamplePriority,
+  SampleStatus,
   SurfaceSampleWithResultsPayload
 } from "@/features/exploraciones/model/proposalSamples.schema";
 
@@ -227,6 +239,7 @@ export function useInteriorSamplesQuery(params: {
   interiorLaborId?: string;
   createdById?: number;
   category?: SampleCategory;
+  status?: SampleStatus;
   priority?: SamplePriority;
   search?: string;
 }) {
@@ -261,12 +274,33 @@ export function useSurfaceSamplesQuery(params: {
   surfaceAreaId?: string;
   createdById?: number;
   category?: SampleCategory;
+  status?: SampleStatus;
   priority?: SamplePriority;
   search?: string;
 }) {
   return useQuery({
     queryKey: [...base, "surface", "samples", params],
     queryFn: () => getSurfaceSamples({ ...params, page: 1, limit: 200 })
+  });
+}
+
+export function useInteriorDispatchesQuery(params: {
+  interiorLaboratoryId?: string;
+  status?: DispatchStatus;
+}) {
+  return useQuery({
+    queryKey: [...base, "interior", "dispatches", params],
+    queryFn: () => getInteriorDispatches({ ...params, page: 1, limit: 100 })
+  });
+}
+
+export function useSurfaceDispatchesQuery(params: {
+  surfaceLaboratoryId?: string;
+  status?: DispatchStatus;
+}) {
+  return useQuery({
+    queryKey: [...base, "surface", "dispatches", params],
+    queryFn: () => getSurfaceDispatches({ ...params, page: 1, limit: 100 })
   });
 }
 
@@ -353,12 +387,56 @@ export function useUpdateSurfaceSampleWithResultsMutation() {
   });
 }
 
-export function useAssignInteriorSampleVoucherMutation() {
+export function useCreateInteriorDispatchMutation() {
   const invalidate = useInvalidateProposalSamples();
-  return useMutation({ mutationFn: assignInteriorSampleVoucher, onSuccess: invalidate });
+  return useMutation({ mutationFn: (payload: CreateDispatchPayload) => createInteriorDispatch(payload), onSuccess: invalidate });
 }
 
-export function useAssignSurfaceSampleVoucherMutation() {
+export function useCreateSurfaceDispatchMutation() {
   const invalidate = useInvalidateProposalSamples();
-  return useMutation({ mutationFn: assignSurfaceSampleVoucher, onSuccess: invalidate });
+  return useMutation({ mutationFn: (payload: CreateDispatchPayload) => createSurfaceDispatch(payload), onSuccess: invalidate });
+}
+
+export function useUpdateInteriorDispatchMutation() {
+  const invalidate = useInvalidateProposalSamples();
+  return useMutation({
+    mutationFn: ({ id, payload }: { id: string; payload: { projectName?: string; sentAt?: string; notes?: string; status?: DispatchStatus } }) =>
+      updateInteriorDispatch(id, payload),
+    onSuccess: invalidate
+  });
+}
+
+export function useUpdateSurfaceDispatchMutation() {
+  const invalidate = useInvalidateProposalSamples();
+  return useMutation({
+    mutationFn: ({ id, payload }: { id: string; payload: { projectName?: string; sentAt?: string; notes?: string; status?: DispatchStatus } }) =>
+      updateSurfaceDispatch(id, payload),
+    onSuccess: invalidate
+  });
+}
+
+export function useDeleteInteriorDispatchMutation() {
+  const invalidate = useInvalidateProposalSamples();
+  return useMutation({ mutationFn: deleteInteriorDispatch, onSuccess: invalidate });
+}
+
+export function useDeleteSurfaceDispatchMutation() {
+  const invalidate = useInvalidateProposalSamples();
+  return useMutation({ mutationFn: deleteSurfaceDispatch, onSuccess: invalidate });
+}
+
+export function useCreateInteriorSampleResultMutation() {
+  const invalidate = useInvalidateProposalSamples();
+  return useMutation({
+    mutationFn: (payload: CreateSampleResultPayload) => createInteriorSampleResult(payload),
+    onSuccess: invalidate
+  });
+}
+
+export function useCreateSurfaceSampleResultMutation() {
+  const invalidate = useInvalidateProposalSamples();
+  return useMutation({
+    mutationFn: (payload: CreateSampleResultPayload) => createSurfaceSampleResult(payload),
+    onSuccess: invalidate
+  });
 }

@@ -7,6 +7,8 @@ const optionalNumber = z.coerce.number().nullable().optional();
 export const laboratorySlotSchema = z.enum(["L1", "L2", "L3"]);
 export const samplePrioritySchema = z.enum(["URGENT", "HIGH", "NORMAL", "LOW"]);
 export const sampleCategorySchema = z.enum(["EXPLORATION", "PRODUCTION"]);
+export const sampleStatusSchema = z.enum(["REGISTERED", "DISPATCHED", "COMPLETED"]);
+export const dispatchStatusSchema = z.enum(["PENDING", "COMPLETED"]);
 
 export const elementSchema = z
   .object({
@@ -85,6 +87,7 @@ export const interiorSampleSchema = z
     voucherNumber: z.number().nullable().optional(),
     voucherCode: optionalText,
     category: sampleCategorySchema.optional().default("EXPLORATION"),
+    status: sampleStatusSchema.optional().default("REGISTERED"),
     priority: samplePrioritySchema.optional().default("NORMAL"),
     east: optionalNumber,
     north: optionalNumber,
@@ -112,6 +115,7 @@ export const surfaceSampleSchema = z
     voucherNumber: z.number().nullable().optional(),
     voucherCode: optionalText,
     category: sampleCategorySchema.optional().default("EXPLORATION"),
+    status: sampleStatusSchema.optional().default("REGISTERED"),
     priority: samplePrioritySchema.optional().default("NORMAL"),
     east: optionalNumber,
     north: optionalNumber,
@@ -126,12 +130,64 @@ export const surfaceSampleSchema = z
   })
   .passthrough();
 
+const dispatchSampleSummarySchema = z
+  .object({
+    id: z.string(),
+    code: z.string(),
+    name: optionalText,
+    status: sampleStatusSchema.optional().default("REGISTERED"),
+    category: sampleCategorySchema.optional().default("EXPLORATION")
+  })
+  .passthrough();
+
+export const dispatchRequestedElementSchema = z
+  .object({
+    id: z.string().optional(),
+    elementId: z.string(),
+    element: elementSchema.optional()
+  })
+  .passthrough();
+
+export const dispatchItemSchema = z
+  .object({
+    id: z.string(),
+    dispatchId: z.string().optional(),
+    interiorSampleId: z.string().nullable().optional(),
+    surfaceSampleId: z.string().nullable().optional(),
+    status: dispatchStatusSchema.optional().default("PENDING"),
+    notes: optionalText,
+    sample: dispatchSampleSummarySchema.optional(),
+    requestedElements: z.array(dispatchRequestedElementSchema).optional().default([])
+  })
+  .passthrough();
+
+export const sampleDispatchSchema = z
+  .object({
+    id: z.string(),
+    interiorLaboratoryId: z.string().nullable().optional(),
+    surfaceLaboratoryId: z.string().nullable().optional(),
+    projectName: optionalText,
+    sentAt: z.string(),
+    notes: optionalText,
+    status: dispatchStatusSchema.optional().default("PENDING"),
+    createdAt: optionalDate,
+    updatedAt: optionalDate,
+    laboratory: catalogItemSchema.optional(),
+    createdBy: createdBySchema.optional(),
+    items: z.array(dispatchItemSchema).optional().default([])
+  })
+  .passthrough();
+
 export type LaboratorySlot = z.infer<typeof laboratorySlotSchema>;
 export type SamplePriority = z.infer<typeof samplePrioritySchema>;
 export type SampleCategory = z.infer<typeof sampleCategorySchema>;
+export type SampleStatus = z.infer<typeof sampleStatusSchema>;
+export type DispatchStatus = z.infer<typeof dispatchStatusSchema>;
 export type ElementCatalogItem = z.infer<typeof elementSchema>;
 export type CatalogItem = z.infer<typeof catalogItemSchema>;
 export type SampleLabAssignment = z.infer<typeof sampleLabAssignmentSchema>;
+export type SampleDispatch = z.infer<typeof sampleDispatchSchema>;
+export type DispatchItem = z.infer<typeof dispatchItemSchema>;
 export type InteriorArea = z.infer<typeof interiorAreaSchema>;
 export type InteriorLevel = z.infer<typeof interiorLevelSchema>;
 export type InteriorLabor = z.infer<typeof interiorLaborSchema>;
@@ -173,6 +229,37 @@ export interface InteriorSampleWithResultsPayload {
   elevation?: number;
   sampledAt?: string;
   labAssignments?: InteriorLabAssignmentPayload[];
+}
+
+export interface DispatchItemPayload {
+  sampleId: string;
+  elementIds: string[];
+  notes?: string;
+}
+
+export interface CreateDispatchPayload {
+  laboratoryId: string;
+  projectName?: string;
+  sentAt: string;
+  notes?: string;
+  items: DispatchItemPayload[];
+}
+
+export interface UpdateDispatchPayload {
+  projectName?: string;
+  sentAt?: string;
+  notes?: string;
+  status?: DispatchStatus;
+}
+
+export interface CreateSampleResultPayload {
+  sampleId: string;
+  elementId: string;
+  value?: number;
+  qualifier?: string;
+  unit?: string;
+  comments?: string;
+  laboratoryId?: string;
 }
 
 export interface SurfaceSampleWithResultsPayload {

@@ -73,10 +73,11 @@ export const exploracionesEndpoints = {
   interiorSamplesProduction: "/api/interior/samples/production",
   interiorSamplesWithResults: "/api/interior/samples/with-results",
   interiorSampleById: (id: string) => `/api/interior/samples/${id}`,
-  interiorSampleAssignVoucherById: (id: string) => `/api/interior/samples/${id}/assign-voucher`,
   interiorSampleWithResultsById: (id: string) => `/api/interior/samples/${id}/with-results`,
   interiorResults: "/api/interior/results",
   interiorResultById: (id: string) => `/api/interior/results/${id}`,
+  interiorDispatches: "/api/interior/dispatches",
+  interiorDispatchById: (id: string) => `/api/interior/dispatches/${id}`,
   surfaceSampleAreas: "/api/surface-sample/areas",
   surfaceSampleAreaById: (id: string) => `/api/surface-sample/areas/${id}`,
   surfaceSampleObjectives: "/api/surface-sample/objectives",
@@ -88,12 +89,12 @@ export const exploracionesEndpoints = {
   surfaceProposalSamplesProduction: "/api/surface-sample/samples/production",
   surfaceProposalSamplesWithResults: "/api/surface-sample/samples/with-results",
   surfaceProposalSampleById: (id: string) => `/api/surface-sample/samples/${id}`,
-  surfaceProposalSampleAssignVoucherById: (id: string) =>
-    `/api/surface-sample/samples/${id}/assign-voucher`,
   surfaceProposalSampleWithResultsById: (id: string) =>
     `/api/surface-sample/samples/${id}/with-results`,
   surfaceProposalResults: "/api/surface-sample/results",
   surfaceProposalResultById: (id: string) => `/api/surface-sample/results/${id}`,
+  surfaceProposalDispatches: "/api/surface-sample/dispatches",
+  surfaceProposalDispatchById: (id: string) => `/api/surface-sample/dispatches/${id}`,
   miningExcelValidate: "/api/imports/mining-excel/validate",
   miningExcelExecute: "/api/imports/mining-excel/execute"
 } as const;

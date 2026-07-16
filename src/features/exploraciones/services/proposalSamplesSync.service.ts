@@ -294,7 +294,6 @@ function sanitizeSamplePayload(action: OfflineProposalAction, payload: ProposalP
     name: typeof source.name === "string" && source.name.trim() ? source.name.trim() : undefined,
     category: (source.category as SampleCategory | undefined) ?? "EXPLORATION",
     priority: source.priority as SamplePriority | undefined,
-    voucherNumber: normalizeOptionalNumber(source.voucherNumber, "talon"),
     east: normalizeOptionalNumber(source.east, "este"),
     north: normalizeOptionalNumber(source.north, "norte"),
     elevation: normalizeOptionalNumber(source.elevation, "elevacion"),
