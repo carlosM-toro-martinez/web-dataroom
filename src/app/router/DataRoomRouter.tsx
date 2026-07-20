@@ -13,6 +13,7 @@ import { NotFoundPage } from "@/pages/not-found/NotFoundPage";
 import { ExploracionesPage } from "@/pages/exploraciones/ExploracionesPage";
 import { ExploracionesReportesPage } from "@/pages/exploraciones/ExploracionesReportesPage";
 import { ExploracionesElementosPage } from "@/pages/exploraciones/ExploracionesElementosPage";
+import { ExploracionesHierarchyPage } from "@/pages/exploraciones/ExploracionesHierarchyPage";
 import { ExploracionesDataRoomPage } from "@/pages/exploraciones/ExploracionesDataRoomPage";
 import { ExploracionesSurfaceDataRoomPage } from "@/pages/exploraciones/ExploracionesSurfaceDataRoomPage";
 import { ExploracionesFormsPage } from "@/pages/exploraciones/ExploracionesFormsPage";
@@ -58,6 +59,7 @@ export function DataRoomRouter() {
             <Route path="/exploraciones/produccion" element={<ExploracionesPage category="PRODUCTION" />} />
           </Route>
           <Route path="/exploraciones/elementos" element={<ExploracionesElementosPage />} />
+          <Route path="/exploraciones/jerarquia" element={<ExploracionesHierarchyPage />} />
           <Route path="/exploraciones/reportes" element={<ExploracionesReportesPage />} />
 
           <Route element={<AdminRoute />}>

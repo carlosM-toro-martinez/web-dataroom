@@ -1,6 +1,8 @@
 const APP_VERSION = "__BUILD_VERSION__";
 const CACHE_NAME = `minera-marte-pwa-${APP_VERSION}`;
+const TILE_CACHE_NAME = "minera-marte-map-tiles-v1";
 const APP_SHELL = ["/", "/manifest.webmanifest", "/icons/app-icon-192.png", "/icons/app-icon-512.png"];
+const TILE_HOSTS = new Set(["a.tile.openstreetmap.org", "b.tile.openstreetmap.org", "c.tile.openstreetmap.org", "tile.openstreetmap.org"]);
 
 self.addEventListener("message", (event) => {
   if (event.data?.type === "SKIP_WAITING") {
@@ -22,7 +24,7 @@ self.addEventListener("activate", (event) => {
     caches
       .keys()
       .then((keys) =>
-        Promise.all(keys.filter((key) => key !== CACHE_NAME).map((key) => caches.delete(key)))
+        Promise.all(keys.filter((key) => key !== CACHE_NAME && key !== TILE_CACHE_NAME).map((key) => caches.delete(key)))
       )
       .then(() => self.clients.claim())
   );
@@ -33,6 +35,23 @@ self.addEventListener("fetch", (event) => {
   const url = new URL(request.url);
 
   if (request.method !== "GET" || url.pathname.startsWith("/api")) return;
+
+  if (TILE_HOSTS.has(url.hostname)) {
+    event.respondWith(
+      caches.open(TILE_CACHE_NAME).then((cache) =>
+        cache.match(request).then((cached) => {
+          if (cached) return cached;
+          return fetch(request)
+            .then((response) => {
+              cache.put(request, response.clone());
+              return response;
+            })
+            .catch(() => Response.error());
+        })
+      )
+    );
+    return;
+  }
 
   if (request.mode === "navigate") {
     event.respondWith(

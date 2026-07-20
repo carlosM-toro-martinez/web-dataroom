@@ -5,11 +5,13 @@ import {
   elementSchema,
   interiorAreaSchema,
   interiorLaborSchema,
+  interiorHierarchyAreaSchema,
   interiorLevelSchema,
   interiorSampleSchema,
   sampleDispatchSchema,
   sampleResultSchema,
   surfaceAreaSchema,
+  surfaceHierarchyAreaSchema,
   surfaceSampleSchema,
   type CreateDispatchPayload,
   type CreateSampleResultPayload,
@@ -159,6 +161,11 @@ export async function createInteriorLaboratory(payload: {
   return parseOne(response.data, (item) => catalogItemSchema.parse(item));
 }
 
+export async function getInteriorHierarchy() {
+  const response = await httpClient.get(apiEndpoints.exploraciones.interiorHierarchy);
+  return parseList(response.data, (item) => interiorHierarchyAreaSchema.parse(item));
+}
+
 export async function getInteriorSamples(params?: {
   interiorLaborId?: string;
   interiorObjectiveId?: string;
@@ -287,6 +294,11 @@ export async function createSurfaceLaboratory(payload: {
 }) {
   const response = await httpClient.post(apiEndpoints.exploraciones.surfaceSampleLaboratories, payload);
   return parseOne(response.data, (item) => catalogItemSchema.parse(item));
+}
+
+export async function getSurfaceHierarchy() {
+  const response = await httpClient.get(apiEndpoints.exploraciones.surfaceSampleHierarchy);
+  return parseList(response.data, (item) => surfaceHierarchyAreaSchema.parse(item));
 }
 
 export async function getSurfaceSamples(params?: {

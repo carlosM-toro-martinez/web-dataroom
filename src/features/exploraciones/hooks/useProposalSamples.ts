@@ -19,6 +19,7 @@ import {
   deleteSurfaceDispatch,
   getInteriorDispatches,
   getInteriorAreas,
+  getInteriorHierarchy,
   getInteriorLabors,
   getInteriorLaboratories,
   getInteriorLevels,
@@ -27,6 +28,7 @@ import {
   getSharedElements,
   getSurfaceDispatches,
   getSurfaceAreas,
+  getSurfaceHierarchy,
   getSurfaceLaboratories,
   getSurfaceObjectives,
   getSurfaceSamples,
@@ -205,6 +207,13 @@ export function useInteriorAreasQuery() {
   });
 }
 
+export function useInteriorHierarchyQuery() {
+  return useQuery({
+    queryKey: [...base, "interior", "hierarchy"],
+    queryFn: getInteriorHierarchy
+  });
+}
+
 export function useInteriorLevelsQuery(interiorAreaId?: string) {
   return useQuery({
     queryKey: [...base, "interior", "levels", interiorAreaId],
@@ -253,6 +262,13 @@ export function useSurfaceAreasQuery() {
   return useQuery({
     queryKey: [...base, "surface", "areas"],
     queryFn: () => getSurfaceAreas({ page: 1, limit: 300 })
+  });
+}
+
+export function useSurfaceHierarchyQuery() {
+  return useQuery({
+    queryKey: [...base, "surface", "hierarchy"],
+    queryFn: getSurfaceHierarchy
   });
 }
 

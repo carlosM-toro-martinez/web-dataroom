@@ -3,6 +3,12 @@ import { z } from "zod";
 const optionalText = z.string().nullable().optional();
 const optionalDate = z.string().nullable().optional();
 const optionalNumber = z.coerce.number().nullable().optional();
+const emptyHierarchyStatusCounts = { registered: 0, dispatched: 0, completed: 0, total: 0 };
+const emptyHierarchySampleCounts = {
+  exploration: emptyHierarchyStatusCounts,
+  production: emptyHierarchyStatusCounts,
+  total: 0
+};
 
 export const laboratorySlotSchema = z.enum(["L1", "L2", "L3"]);
 export const samplePrioritySchema = z.enum(["URGENT", "HIGH", "NORMAL", "LOW"]);
@@ -178,6 +184,66 @@ export const sampleDispatchSchema = z
   })
   .passthrough();
 
+export const hierarchyStatusCountsSchema = z
+  .object({
+    registered: z.number().optional().default(0),
+    dispatched: z.number().optional().default(0),
+    completed: z.number().optional().default(0),
+    total: z.number().optional().default(0)
+  })
+  .passthrough();
+
+export const hierarchySampleCountsSchema = z
+  .object({
+    exploration: hierarchyStatusCountsSchema.optional().default(emptyHierarchyStatusCounts),
+    production: hierarchyStatusCountsSchema.optional().default(emptyHierarchyStatusCounts),
+    total: z.number().optional().default(0)
+  })
+  .passthrough();
+
+export const interiorHierarchyLaborSchema = z
+  .object({
+    id: z.string(),
+    name: z.string(),
+    abbreviation: optionalText,
+    description: optionalText,
+    samples: hierarchySampleCountsSchema.optional().default(emptyHierarchySampleCounts)
+  })
+  .passthrough();
+
+export const interiorHierarchyLevelSchema = z
+  .object({
+    id: z.string(),
+    name: z.string(),
+    abbreviation: optionalText,
+    elevation: z.number().nullable().optional(),
+    description: optionalText,
+    samples: hierarchySampleCountsSchema.optional().default(emptyHierarchySampleCounts),
+    labors: z.array(interiorHierarchyLaborSchema).optional().default([])
+  })
+  .passthrough();
+
+export const interiorHierarchyAreaSchema = z
+  .object({
+    id: z.string(),
+    name: z.string(),
+    abbreviation: optionalText,
+    description: optionalText,
+    samples: hierarchySampleCountsSchema.optional().default(emptyHierarchySampleCounts),
+    levels: z.array(interiorHierarchyLevelSchema).optional().default([])
+  })
+  .passthrough();
+
+export const surfaceHierarchyAreaSchema = z
+  .object({
+    id: z.string(),
+    name: z.string(),
+    abbreviation: optionalText,
+    description: optionalText,
+    samples: hierarchySampleCountsSchema.optional().default(emptyHierarchySampleCounts)
+  })
+  .passthrough();
+
 export type LaboratorySlot = z.infer<typeof laboratorySlotSchema>;
 export type SamplePriority = z.infer<typeof samplePrioritySchema>;
 export type SampleCategory = z.infer<typeof sampleCategorySchema>;
@@ -188,6 +254,9 @@ export type CatalogItem = z.infer<typeof catalogItemSchema>;
 export type SampleLabAssignment = z.infer<typeof sampleLabAssignmentSchema>;
 export type SampleDispatch = z.infer<typeof sampleDispatchSchema>;
 export type DispatchItem = z.infer<typeof dispatchItemSchema>;
+export type HierarchySampleCounts = z.infer<typeof hierarchySampleCountsSchema>;
+export type InteriorHierarchyArea = z.infer<typeof interiorHierarchyAreaSchema>;
+export type SurfaceHierarchyArea = z.infer<typeof surfaceHierarchyAreaSchema>;
 export type InteriorArea = z.infer<typeof interiorAreaSchema>;
 export type InteriorLevel = z.infer<typeof interiorLevelSchema>;
 export type InteriorLabor = z.infer<typeof interiorLaborSchema>;

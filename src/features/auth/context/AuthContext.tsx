@@ -63,6 +63,10 @@ export function AuthProvider({ children }: PropsWithChildren) {
       return;
     }
 
+    if (typeof navigator !== "undefined" && !navigator.onLine) {
+      return;
+    }
+
     if (refreshPromiseRef.current) {
       return refreshPromiseRef.current;
     }
@@ -76,7 +80,10 @@ export function AuthProvider({ children }: PropsWithChildren) {
           user: session.user
         });
       } catch (error) {
-        if (isTransientNetworkError(error)) {
+        if (
+          isTransientNetworkError(error) ||
+          (typeof navigator !== "undefined" && !navigator.onLine)
+        ) {
           return;
         }
         applySession(null);
@@ -119,6 +126,9 @@ export function AuthProvider({ children }: PropsWithChildren) {
     if (!session?.accessToken) return;
 
     const validateOrRefresh = () => {
+      if (typeof navigator !== "undefined" && !navigator.onLine) {
+        return;
+      }
       if (isAuthTokenExpired(session.accessToken)) {
         void refreshAccessToken();
         return;

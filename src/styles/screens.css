@@ -38,6 +38,14 @@
   min-height: 2.625rem;
 }
 
+.exploraciones-catalog-toggle {
+  border-radius: 0.75rem;
+}
+
+.exploraciones-catalog-chevron {
+  display: none;
+}
+
 .nav-dropdown::after {
   content: "";
   position: absolute;
@@ -606,6 +614,14 @@ section[id="contact"] {
     width: 100%;
   }
 
+  .exploraciones-form-header {
+    align-items: stretch;
+  }
+
+  .exploraciones-form-summary {
+    min-width: 0 !important;
+  }
+
   .exploraciones-result-row {
     grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
   }
@@ -690,11 +706,64 @@ section[id="contact"] {
     border-radius: 0.875rem;
   }
 
+  .exploraciones-catalog-section {
+    padding: 0.75rem !important;
+  }
+
+  .exploraciones-catalog-toggle {
+    width: 100%;
+    padding: 0.35rem 0.25rem;
+  }
+
+  .exploraciones-catalog-toggle span span:last-child {
+    font-size: 0.78rem;
+    line-height: 1.25rem;
+  }
+
+  .exploraciones-catalog-chevron {
+    display: block;
+  }
+
+  .exploraciones-catalog-actions {
+    margin-top: 0.75rem;
+    width: 100%;
+  }
+
+  .exploraciones-catalog-actions--collapsed {
+    display: none !important;
+  }
+
   .exploraciones-mode-grid,
   .exploraciones-main-grid,
   .exploraciones-result-row,
   .exploraciones-modal-grid {
     grid-template-columns: 1fr !important;
+  }
+
+  .exploraciones-form-panel {
+    padding: 1rem !important;
+  }
+
+  .exploraciones-form-panel form {
+    gap: 0;
+  }
+
+  .exploraciones-form-header {
+    display: grid !important;
+    grid-template-columns: 1fr;
+  }
+
+  .exploraciones-form-header h2 {
+    font-size: 1rem;
+    line-height: 1.35;
+  }
+
+  .exploraciones-form-summary {
+    grid-template-columns: 1fr !important;
+  }
+
+  .exploraciones-form-summary > div {
+    padding: 0.65rem 0.75rem;
   }
 
   .exploraciones-mode-button,
@@ -706,10 +775,32 @@ section[id="contact"] {
 
   .exploraciones-catalog-actions {
     grid-template-columns: 1fr 1fr;
+    gap: 0.5rem;
+  }
+
+  .exploraciones-catalog-button {
+    min-height: 2.5rem;
+    padding-left: 0.65rem !important;
+    padding-right: 0.65rem !important;
+    font-size: 0.78rem !important;
   }
 
   .exploraciones-result-row > :last-child {
     grid-column: auto;
+  }
+
+  .exploraciones-main-grid {
+    gap: 0.75rem !important;
+  }
+
+  .exploraciones-form-actions {
+    position: sticky;
+    bottom: 0;
+    margin-left: -1rem;
+    margin-right: -1rem;
+    background: var(--color-surface-container-low);
+    padding: 0.75rem 1rem 0;
+    z-index: 5;
   }
 
   .exploraciones-table-wrap {

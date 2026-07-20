@@ -3,12 +3,14 @@ import { Link } from "react-router-dom";
 import L from "leaflet";
 import {
   Beaker,
+  ChevronDown,
   Eye,
   FlaskConical,
   Landmark,
   Layers3,
   MapPinned,
   Microscope,
+  MoreVertical,
   Pencil,
   Plus,
   Printer,
@@ -89,9 +91,20 @@ const geoMarkerIcon = L.divIcon({
   iconAnchor: [9, 9]
 });
 
+const MAP_TILE_CACHE_NAME = "minera-marte-map-tiles-v1";
+const MAP_TILE_ZOOMS = [14, 15, 16, 17] as const;
+const MAP_TILE_RADIUS_BY_ZOOM: Record<(typeof MAP_TILE_ZOOMS)[number], number> = {
+  14: 1,
+  15: 1,
+  16: 2,
+  17: 2
+};
+
 type RegisterType = "interior" | "surface";
 type ResultStatusFilter = "all" | "with" | "without";
 type SampleLifecycleFilter = "all" | SampleStatus;
+type SyncStatusFilter = "all" | "pending" | "synced";
+type RecentRecordsView = "records" | "batches";
 type ModalKind =
   | "element"
   | "interior-area"
@@ -231,6 +244,12 @@ const SAMPLE_STATUS_OPTIONS: Array<{ id: SampleLifecycleFilter; label: string }>
 const DISPATCH_STATUS_LABELS: Record<"PENDING" | "COMPLETED", string> = {
   PENDING: "Pendiente",
   COMPLETED: "Completado"
+};
+
+const SAMPLE_STATUS_WEIGHT: Record<SampleStatus, number> = {
+  DISPATCHED: 3,
+  COMPLETED: 2,
+  REGISTERED: 1
 };
 
 const PRIORITY_WEIGHT: Record<SamplePriority, number> = {
@@ -570,7 +589,7 @@ function ExploracionesCategoryLanding() {
       />
 
       <section className={`${panelClass} exploraciones-panel p-5`}>
-        <div className="grid gap-3 md:grid-cols-2">
+        <div className="grid gap-3 md:grid-cols-3">
           <Link
             to="/exploraciones/exploracion"
             className="group rounded-xl border border-[var(--color-border-soft)] bg-[var(--color-surface-container-high)] p-5 transition hover:border-[var(--color-primary)]"
@@ -604,6 +623,23 @@ function ExploracionesCategoryLanding() {
               </div>
             </div>
           </Link>
+
+          <Link
+            to="/exploraciones/jerarquia"
+            className="group rounded-xl border border-[var(--color-border-soft)] bg-[var(--color-surface-container-high)] p-5 transition hover:border-[var(--color-primary)]"
+          >
+            <div className="flex items-center gap-3">
+              <span className="inline-flex h-11 w-11 items-center justify-center rounded-lg bg-[var(--color-primary)] text-[var(--color-on-primary)]">
+                <Layers3 size={20} />
+              </span>
+              <div>
+                <h2 className="text-lg font-bold">Jerarquía</h2>
+                <p className="mt-1 text-sm text-[var(--color-on-surface-variant)]">
+                  Revisar áreas, niveles, labores y conteos por estado.
+                </p>
+              </div>
+            </div>
+          </Link>
         </div>
       </section>
     </div>
@@ -622,17 +658,25 @@ function ExploracionesRegisterPage({ sampleCategory }: { sampleCategory: SampleC
   const [priorityFilter, setPriorityFilter] = useState<SamplePriority | "">("");
   const [resultStatusFilter, setResultStatusFilter] = useState<ResultStatusFilter>("all");
   const [sampleStatusFilter, setSampleStatusFilter] = useState<SampleLifecycleFilter>("all");
+  const [syncStatusFilter, setSyncStatusFilter] = useState<SyncStatusFilter>("all");
   const [onlyMine, setOnlyMine] = useState(false);
   const [dispatchForm, setDispatchForm] = useState<DispatchForm>(() => initialDispatchForm());
   const [dispatchItems, setDispatchItems] = useState<DispatchDraftItem[]>([]);
+  const [showDispatchModal, setShowDispatchModal] = useState(false);
+  const [dispatchSampleSearch, setDispatchSampleSearch] = useState("");
   const [dispatchResultTarget, setDispatchResultTarget] = useState<DispatchResultTarget | null>(null);
+  const [catalogExpanded, setCatalogExpanded] = useState(false);
   const [defaultsSeeded, setDefaultsSeeded] = useState(false);
   const [editTarget, setEditTarget] = useState<EditTarget>(null);
   const [geoPoint, setGeoPoint] = useState<GeoPoint | null>(null);
   const [geoStatus, setGeoStatus] = useState<string>("");
   const [isLocating, setIsLocating] = useState(false);
   const [showGeoMap, setShowGeoMap] = useState(false);
+  const [, setIsCachingMap] = useState(false);
+  const [mapCacheStatus, setMapCacheStatus] = useState("");
+  const [showLabResults, setShowLabResults] = useState(false);
   const autoLocationRequestedRef = useRef(false);
+  const autoMapCacheKeyRef = useRef<string | null>(null);
   const sampleFormRef = useRef<HTMLElement | null>(null);
   const syncInFlightRef = useRef(false);
   const lastSilentSyncAtRef = useRef(0);
@@ -1078,6 +1122,10 @@ function ExploracionesRegisterPage({ sampleCategory }: { sampleCategory: SampleC
       .filter((row) => (!priorityFilter ? true : row.priority === priorityFilter))
       .filter((row) => (sampleStatusFilter === "all" ? true : row.status === sampleStatusFilter))
       .filter((row) => {
+        if (syncStatusFilter === "all") return true;
+        return syncStatusFilter === "pending" ? row.source === "local" : row.source === "remote";
+      })
+      .filter((row) => {
         if (resultStatusFilter === "all") return true;
         const rowHasResults = hasResults(row.results);
         return resultStatusFilter === "with" ? rowHasResults : !rowHasResults;
@@ -1097,6 +1145,8 @@ function ExploracionesRegisterPage({ sampleCategory }: { sampleCategory: SampleC
         );
       })
       .sort((left, right) => {
+        const statusDiff = SAMPLE_STATUS_WEIGHT[right.status] - SAMPLE_STATUS_WEIGHT[left.status];
+        if (statusDiff !== 0) return statusDiff;
         const priorityDiff = PRIORITY_WEIGHT[right.priority] - PRIORITY_WEIGHT[left.priority];
         if (priorityDiff !== 0) return priorityDiff;
         const leftDate = left.sampledAt ? new Date(left.sampledAt).getTime() : 0;
@@ -1111,6 +1161,7 @@ function ExploracionesRegisterPage({ sampleCategory }: { sampleCategory: SampleC
     remoteVisibleSamples,
     resultStatusFilter,
     sampleStatusFilter,
+    syncStatusFilter,
     sampleCategory,
     search,
     user?.nombre
@@ -1275,6 +1326,7 @@ function ExploracionesRegisterPage({ sampleCategory }: { sampleCategory: SampleC
     setResults([]);
     setEditTarget(null);
     setShowGeoMap(false);
+    setShowLabResults(false);
   }
 
   function mapResultRows(rawResults?: any[]): ResultRow[] {
@@ -1294,6 +1346,7 @@ function ExploracionesRegisterPage({ sampleCategory }: { sampleCategory: SampleC
   }
 
   function startEdit(row: SampleTableRow) {
+    setShowLabResults(true);
     const objectiveTextFromId = (module: RegisterType, id?: string) => {
       const objectives = module === "interior" ? interiorObjectives : surfaceObjectives;
       const objective = objectives.find((item) => item.id === id);
@@ -1435,7 +1488,60 @@ function ExploracionesRegisterPage({ sampleCategory }: { sampleCategory: SampleC
     setGeoStatus(`Ubicación ajustada. UTM zona ${utm.zoneNumber}`);
   }
 
-  function fillFromCurrentLocation() {
+  async function cacheMapForCurrentPoint(options: { silent?: boolean } = {}) {
+    if (!geoPoint) {
+      if (!options.silent) showError("Primero captura o ajusta una ubicación para descargar el mapa.");
+      return;
+    }
+    if (!("caches" in window)) {
+      if (!options.silent) showError("Este navegador no permite guardar mapas offline.");
+      return;
+    }
+    if (!navigator.onLine) {
+      if (!options.silent) showError("Necesitas internet para descargar el mapa de esta zona.");
+      return;
+    }
+
+    setIsCachingMap(true);
+    setMapCacheStatus("Descargando mapa de la zona...");
+
+    try {
+      const cache = await caches.open(MAP_TILE_CACHE_NAME);
+      const tiles = buildOfflineMapTiles(geoPoint.latitude, geoPoint.longitude);
+      let saved = 0;
+
+      for (const tile of tiles) {
+        const request = new Request(tile.url, { mode: "no-cors" });
+        const cached = await cache.match(request);
+        if (!cached) {
+          const response = await fetch(request);
+          await cache.put(request, response);
+        }
+        saved += 1;
+        if (saved % 12 === 0 || saved === tiles.length) {
+          setMapCacheStatus(`Guardando mapa offline ${saved}/${tiles.length}...`);
+        }
+      }
+
+      setMapCacheStatus(`Mapa offline listo para esta zona (${tiles.length} mosaicos).`);
+      if (!options.silent) showSuccess("Mapa offline guardado para esta zona.");
+    } catch (error) {
+      setMapCacheStatus("No se pudo descargar el mapa offline.");
+      if (!options.silent) {
+        showError(error instanceof Error ? error.message : "No se pudo descargar el mapa offline.");
+      }
+    } finally {
+      setIsCachingMap(false);
+    }
+  }
+
+  function readDevicePosition(options: PositionOptions) {
+    return new Promise<GeolocationPosition>((resolve, reject) => {
+      navigator.geolocation.getCurrentPosition(resolve, reject, options);
+    });
+  }
+
+  async function fillFromCurrentLocation() {
     if (!("geolocation" in navigator)) {
       showError("Este dispositivo no soporta geolocalización.");
       return;
@@ -1444,31 +1550,50 @@ function ExploracionesRegisterPage({ sampleCategory }: { sampleCategory: SampleC
     setIsLocating(true);
     setGeoStatus("Obteniendo ubicación del dispositivo...");
 
-    navigator.geolocation.getCurrentPosition(
-      (position) => {
+    try {
+      const position = await readDevicePosition({
+        enableHighAccuracy: false,
+        timeout: 18000,
+        maximumAge: 300000
+      });
+      const { latitude, longitude, accuracy, altitude } = position.coords;
+      const utm = applyGeoCoordinates({ latitude, longitude, altitude, accuracy });
+      setShowGeoMap(false);
+      setGeoStatus(`Ubicación cargada. UTM zona ${utm.zoneNumber}`);
+    } catch (firstError) {
+      const error = firstError as GeolocationPositionError;
+      if (error.code === error.PERMISSION_DENIED) {
+        const message = "No se concedió permiso para acceder a la ubicación.";
+        setGeoStatus(message);
+        showError(message);
+        setIsLocating(false);
+        return;
+      }
+
+      setGeoStatus("El GPS está tardando. Intentando una lectura más precisa...");
+
+      try {
+        const position = await readDevicePosition({
+          enableHighAccuracy: true,
+          timeout: 45000,
+          maximumAge: 600000
+        });
         const { latitude, longitude, accuracy, altitude } = position.coords;
         const utm = applyGeoCoordinates({ latitude, longitude, altitude, accuracy });
         setShowGeoMap(false);
         setGeoStatus(`Ubicación cargada. UTM zona ${utm.zoneNumber}`);
-        setIsLocating(false);
-      },
-      (error) => {
-        setIsLocating(false);
+      } catch (secondError) {
+        const finalError = secondError as GeolocationPositionError;
         const message =
-          error.code === error.PERMISSION_DENIED
-            ? "No se concedió permiso para acceder a la ubicación."
-            : error.code === error.POSITION_UNAVAILABLE
-              ? "La ubicación no está disponible en este momento."
-              : "Se agotó el tiempo al intentar obtener la ubicación.";
+          finalError.code === finalError.POSITION_UNAVAILABLE
+            ? "La ubicación no está disponible en este momento. Revisa que el GPS del dispositivo esté activo."
+            : "No se pudo obtener la ubicación a tiempo. Intenta acercarte a una zona con señal o ajusta el punto en el mapa.";
         setGeoStatus(message);
         showError(message);
-      },
-      {
-        enableHighAccuracy: true,
-        timeout: 15000,
-        maximumAge: 0
       }
-    );
+    } finally {
+      setIsLocating(false);
+    }
   }
 
   useEffect(() => {
@@ -1476,6 +1601,53 @@ function ExploracionesRegisterPage({ sampleCategory }: { sampleCategory: SampleC
     autoLocationRequestedRef.current = true;
     fillFromCurrentLocation();
   }, []);
+
+  useEffect(() => {
+    if (!geoPoint || !("caches" in window)) {
+      setMapCacheStatus("");
+      return;
+    }
+
+    let cancelled = false;
+    const centerTile = buildOfflineMapTiles(geoPoint.latitude, geoPoint.longitude).find((tile) => tile.zoom === 16);
+    if (!centerTile) return;
+    const cacheKey = `${centerTile.zoom}/${centerTile.x}/${centerTile.y}`;
+
+    caches
+      .open(MAP_TILE_CACHE_NAME)
+      .then((cache) => cache.match(new Request(centerTile.url, { mode: "no-cors" })))
+      .then((cached) => {
+        if (cancelled) return;
+        if (cached) {
+          setMapCacheStatus(cached ? "Mapa offline disponible para esta zona." : "");
+          autoMapCacheKeyRef.current = cacheKey;
+          return;
+        }
+        setMapCacheStatus("");
+        if (navigator.onLine && autoMapCacheKeyRef.current !== cacheKey) {
+          autoMapCacheKeyRef.current = cacheKey;
+          void cacheMapForCurrentPoint({ silent: true });
+        }
+      })
+      .catch(() => {
+        if (!cancelled) setMapCacheStatus("");
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [geoPoint]);
+
+  useEffect(() => {
+    if (!geoPoint) return;
+
+    const cacheWhenOnline = () => {
+      if (navigator.onLine) void cacheMapForCurrentPoint({ silent: true });
+    };
+
+    window.addEventListener("online", cacheWhenOnline);
+    return () => window.removeEventListener("online", cacheWhenOnline);
+  }, [geoPoint]);
 
   function closeModal() {
     setModalKind(null);
@@ -2097,17 +2269,28 @@ function ExploracionesRegisterPage({ sampleCategory }: { sampleCategory: SampleC
         </div>
       </section>
 
-      <section className={`${panelClass} exploraciones-panel p-4`}>
+      <section className={`${panelClass} exploraciones-panel exploraciones-catalog-section p-3 sm:p-4`}>
         <div className="exploraciones-catalog-bar flex flex-wrap items-center justify-between gap-3">
-          <div>
-            <h2 className="text-sm font-bold uppercase tracking-wider text-[var(--color-on-surface-variant)]">
-              Catálogos
-            </h2>
-            <p className="mt-1 text-sm text-[var(--color-on-surface-variant)]">
-              Crea datos auxiliares sin salir del registro. Todo queda disponible offline.
-            </p>
-          </div>
-          <div className="exploraciones-catalog-actions flex flex-wrap gap-2">
+          <button
+            type="button"
+            className="exploraciones-catalog-toggle flex flex-1 items-center justify-between gap-3 text-left"
+            onClick={() => setCatalogExpanded((current) => !current)}
+            aria-expanded={catalogExpanded}
+          >
+            <span>
+              <span className="block text-sm font-bold uppercase tracking-wider text-[var(--color-on-surface-variant)]">
+                Catálogos
+              </span>
+              <span className="mt-1 block text-sm text-[var(--color-on-surface-variant)]">
+                Crea datos auxiliares sin salir del registro. Todo queda disponible offline.
+              </span>
+            </span>
+            <ChevronDown
+              size={18}
+              className={`exploraciones-catalog-chevron shrink-0 transition ${catalogExpanded ? "rotate-180" : ""}`}
+            />
+          </button>
+          <div className={`exploraciones-catalog-actions flex flex-wrap gap-2 ${catalogExpanded ? "" : "exploraciones-catalog-actions--collapsed"}`}>
             <CatalogButton icon={Microscope} onClick={() => openModal("element")}>Elemento</CatalogButton>
             <CatalogButton
               icon={Landmark}
@@ -2152,9 +2335,9 @@ function ExploracionesRegisterPage({ sampleCategory }: { sampleCategory: SampleC
         </div>
       </section>
 
-      <section ref={sampleFormRef} className={`${panelClass} exploraciones-panel scroll-mt-4 p-5`}>
+      <section ref={sampleFormRef} className={`${panelClass} exploraciones-panel exploraciones-form-panel scroll-mt-4 p-4 sm:p-5`}>
         <form onSubmit={onSubmitSample} className="space-y-5">
-          <div className="flex flex-wrap items-start justify-between gap-3">
+          <div className="exploraciones-form-header flex flex-wrap items-start justify-between gap-3">
             <div className="flex items-center gap-2">
               <FlaskConical size={18} />
               <h2 className="text-lg font-bold">
@@ -2162,13 +2345,23 @@ function ExploracionesRegisterPage({ sampleCategory }: { sampleCategory: SampleC
                 {registerType === "interior" ? "Interior Mina" : "Superficie"}
               </h2>
             </div>
-            <div className="rounded-lg border border-[var(--color-border-soft)] bg-[var(--color-surface-container-high)] px-3 py-2 text-right">
-              <p className="text-[10px] font-bold uppercase tracking-wider text-[var(--color-on-surface-variant)]">
-                Fecha y hora
-              </p>
-              <p className="mt-0.5 text-sm font-semibold text-[var(--color-on-surface)]">
-                {formatDate(toIso(sampleForm.sampledAt) ?? new Date().toISOString())}
-              </p>
+            <div className="exploraciones-form-summary grid w-full gap-2 sm:w-auto sm:min-w-[420px] sm:grid-cols-2">
+              <div className="rounded-lg border border-[var(--color-border-soft)] bg-[var(--color-surface-container-high)] px-3 py-2">
+                <p className="text-[10px] font-bold uppercase tracking-wider text-[var(--color-on-surface-variant)]">
+                  Nombre generado
+                </p>
+                <p className="mt-0.5 truncate text-sm font-semibold text-[var(--color-on-surface)]">
+                  {sampleName || "Completa ubicación y sufijo"}
+                </p>
+              </div>
+              <div className="rounded-lg border border-[var(--color-border-soft)] bg-[var(--color-surface-container-high)] px-3 py-2 text-left sm:text-right">
+                <p className="text-[10px] font-bold uppercase tracking-wider text-[var(--color-on-surface-variant)]">
+                  Fecha y hora
+                </p>
+                <p className="mt-0.5 text-sm font-semibold text-[var(--color-on-surface)]">
+                  {formatDate(toIso(sampleForm.sampledAt) ?? new Date().toISOString())}
+                </p>
+              </div>
             </div>
           </div>
 
@@ -2186,14 +2379,7 @@ function ExploracionesRegisterPage({ sampleCategory }: { sampleCategory: SampleC
             </div>
           )}
 
-          <div className="exploraciones-main-grid grid gap-3 md:grid-cols-2 xl:grid-cols-[1.2fr_0.8fr_0.7fr]">
-            <TextField
-              label="Nombre"
-              value={sampleName}
-              onChange={() => undefined}
-              disabled
-              placeholder="Completa la ubicación y el sufijo"
-            />
+          <div className="exploraciones-main-grid grid gap-3 md:grid-cols-2">
             <TextField
               label="Sufijo"
               value={sampleForm.sampleNameSuffix}
@@ -2244,17 +2430,20 @@ function ExploracionesRegisterPage({ sampleCategory }: { sampleCategory: SampleC
                   <div className="grid gap-1 text-xs text-[var(--color-on-surface-variant)] md:grid-cols-2 md:gap-4">
                     <p>Latitud: {geoPoint.latitude.toFixed(6)}</p>
                     <p>Longitud: {geoPoint.longitude.toFixed(6)}</p>
+                    {mapCacheStatus ? (
+                      <p className="md:col-span-2">{mapCacheStatus}</p>
+                    ) : null}
                   </div>
                   <button
                     type="button"
-                    className={secondaryButton}
+                    className={`${secondaryButton} w-full sm:w-auto`}
                     onClick={() => setShowGeoMap((current) => !current)}
                   >
                     <MapPinned size={14} />
                     {showGeoMap ? "Ocultar mapa" : "Ver mapa"}
                   </button>
                 </div>
-                {showGeoMap && navigator.onLine ? (
+                {showGeoMap && (navigator.onLine || mapCacheStatus.includes("offline")) ? (
                   <div className="h-56 w-full">
                     <MapContainer
                       center={[geoPoint.latitude, geoPoint.longitude]}
@@ -2262,7 +2451,10 @@ function ExploracionesRegisterPage({ sampleCategory }: { sampleCategory: SampleC
                       scrollWheelZoom={false}
                       className="h-full w-full"
                     >
-                      <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
+                      <TileLayer
+                        attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
+                        url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+                      />
                       <Marker
                         position={[geoPoint.latitude, geoPoint.longitude]}
                         icon={geoMarkerIcon}
@@ -2278,50 +2470,72 @@ function ExploracionesRegisterPage({ sampleCategory }: { sampleCategory: SampleC
                     </MapContainer>
                   </div>
                 ) : null}
-                {showGeoMap && !navigator.onLine ? (
-                  <p className="border-t border-[var(--color-border-soft)] px-4 py-3 text-xs text-[var(--color-on-surface-variant)]">
-                    Sin conexión: se muestran las coordenadas capturadas, pero no el mapa base.
-                  </p>
+                {showGeoMap && !navigator.onLine && !mapCacheStatus.includes("offline") ? (
+                  <OfflineGeoMap geoPoint={geoPoint} />
                 ) : null}
               </div>
             ) : null}
           </div>
 
-          {registerType === "interior" ? (
-            <div className="exploraciones-main-grid grid gap-3 md:grid-cols-3">
-              {(["labL1", "labL2", "labL3"] as const).map((field, index) => (
-                <FormSelect
-                  key={field}
-                  label={`Laboratorio L${index + 1}`}
-                  value={sampleForm[field]}
-                  options={laboratoryOptions}
-                  onChange={(value) => setSampleField(field, value)}
-                />
-              ))}
-            </div>
-          ) : null}
+          <section className="rounded-xl border border-[var(--color-border-soft)] bg-[var(--color-surface-container-high)]">
+            <button
+              type="button"
+              className="flex w-full items-center justify-between gap-3 px-4 py-3 text-left"
+              onClick={() => setShowLabResults((current) => !current)}
+            >
+              <div>
+                <p className="text-sm font-bold text-[var(--color-on-surface)]">
+                  Laboratorios y resultados
+                </p>
+                <p className="mt-0.5 text-xs text-[var(--color-on-surface-variant)]">
+                  Opcional al registrar la muestra. Puedes abrirlo si ya tienes datos de laboratorio.
+                </p>
+              </div>
+              <span className="rounded-lg border border-[var(--color-outline-variant)] px-3 py-1 text-xs font-bold text-[var(--color-on-surface-variant)]">
+                {showLabResults ? "Contraer" : "Desplegar"}
+              </span>
+            </button>
 
-          <ResultsEditor
-            registerType={registerType}
-            rows={results}
-            elements={elements}
-            interiorLabGroups={selectedInteriorLabGroups}
-            laboratories={surfaceLaboratories}
-            onChange={(id, field, value) =>
-              setResults((current) => current.map((row) => (row.id === id ? { ...row, [field]: value } : row)))
-            }
-            onAddForLab={(lab) =>
-              setResults((current) => [
-                ...current,
-                {
-                  ...initialResult(),
-                  labSlot: lab.slot ?? "",
-                  laboratoryId: lab.laboratoryId ?? ""
-                }
-              ])
-            }
-            onRemove={(id) => setResults((current) => current.filter((row) => row.id !== id))}
-          />
+            {showLabResults ? (
+              <div className="space-y-4 border-t border-[var(--color-border-soft)] p-4">
+                {registerType === "interior" ? (
+                  <div className="exploraciones-main-grid grid gap-3 md:grid-cols-3">
+                    {(["labL1", "labL2", "labL3"] as const).map((field, index) => (
+                      <FormSelect
+                        key={field}
+                        label={`Laboratorio L${index + 1}`}
+                        value={sampleForm[field]}
+                        options={laboratoryOptions}
+                        onChange={(value) => setSampleField(field, value)}
+                      />
+                    ))}
+                  </div>
+                ) : null}
+
+                <ResultsEditor
+                  registerType={registerType}
+                  rows={results}
+                  elements={elements}
+                  interiorLabGroups={selectedInteriorLabGroups}
+                  laboratories={surfaceLaboratories}
+                  onChange={(id, field, value) =>
+                    setResults((current) => current.map((row) => (row.id === id ? { ...row, [field]: value } : row)))
+                  }
+                  onAddForLab={(lab) =>
+                    setResults((current) => [
+                      ...current,
+                      {
+                        ...initialResult(),
+                        labSlot: lab.slot ?? "",
+                        laboratoryId: lab.laboratoryId ?? ""
+                      }
+                    ])
+                  }
+                  onRemove={(id) => setResults((current) => current.filter((row) => row.id !== id))}
+                />
+              </div>
+            ) : null}
+          </section>
 
           <div className="exploraciones-form-actions flex flex-wrap items-center justify-end gap-2 border-t border-[var(--color-border-soft)] pt-4">
             {isEditing ? (
@@ -2348,36 +2562,63 @@ function ExploracionesRegisterPage({ sampleCategory }: { sampleCategory: SampleC
         </form>
       </section>
 
-      <DispatchPanel
-        registerType={registerType}
-        form={dispatchForm}
-        items={dispatchItems}
-        samples={registeredSamplesForDispatch}
-        elements={elements}
-        laboratories={activeLaboratories}
-        dispatches={activeDispatches}
-        isSaving={isDispatchSaving}
-        onFormChange={setDispatchField}
-        onToggleSample={toggleDispatchSample}
-        onToggleElement={toggleDispatchElement}
-        onItemNotesChange={setDispatchItemNotes}
-        onSubmit={submitDispatch}
-        onDeleteDispatch={deleteDispatch}
-        onRegisterResults={(dispatch, item) => setDispatchResultTarget({ dispatch, item })}
-        onPrintDispatch={printDispatchRemission}
-      />
+      <section className={`${panelClass} exploraciones-panel p-4`}>
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <h2 className="flex items-center gap-2 text-lg font-bold">
+              <Send size={18} />
+              Lote / Nota de remisión
+            </h2>
+            <p className="mt-1 text-sm text-[var(--color-on-surface-variant)]">
+              Crea lotes, imprime notas y registra resultados desde una pantalla emergente.
+            </p>
+          </div>
+          <button type="button" className={`${primaryButton} w-full sm:w-auto`} onClick={() => setShowDispatchModal(true)}>
+            <Send size={15} />
+            Abrir lotes
+          </button>
+        </div>
+      </section>
+
+      {showDispatchModal ? (
+        <DispatchPanel
+          registerType={registerType}
+          form={dispatchForm}
+          items={dispatchItems}
+          samples={registeredSamplesForDispatch}
+          elements={elements}
+          laboratories={activeLaboratories}
+          dispatches={activeDispatches}
+          isSaving={isDispatchSaving}
+          sampleSearch={dispatchSampleSearch}
+          onSampleSearchChange={setDispatchSampleSearch}
+          onFormChange={setDispatchField}
+          onToggleSample={toggleDispatchSample}
+          onToggleElement={toggleDispatchElement}
+          onItemNotesChange={setDispatchItemNotes}
+          onSubmit={submitDispatch}
+          onClose={() => setShowDispatchModal(false)}
+          onDeleteDispatch={deleteDispatch}
+          onRegisterResults={(dispatch, item) => setDispatchResultTarget({ dispatch, item })}
+          onPrintDispatch={printDispatchRemission}
+        />
+      ) : null}
 
       <SamplesTable
         rows={sampleRows}
+        dispatches={activeDispatches}
+        registerType={registerType}
         search={search}
         priorityFilter={priorityFilter}
         resultStatusFilter={resultStatusFilter}
         sampleStatusFilter={sampleStatusFilter}
+        syncStatusFilter={syncStatusFilter}
         onlyMine={onlyMine}
         onSearch={setSearch}
         onPriorityFilterChange={setPriorityFilter}
         onResultStatusFilterChange={setResultStatusFilter}
         onSampleStatusFilterChange={setSampleStatusFilter}
+        onSyncStatusFilterChange={setSyncStatusFilter}
         onOnlyMineChange={setOnlyMine}
         onEdit={startEdit}
         onPrintVoucher={handlePrintVoucher}
@@ -3129,53 +3370,195 @@ function writeDispatchRemissionDocument(printWindow: Window, dispatch: SampleDis
   printWindow.document.close();
 }
 
+function buildOfflineMapTiles(latitude: number, longitude: number) {
+  const tiles: Array<{ url: string; zoom: number; x: number; y: number }> = [];
+  const seen = new Set<string>();
+
+  MAP_TILE_ZOOMS.forEach((zoom) => {
+    const center = latLonToTile(latitude, longitude, zoom);
+    const radius = MAP_TILE_RADIUS_BY_ZOOM[zoom];
+    const maxTile = 2 ** zoom;
+
+    for (let x = center.x - radius; x <= center.x + radius; x += 1) {
+      for (let y = center.y - radius; y <= center.y + radius; y += 1) {
+        if (y < 0 || y >= maxTile) continue;
+        const wrappedX = ((x % maxTile) + maxTile) % maxTile;
+        const server = ["a", "b", "c"][Math.abs(wrappedX + y + zoom) % 3];
+        const key = `${zoom}/${wrappedX}/${y}`;
+        if (seen.has(key)) continue;
+        seen.add(key);
+        tiles.push({
+          url: `https://${server}.tile.openstreetmap.org/${zoom}/${wrappedX}/${y}.png`,
+          zoom,
+          x: wrappedX,
+          y
+        });
+      }
+    }
+  });
+
+  return tiles;
+}
+
+function latLonToTile(latitude: number, longitude: number, zoom: number) {
+  const latRad = (latitude * Math.PI) / 180;
+  const scale = 2 ** zoom;
+  return {
+    x: Math.floor(((longitude + 180) / 360) * scale),
+    y: Math.floor(((1 - Math.log(Math.tan(latRad) + 1 / Math.cos(latRad)) / Math.PI) / 2) * scale)
+  };
+}
+
+function OfflineGeoMap({ geoPoint }: { geoPoint: GeoPoint }) {
+  return (
+    <div className="border-t border-[var(--color-border-soft)]">
+      <div className="relative h-56 overflow-hidden bg-[var(--color-surface-container)]">
+        <div
+          className="absolute inset-0 opacity-75"
+          style={{
+            backgroundImage:
+              "linear-gradient(var(--color-border-soft) 1px, transparent 1px), linear-gradient(90deg, var(--color-border-soft) 1px, transparent 1px)",
+            backgroundSize: "32px 32px"
+          }}
+        />
+        <div className="absolute inset-x-0 top-1/2 border-t border-[var(--color-outline-variant)]/55" />
+        <div className="absolute inset-y-0 left-1/2 border-l border-[var(--color-outline-variant)]/55" />
+        <div className="absolute left-1/2 top-1/2 h-5 w-5 -translate-x-1/2 -translate-y-1/2 rounded-full border-[3px] border-white bg-[var(--color-primary)] shadow-lg shadow-black/30" />
+        <div className="absolute left-1/2 top-1/2 h-16 w-16 -translate-x-1/2 -translate-y-1/2 rounded-full border border-[var(--color-primary)]/35" />
+        <div className="absolute bottom-3 left-3 rounded-lg border border-[var(--color-border-soft)] bg-[var(--color-surface-container-low)]/95 px-3 py-2 text-xs text-[var(--color-on-surface)] shadow">
+          <p className="font-bold">Mapa offline</p>
+          <p className="mt-1 text-[var(--color-on-surface-variant)]">
+            Lat {geoPoint.latitude.toFixed(6)} · Lon {geoPoint.longitude.toFixed(6)}
+          </p>
+          {geoPoint.accuracy ? (
+            <p className="text-[var(--color-on-surface-variant)]">Precisión aprox. {Math.round(geoPoint.accuracy)} m</p>
+          ) : null}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function SamplesTable({
   rows,
+  dispatches,
+  registerType,
   search,
   priorityFilter,
   resultStatusFilter,
   sampleStatusFilter,
+  syncStatusFilter,
   onlyMine,
   onSearch,
   onPriorityFilterChange,
   onResultStatusFilterChange,
   onSampleStatusFilterChange,
+  onSyncStatusFilterChange,
   onOnlyMineChange,
   onEdit,
   onPrintVoucher
 }: {
   rows: SampleTableRow[];
+  dispatches: SampleDispatch[];
+  registerType: RegisterType;
   search: string;
   priorityFilter: SamplePriority | "";
   resultStatusFilter: ResultStatusFilter;
   sampleStatusFilter: SampleLifecycleFilter;
+  syncStatusFilter: SyncStatusFilter;
   onlyMine: boolean;
   onSearch: (value: string) => void;
   onPriorityFilterChange: (value: SamplePriority | "") => void;
   onResultStatusFilterChange: (value: ResultStatusFilter) => void;
   onSampleStatusFilterChange: (value: SampleLifecycleFilter) => void;
+  onSyncStatusFilterChange: (value: SyncStatusFilter) => void;
   onOnlyMineChange: (value: boolean) => void;
   onEdit: (row: SampleTableRow) => void;
   onPrintVoucher: (row: SampleTableRow) => void;
 }) {
   const [detailRow, setDetailRow] = useState<SampleTableRow | null>(null);
   const [voucherConfirmRow, setVoucherConfirmRow] = useState<SampleTableRow | null>(null);
+  const [openActionsId, setOpenActionsId] = useState<string | null>(null);
+  const [viewMode, setViewMode] = useState<RecentRecordsView>("records");
+  const [page, setPage] = useState(1);
+  const pageSize = 8;
+  const totalPages = Math.max(1, Math.ceil(rows.length / pageSize));
+  const currentPage = Math.min(page, totalPages);
+  const paginatedRows = rows.slice((currentPage - 1) * pageSize, currentPage * pageSize);
+  const dispatchGroups = useMemo(
+    () => buildDispatchGroups(rows, dispatches, registerType),
+    [dispatches, registerType, rows]
+  );
+  const totalGroupPages = Math.max(1, Math.ceil(dispatchGroups.length / pageSize));
+  const currentGroupPage = Math.min(page, totalGroupPages);
+  const paginatedGroups = dispatchGroups.slice((currentGroupPage - 1) * pageSize, currentGroupPage * pageSize);
+  const activeTotalPages = viewMode === "records" ? totalPages : totalGroupPages;
+  const activeCurrentPage = viewMode === "records" ? currentPage : currentGroupPage;
+
+  useEffect(() => {
+    setPage(1);
+    setOpenActionsId(null);
+  }, [rows, dispatches, viewMode]);
+
   const confirmVoucherPrint = () => {
     if (!voucherConfirmRow) return;
     const row = voucherConfirmRow;
     setVoucherConfirmRow(null);
     onPrintVoucher(row);
   };
+  const showRowActions = (row: SampleTableRow) => (
+    <RowActionsMenu
+      row={row}
+      isOpen={openActionsId === row.id}
+      onToggle={() => setOpenActionsId((current) => (current === row.id ? null : row.id))}
+      onView={() => {
+        setOpenActionsId(null);
+        setDetailRow(row);
+      }}
+      onEdit={() => {
+        setOpenActionsId(null);
+        onEdit(row);
+      }}
+      onPrintVoucher={() => {
+        setOpenActionsId(null);
+        setVoucherConfirmRow(row);
+      }}
+    />
+  );
 
   return (
     <>
-      <article className={`${panelClass} exploraciones-panel overflow-hidden`}>
+      <article className={`${panelClass} exploraciones-panel overflow-visible`}>
         <div className="border-b border-[var(--color-border-soft)] bg-[var(--color-surface-container-high)] px-5 py-3">
           <div className="flex flex-wrap items-center gap-2">
             <h2 className="flex items-center gap-2 text-sm font-bold uppercase tracking-wider text-[var(--color-on-surface-variant)]">
               <FlaskConical size={14} />
               Registros recientes
             </h2>
+            <div className="flex w-full overflow-hidden rounded-lg border border-[var(--color-outline-variant)] sm:w-auto">
+              <button
+                type="button"
+                className={`flex-1 px-3 py-2 text-xs font-bold sm:flex-none ${
+                  viewMode === "records"
+                    ? "bg-[var(--color-primary)] text-[var(--color-on-primary)]"
+                    : "text-[var(--color-on-surface-variant)]"
+                }`}
+                onClick={() => setViewMode("records")}
+              >
+                Registros
+              </button>
+              <button
+                type="button"
+                className={`flex-1 px-3 py-2 text-xs font-bold sm:flex-none ${
+                  viewMode === "batches"
+                    ? "bg-[var(--color-primary)] text-[var(--color-on-primary)]"
+                    : "text-[var(--color-on-surface-variant)]"
+                }`}
+                onClick={() => setViewMode("batches")}
+              >
+                Por lote
+              </button>
+            </div>
             <label className="exploraciones-search relative ml-auto w-full sm:w-56">
               <Search size={14} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[var(--color-on-surface-variant)]" />
               <input
@@ -3217,6 +3600,15 @@ function SamplesTable({
               <option value="with">Con resultado</option>
               <option value="without">Sin resultado</option>
             </select>
+            <select
+              className={`${fieldClass} w-full py-2 sm:w-44`}
+              value={syncStatusFilter}
+              onChange={(event) => onSyncStatusFilterChange(event.target.value as SyncStatusFilter)}
+            >
+              <option value="all">Sincronización</option>
+              <option value="pending">Pendientes sync</option>
+              <option value="synced">Sincronizados</option>
+            </select>
             <button
               type="button"
               className={`${onlyMine ? primaryButton : secondaryButton} px-3 py-2`}
@@ -3226,6 +3618,7 @@ function SamplesTable({
             </button>
           </div>
         </div>
+        {viewMode === "records" ? (
         <div className="exploraciones-table-wrap overflow-x-auto">
           <table className="w-full border-collapse text-left">
             <thead>
@@ -3238,7 +3631,7 @@ function SamplesTable({
               </tr>
             </thead>
             <tbody className="divide-y divide-[var(--color-border-soft)]">
-              {rows.map((row) => (
+              {paginatedRows.map((row) => (
                 <tr key={row.id} className={`${priorityRowClass(row.priority)} transition hover:brightness-[0.98]`}>
                   <td className="px-4 py-3 text-xs">{row.name ?? "-"}</td>
                   <td className="px-4 py-3 text-xs font-bold">{formatVoucherLabel(row)}</td>
@@ -3261,25 +3654,7 @@ function SamplesTable({
                     ) : null}
                   </td>
                   <td className="px-4 py-3 text-xs">
-                    <div className="flex flex-wrap gap-2">
-                      <button type="button" className={secondaryButton} onClick={() => setDetailRow(row)}>
-                        <Eye size={14} />
-                        Ver
-                      </button>
-                      <button type="button" className={secondaryButton} onClick={() => onEdit(row)}>
-                        <Pencil size={14} />
-                        Editar
-                      </button>
-                      <button
-                        type="button"
-                        className={secondaryButton}
-                        onClick={() => setVoucherConfirmRow(row)}
-                        disabled={row.source !== "remote"}
-                      >
-                        <Printer size={14} />
-                        Imprimir talón
-                      </button>
-                    </div>
+                    {showRowActions(row)}
                   </td>
                 </tr>
               ))}
@@ -3293,73 +3668,40 @@ function SamplesTable({
             </tbody>
           </table>
         </div>
+        ) : null}
+        {viewMode === "records" ? (
         <div className="exploraciones-mobile-list hidden divide-y divide-[var(--color-border-soft)]">
-          {rows.map((row) => (
-            <div key={row.id} className={`space-y-2 px-4 py-4 ${priorityMobileClass(row.priority)}`}>
+          {paginatedRows.map((row) => (
+            <div key={row.id} className={`px-4 py-3 ${priorityMobileClass(row.priority)}`}>
               <div className="flex items-start justify-between gap-3">
-                <div>
-                  <p className="text-xs font-bold uppercase tracking-wider text-[var(--color-on-surface-variant)]">
-                    Nombre
+                <div className="min-w-0">
+                  <p className="truncate text-sm font-extrabold">{formatVoucherLabel(row)}</p>
+                  <p className="mt-0.5 truncate text-xs font-semibold text-[var(--color-on-surface-variant)]">
+                    {row.name ?? row.location}
                   </p>
-                  <p className="mt-1 text-sm font-bold">{row.name ?? "-"}</p>
-                  <p className="mt-1 text-xs font-bold">Código / Talón {formatVoucherLabel(row)}</p>
                 </div>
-                <p className="shrink-0 text-xs text-[var(--color-on-surface-variant)]">
-                  {formatDate(row.sampledAt)}
-                </p>
+                {showRowActions(row)}
               </div>
-              <div className="grid gap-2 text-xs">
-                <p>
-                  <span className="font-bold text-[var(--color-on-surface-variant)]">Estado: </span>
-                  <span className={sampleStatusBadgeClass(row.status)}>{SAMPLE_STATUS_LABELS[row.status]}</span>
-                </p>
-                <p>
-                  <span className="font-bold text-[var(--color-on-surface-variant)]">Prioridad: </span>
-                  <span className={priorityBadgeClass(row.priority)}>{PRIORITY_LABELS[row.priority]}</span>
-                </p>
-                <p>
-                  <span className="font-bold text-[var(--color-on-surface-variant)]">Ubicación: </span>
-                  {row.location}
-                </p>
-                <p>
-                  <span className="font-bold text-[var(--color-on-surface-variant)]">Objetivo: </span>
-                  {row.objectiveName}
-                </p>
-                <p>
-                  <span className="font-bold text-[var(--color-on-surface-variant)]">Registrado por: </span>
-                  {row.createdByName}
-                </p>
-                <div>
-                  <span className="font-bold text-[var(--color-on-surface-variant)]">Resultados: </span>
-                  <div className="mt-1">
-                    <ResultStatus results={row.results} />
-                    {getRowSyncError(row) ? (
-                      <p className="mt-2 text-xs font-semibold text-[var(--color-error)]">
-                        {getRowSyncError(row)}
-                      </p>
-                    ) : null}
-                  </div>
-                </div>
+              <div className="mt-2 flex flex-wrap items-center gap-2">
+                <span className={sampleStatusBadgeClass(row.status)}>{SAMPLE_STATUS_LABELS[row.status]}</span>
+                <span className={priorityBadgeClass(row.priority)}>{PRIORITY_LABELS[row.priority]}</span>
+                <span className={`inline-flex rounded-full px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider ${
+                  row.source === "local"
+                    ? "bg-[var(--color-tertiary)] text-black"
+                    : "bg-[var(--color-success)] text-black"
+                }`}>
+                  {row.source === "local" ? "Pendiente sync" : "Sync"}
+                </span>
               </div>
-              <div className="flex flex-wrap gap-2">
-                <button type="button" className={secondaryButton} onClick={() => setDetailRow(row)}>
-                  <Eye size={14} />
-                  Ver
-                </button>
-                <button type="button" className={secondaryButton} onClick={() => onEdit(row)}>
-                  <Pencil size={14} />
-                  Editar resultados
-                </button>
-                <button
-                  type="button"
-                  className={secondaryButton}
-                  onClick={() => setVoucherConfirmRow(row)}
-                  disabled={row.source !== "remote"}
-                >
-                  <Printer size={14} />
-                  Imprimir talón
-                </button>
+              <div className="mt-2 grid grid-cols-2 gap-x-3 gap-y-1 text-xs text-[var(--color-on-surface-variant)]">
+                <p className="truncate"><span className="font-bold">Ubicación: </span>{row.location}</p>
+                <p className="truncate"><span className="font-bold">Muestreo: </span>{formatDate(row.sampledAt)}</p>
+                <p className="truncate"><span className="font-bold">Objetivo: </span>{row.objectiveName}</p>
+                <p className="truncate"><span className="font-bold">Usuario: </span>{row.createdByName}</p>
               </div>
+              {getRowSyncError(row) ? (
+                <p className="mt-2 text-xs font-semibold text-[var(--color-error)]">{getRowSyncError(row)}</p>
+              ) : null}
             </div>
           ))}
           {rows.length === 0 ? (
@@ -3367,6 +3709,88 @@ function SamplesTable({
               No hay muestras para mostrar.
             </p>
           ) : null}
+        </div>
+        ) : null}
+        {viewMode === "batches" ? (
+          <div className="divide-y divide-[var(--color-border-soft)]">
+            {paginatedGroups.map((group) => (
+              <section key={group.id} className="p-4">
+                <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                  <div>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <h3 className="text-sm font-extrabold">{group.title}</h3>
+                      <span className={dispatchStatusBadgeClass(group.status)}>
+                        {DISPATCH_STATUS_LABELS[group.status]}
+                      </span>
+                    </div>
+                    <p className="mt-1 text-xs text-[var(--color-on-surface-variant)]">
+                      {group.laboratory} · {formatDate(group.sentAt)} · {group.rows.length} muestra{group.rows.length === 1 ? "" : "s"}
+                    </p>
+                  </div>
+                </div>
+                <div className="mt-3 overflow-x-auto">
+                  <table className="w-full min-w-[760px] border-collapse text-left">
+                    <thead>
+                      <tr>
+                        {["Código / Talón", "Nombre", "Estado", "Prioridad", "Ubicación", "Resultados", "Acciones"].map((heading) => (
+                          <th key={heading} className="px-3 py-2 text-[10px] font-bold uppercase tracking-widest text-[var(--color-on-surface-variant)]">
+                            {heading}
+                          </th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-[var(--color-border-soft)]">
+                      {group.rows.map((row) => (
+                        <tr key={`${group.id}-${row.id}`} className={`${priorityRowClass(row.priority)} transition hover:brightness-[0.98]`}>
+                          <td className="px-3 py-2 text-xs font-bold">{formatVoucherLabel(row)}</td>
+                          <td className="px-3 py-2 text-xs">{row.name ?? "-"}</td>
+                          <td className="px-3 py-2 text-xs">
+                            <span className={sampleStatusBadgeClass(row.status)}>{SAMPLE_STATUS_LABELS[row.status]}</span>
+                          </td>
+                          <td className="px-3 py-2 text-xs">
+                            <span className={priorityBadgeClass(row.priority)}>{PRIORITY_LABELS[row.priority]}</span>
+                          </td>
+                          <td className="px-3 py-2 text-xs">{row.location}</td>
+                          <td className="px-3 py-2 text-xs"><ResultStatus results={row.results} /></td>
+                          <td className="px-3 py-2 text-xs">{showRowActions(row)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </section>
+            ))}
+            {dispatchGroups.length === 0 ? (
+              <p className="px-4 py-6 text-center text-sm text-[var(--color-on-surface-variant)]">
+                No hay lotes para mostrar con los filtros actuales.
+              </p>
+            ) : null}
+          </div>
+        ) : null}
+        <div className="flex flex-col gap-3 border-t border-[var(--color-border-soft)] px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+          <p className="text-xs text-[var(--color-on-surface-variant)]">
+            {viewMode === "records"
+              ? `${rows.length} registro${rows.length === 1 ? "" : "s"}`
+              : `${dispatchGroups.length} lote${dispatchGroups.length === 1 ? "" : "s"}`} · Página {activeCurrentPage} de {activeTotalPages}
+          </p>
+          <div className="grid grid-cols-2 gap-2 sm:flex">
+            <button
+              type="button"
+              className={secondaryButton}
+              disabled={activeCurrentPage <= 1}
+              onClick={() => setPage((current) => Math.max(1, current - 1))}
+            >
+              Anterior
+            </button>
+            <button
+              type="button"
+              className={secondaryButton}
+              disabled={activeCurrentPage >= activeTotalPages}
+              onClick={() => setPage((current) => Math.min(activeTotalPages, current + 1))}
+            >
+              Siguiente
+            </button>
+          </div>
         </div>
       </article>
 
@@ -3382,6 +3806,134 @@ function SamplesTable({
   );
 }
 
+function RowActionsMenu({
+  row,
+  isOpen,
+  onToggle,
+  onView,
+  onEdit,
+  onPrintVoucher
+}: {
+  row: SampleTableRow;
+  isOpen: boolean;
+  onToggle: () => void;
+  onView: () => void;
+  onEdit: () => void;
+  onPrintVoucher: () => void;
+}) {
+  return (
+    <div className="relative inline-flex shrink-0">
+      <button
+        type="button"
+        className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-[var(--color-outline-variant)] text-[var(--color-on-surface-variant)] transition hover:border-[var(--color-primary)] hover:text-[var(--color-on-surface)]"
+        onClick={onToggle}
+        aria-label="Abrir acciones"
+      >
+        <MoreVertical size={17} />
+      </button>
+      {isOpen ? (
+        <div className="absolute right-0 top-10 z-30 min-w-44 overflow-hidden rounded-lg border border-[var(--color-border-soft)] bg-[var(--color-surface-container-highest)] shadow-xl">
+          <button
+            type="button"
+            className="flex w-full items-center gap-2 px-3 py-2 text-left text-xs font-semibold hover:bg-[var(--color-surface-bright)]"
+            onClick={onView}
+          >
+            <Eye size={14} />
+            Ver
+          </button>
+          <button
+            type="button"
+            className="flex w-full items-center gap-2 px-3 py-2 text-left text-xs font-semibold hover:bg-[var(--color-surface-bright)]"
+            onClick={onEdit}
+          >
+            <Pencil size={14} />
+            Editar
+          </button>
+          <button
+            type="button"
+            className="flex w-full items-center gap-2 px-3 py-2 text-left text-xs font-semibold hover:bg-[var(--color-surface-bright)] disabled:opacity-50"
+            onClick={onPrintVoucher}
+            disabled={row.source !== "remote"}
+          >
+            <Printer size={14} />
+            Imprimir talón
+          </button>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function dispatchStatusBadgeClass(status: "PENDING" | "COMPLETED") {
+  return status === "COMPLETED"
+    ? "inline-flex rounded-full bg-[var(--color-success)] px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider text-black"
+    : "inline-flex rounded-full bg-[var(--color-warning)] px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider text-black";
+}
+
+function buildDispatchGroups(rows: SampleTableRow[], dispatches: SampleDispatch[], registerType: RegisterType) {
+  const rowsById = new Map(rows.map((row) => [row.id, row]));
+  const rowsByCode = new Map(rows.map((row) => [row.code.replace(" (offline)", ""), row]));
+  const usedRowIds = new Set<string>();
+  const groups = dispatches
+    .map((dispatch) => {
+      const groupRows = dispatch.items
+        .map((item) => {
+          const sampleId =
+            registerType === "interior"
+              ? item.interiorSampleId ?? item.sample?.id
+              : item.surfaceSampleId ?? item.sample?.id;
+          const sampleCode = item.sample?.code;
+          const row = (sampleId ? rowsById.get(sampleId) : undefined) ?? (sampleCode ? rowsByCode.get(sampleCode) : undefined);
+          if (row) usedRowIds.add(row.id);
+          return row;
+        })
+        .filter((row): row is SampleTableRow => Boolean(row))
+        .sort(compareSampleRows);
+
+      return {
+        id: dispatch.id,
+        title: dispatch.projectName || "Lote sin proyecto",
+        laboratory: dispatch.laboratory?.name ?? "Laboratorio",
+        sentAt: dispatch.sentAt,
+        status: dispatch.status ?? "PENDING",
+        rows: groupRows
+      };
+    })
+    .filter((group) => group.rows.length > 0)
+    .sort((left, right) => {
+      const leftStatus = left.rows.some((row) => row.status === "DISPATCHED") ? 1 : 0;
+      const rightStatus = right.rows.some((row) => row.status === "DISPATCHED") ? 1 : 0;
+      if (leftStatus !== rightStatus) return rightStatus - leftStatus;
+      const leftDate = left.sentAt ? new Date(left.sentAt).getTime() : 0;
+      const rightDate = right.sentAt ? new Date(right.sentAt).getTime() : 0;
+      return rightDate - leftDate;
+    });
+
+  const unbatchedRows = rows.filter((row) => !usedRowIds.has(row.id));
+  if (unbatchedRows.length > 0) {
+    groups.push({
+      id: "unbatched",
+      title: "Sin lote",
+      laboratory: "Muestras registradas sin despacho",
+      sentAt: "",
+      status: "PENDING" as const,
+      rows: unbatchedRows.sort(compareSampleRows)
+    });
+  }
+
+  return groups;
+}
+
+function compareSampleRows(left: SampleTableRow, right: SampleTableRow) {
+  const statusDiff = SAMPLE_STATUS_WEIGHT[right.status] - SAMPLE_STATUS_WEIGHT[left.status];
+  if (statusDiff !== 0) return statusDiff;
+  const priorityDiff = PRIORITY_WEIGHT[right.priority] - PRIORITY_WEIGHT[left.priority];
+  if (priorityDiff !== 0) return priorityDiff;
+  const leftDate = left.sampledAt ? new Date(left.sampledAt).getTime() : 0;
+  const rightDate = right.sampledAt ? new Date(right.sampledAt).getTime() : 0;
+  return rightDate - leftDate;
+}
+
 function DispatchPanel({
   registerType,
   form,
@@ -3391,11 +3943,14 @@ function DispatchPanel({
   laboratories,
   dispatches,
   isSaving,
+  sampleSearch,
+  onSampleSearchChange,
   onFormChange,
   onToggleSample,
   onToggleElement,
   onItemNotesChange,
   onSubmit,
+  onClose,
   onDeleteDispatch,
   onRegisterResults,
   onPrintDispatch
@@ -3408,22 +3963,31 @@ function DispatchPanel({
   laboratories: CatalogItem[];
   dispatches: SampleDispatch[];
   isSaving: boolean;
+  sampleSearch: string;
+  onSampleSearchChange: (value: string) => void;
   onFormChange: (field: keyof DispatchForm, value: string) => void;
   onToggleSample: (sampleId: string) => void;
   onToggleElement: (sampleId: string, elementId: string) => void;
   onItemNotesChange: (sampleId: string, notes: string) => void;
   onSubmit: (event: FormEvent<HTMLFormElement>) => void;
+  onClose: () => void;
   onDeleteDispatch: (dispatch: SampleDispatch) => void;
   onRegisterResults: (dispatch: SampleDispatch, item: NonNullable<SampleDispatch["items"]>[number]) => void;
   onPrintDispatch: (dispatch: SampleDispatch) => void;
 }) {
   const selectedBySample = new Map(items.map((item) => [item.sampleId, item]));
   const labOptions = labelOptions(laboratories);
+  const normalizedSampleSearch = normalizeCatalogText(sampleSearch);
+  const visibleSamples = normalizedSampleSearch
+    ? samples.filter((sample) =>
+        normalizeCatalogText(`${sample.code ?? ""} ${sample.name ?? ""}`).includes(normalizedSampleSearch)
+      )
+    : samples;
 
   return (
-    <section className={`${panelClass} exploraciones-panel p-5`}>
-      <form onSubmit={onSubmit} className="space-y-4">
-        <div className="flex flex-wrap items-start justify-between gap-3">
+    <div className="exploraciones-modal fixed inset-0 z-[100] flex items-end justify-center bg-black/55 p-0 sm:items-center sm:p-4">
+      <section className="exploraciones-modal-card flex h-[94vh] w-full flex-col overflow-hidden rounded-t-2xl border border-[var(--color-border-soft)] bg-[var(--color-surface-container-low)] shadow-2xl sm:h-auto sm:max-h-[92vh] sm:max-w-6xl sm:rounded-2xl">
+        <div className="flex items-start justify-between gap-3 border-b border-[var(--color-border-soft)] p-4">
           <div>
             <h2 className="flex items-center gap-2 text-lg font-bold">
               <Send size={18} />
@@ -3433,173 +3997,208 @@ function DispatchPanel({
               Agrupa muestras registradas, elige laboratorio y solicita los elementos a analizar.
             </p>
           </div>
-          <button type="submit" className={primaryButton} disabled={isSaving}>
-            <Send size={15} />
-            Crear lote
+          <button type="button" className="rounded-lg p-2 text-[var(--color-on-surface-variant)] hover:bg-[var(--color-surface-container-high)]" onClick={onClose} aria-label="Cerrar">
+            <X size={20} />
           </button>
         </div>
 
-        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-          <FormSelect label="Laboratorio" value={form.laboratoryId} options={labOptions} onChange={(value) => onFormChange("laboratoryId", value)} />
-          <TextField label="Proyecto" value={form.projectName} onChange={(value) => onFormChange("projectName", value)} />
-          <TextField label="Fecha de envío" type="datetime-local" value={form.sentAt} onChange={(value) => onFormChange("sentAt", value)} />
-          <TextField label="Notas" value={form.notes} onChange={(value) => onFormChange("notes", value)} />
-        </div>
-
-        <div className="grid gap-3 lg:grid-cols-[0.9fr_1.1fr]">
-          <div className="rounded-xl border border-[var(--color-border-soft)] bg-[var(--color-surface-container-high)] p-3">
-            <h3 className="text-xs font-bold uppercase tracking-wider text-[var(--color-on-surface-variant)]">
-              Muestras registradas
-            </h3>
-            <div className="mt-3 max-h-72 space-y-2 overflow-y-auto pr-1">
-              {samples.map((sample) => {
-                const selected = selectedBySample.has(sample.id);
-                return (
-                  <label
-                    key={sample.id}
-                    className={`flex cursor-pointer items-start gap-2 rounded-lg border px-3 py-2 text-sm ${
-                      selected
-                        ? "border-[var(--color-primary)] bg-[var(--color-primary)]/10"
-                        : "border-[var(--color-border-soft)]"
-                    }`}
-                  >
-                    <input
-                      type="checkbox"
-                      checked={selected}
-                      onChange={() => onToggleSample(sample.id)}
-                      className="mt-1"
-                    />
-                    <span>
-                      <span className="block font-bold">{sample.code}</span>
-                      <span className="block text-xs text-[var(--color-on-surface-variant)]">
-                        {sample.name ?? "-"} · {SAMPLE_STATUS_LABELS[sample.status ?? "REGISTERED"]}
-                      </span>
-                    </span>
-                  </label>
-                );
-              })}
-              {samples.length === 0 ? (
-                <p className="text-sm text-[var(--color-on-surface-variant)]">
-                  No hay muestras registradas disponibles para despachar en este filtro.
+        <div className="flex-1 overflow-y-auto p-4 sm:p-5">
+          <form onSubmit={onSubmit} className="space-y-4">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <h3 className="text-sm font-bold">Nuevo lote</h3>
+                <p className="mt-1 text-xs text-[var(--color-on-surface-variant)]">
+                  Selecciona el laboratorio y las muestras que irán juntas.
                 </p>
-              ) : null}
+              </div>
+              <button type="submit" className={`${primaryButton} w-full sm:w-auto`} disabled={isSaving}>
+                <Send size={15} />
+                Crear lote
+              </button>
             </div>
-          </div>
 
-          <div className="rounded-xl border border-[var(--color-border-soft)] bg-[var(--color-surface-container-high)] p-3">
-            <h3 className="text-xs font-bold uppercase tracking-wider text-[var(--color-on-surface-variant)]">
-              Elementos solicitados por muestra
-            </h3>
-            <div className="mt-3 max-h-72 space-y-3 overflow-y-auto pr-1">
-              {items.map((item) => {
-                const sample = samples.find((candidate) => candidate.id === item.sampleId);
-                return (
-                  <div key={item.sampleId} className="rounded-lg border border-[var(--color-border-soft)] p-3">
-                    <div className="flex flex-wrap items-center justify-between gap-2">
-                      <p className="text-sm font-bold">{sample?.code ?? item.sampleId}</p>
-                      <button type="button" className={secondaryButton} onClick={() => onToggleSample(item.sampleId)}>
-                        <Trash2 size={13} />
-                        Quitar
-                      </button>
-                    </div>
-                    <div className="mt-3 flex flex-wrap gap-2">
-                      {elements.map((element) => (
-                        <label key={element.id} className="inline-flex cursor-pointer items-center gap-1 rounded-lg border border-[var(--color-border-soft)] px-2 py-1 text-xs">
-                          <input
-                            type="checkbox"
-                            checked={item.elementIds.includes(element.id)}
-                            onChange={() => onToggleElement(item.sampleId, element.id)}
-                          />
-                          {element.symbol}
-                        </label>
-                      ))}
-                    </div>
-                    <input
-                      className={`${fieldClass} mt-3`}
-                      value={item.notes}
-                      onChange={(event) => onItemNotesChange(item.sampleId, event.target.value)}
-                      placeholder="Notas de la muestra en este lote"
-                    />
-                  </div>
-                );
-              })}
-              {items.length === 0 ? (
-                <p className="text-sm text-[var(--color-on-surface-variant)]">
-                  Selecciona muestras para indicar qué elementos debe revisar el laboratorio.
-                </p>
-              ) : null}
+            <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+              <FormSelect label="Laboratorio" value={form.laboratoryId} options={labOptions} onChange={(value) => onFormChange("laboratoryId", value)} />
+              <TextField label="Proyecto" value={form.projectName} onChange={(value) => onFormChange("projectName", value)} />
+              <TextField label="Fecha de envío" type="datetime-local" value={form.sentAt} onChange={(value) => onFormChange("sentAt", value)} />
+              <TextField label="Notas" value={form.notes} onChange={(value) => onFormChange("notes", value)} />
             </div>
-          </div>
-        </div>
-      </form>
 
-      <div className="mt-5 border-t border-[var(--color-border-soft)] pt-4">
-        <h3 className="text-sm font-bold">Lotes enviados</h3>
-        <div className="mt-3 space-y-3">
-          {dispatches.map((dispatch) => (
-            <div key={dispatch.id} className="rounded-xl border border-[var(--color-border-soft)] bg-[var(--color-surface-container-high)] p-3">
-              <div className="flex flex-wrap items-start justify-between gap-3">
-                <div>
-                  <p className="text-sm font-bold">
-                    {dispatch.projectName || "Sin proyecto"} · {dispatch.laboratory?.name ?? "Laboratorio"}
-                  </p>
-                  <p className="mt-1 text-xs text-[var(--color-on-surface-variant)]">
-                    Enviado: {formatDate(dispatch.sentAt)} · {DISPATCH_STATUS_LABELS[dispatch.status ?? "PENDING"]}
-                  </p>
+            <div className="grid gap-3 lg:grid-cols-[0.9fr_1.1fr]">
+              <div className="rounded-xl border border-[var(--color-border-soft)] bg-[var(--color-surface-container-high)] p-3">
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                  <h3 className="text-xs font-bold uppercase tracking-wider text-[var(--color-on-surface-variant)]">
+                    Muestras registradas
+                  </h3>
+                  <span className="text-xs text-[var(--color-on-surface-variant)]">
+                    {visibleSamples.length} de {samples.length}
+                  </span>
                 </div>
-                <div className="flex flex-wrap gap-2">
-                  <button
-                    type="button"
-                    className={secondaryButton}
-                    onClick={() => onPrintDispatch(dispatch)}
-                  >
-                    <Printer size={14} />
-                    Imprimir nota
-                  </button>
-                  <button
-                    type="button"
-                    className={secondaryButton}
-                    disabled={dispatch.status === "COMPLETED" || isSaving}
-                    onClick={() => onDeleteDispatch(dispatch)}
-                  >
-                    <Trash2 size={14} />
-                    Eliminar
-                  </button>
+                <div className="relative mt-3">
+                  <Search className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[var(--color-on-surface-variant)]" size={16} />
+                  <input
+                    className={`${fieldClass} py-2 pl-9`}
+                    value={sampleSearch}
+                    onChange={(event) => onSampleSearchChange(event.target.value)}
+                    placeholder="Buscar por código o nombre"
+                  />
+                </div>
+                <div className="mt-3 max-h-[42vh] space-y-2 overflow-y-auto pr-1 sm:max-h-72">
+                  {visibleSamples.map((sample) => {
+                    const selected = selectedBySample.has(sample.id);
+                    return (
+                      <label
+                        key={sample.id}
+                        className={`flex cursor-pointer items-start gap-2 rounded-lg border px-3 py-2 text-sm ${
+                          selected
+                            ? "border-[var(--color-primary)] bg-[var(--color-primary)]/10"
+                            : "border-[var(--color-border-soft)]"
+                        }`}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={selected}
+                          onChange={() => onToggleSample(sample.id)}
+                          className="mt-1"
+                        />
+                        <span className="min-w-0">
+                          <span className="block truncate font-bold">{sample.code}</span>
+                          <span className="block break-words text-xs text-[var(--color-on-surface-variant)]">
+                            {sample.name ?? "-"} · {SAMPLE_STATUS_LABELS[sample.status ?? "REGISTERED"]}
+                          </span>
+                        </span>
+                      </label>
+                    );
+                  })}
+                  {samples.length === 0 ? (
+                    <p className="text-sm text-[var(--color-on-surface-variant)]">
+                      No hay muestras registradas disponibles para despachar en este filtro.
+                    </p>
+                  ) : null}
+                  {samples.length > 0 && visibleSamples.length === 0 ? (
+                    <p className="text-sm text-[var(--color-on-surface-variant)]">
+                      No hay muestras que coincidan con la búsqueda.
+                    </p>
+                  ) : null}
                 </div>
               </div>
-              <div className="mt-3 grid gap-2 md:grid-cols-2">
-                {dispatch.items.map((item) => (
-                  <div key={item.id} className="rounded-lg border border-[var(--color-border-soft)] p-3">
-                    <div className="flex flex-wrap items-start justify-between gap-2">
-                      <div>
-                        <p className="text-sm font-bold">{item.sample?.code ?? item.interiorSampleId ?? item.surfaceSampleId}</p>
-                        <p className="mt-1 text-xs text-[var(--color-on-surface-variant)]">
-                          {DISPATCH_STATUS_LABELS[item.status ?? "PENDING"]} · {(item.requestedElements ?? []).map((requested) => requested.element?.symbol ?? requested.elementId).join(", ")}
-                        </p>
+
+              <div className="rounded-xl border border-[var(--color-border-soft)] bg-[var(--color-surface-container-high)] p-3">
+                <h3 className="text-xs font-bold uppercase tracking-wider text-[var(--color-on-surface-variant)]">
+                  Elementos solicitados por muestra
+                </h3>
+                <div className="mt-3 max-h-[42vh] space-y-3 overflow-y-auto pr-1 sm:max-h-72">
+                  {items.map((item) => {
+                    const sample = samples.find((candidate) => candidate.id === item.sampleId);
+                    return (
+                      <div key={item.sampleId} className="rounded-lg border border-[var(--color-border-soft)] p-3">
+                        <div className="flex flex-wrap items-center justify-between gap-2">
+                          <p className="text-sm font-bold">{sample?.code ?? item.sampleId}</p>
+                          <button type="button" className={secondaryButton} onClick={() => onToggleSample(item.sampleId)}>
+                            <Trash2 size={13} />
+                            Quitar
+                          </button>
+                        </div>
+                        <div className="mt-3 flex flex-wrap gap-2">
+                          {elements.map((element) => (
+                            <label key={element.id} className="inline-flex cursor-pointer items-center gap-1 rounded-lg border border-[var(--color-border-soft)] px-2 py-1 text-xs">
+                              <input
+                                type="checkbox"
+                                checked={item.elementIds.includes(element.id)}
+                                onChange={() => onToggleElement(item.sampleId, element.id)}
+                              />
+                              {element.symbol}
+                            </label>
+                          ))}
+                        </div>
+                        <input
+                          className={`${fieldClass} mt-3`}
+                          value={item.notes}
+                          onChange={(event) => onItemNotesChange(item.sampleId, event.target.value)}
+                          placeholder="Notas de la muestra en este lote"
+                        />
                       </div>
+                    );
+                  })}
+                  {items.length === 0 ? (
+                    <p className="text-sm text-[var(--color-on-surface-variant)]">
+                      Selecciona muestras para indicar qué elementos debe revisar el laboratorio.
+                    </p>
+                  ) : null}
+                </div>
+              </div>
+            </div>
+          </form>
+
+          <div className="mt-5 border-t border-[var(--color-border-soft)] pt-4">
+            <h3 className="text-sm font-bold">Lotes enviados</h3>
+            <div className="mt-3 space-y-3">
+              {dispatches.map((dispatch) => (
+                <div key={dispatch.id} className="rounded-xl border border-[var(--color-border-soft)] bg-[var(--color-surface-container-high)] p-3">
+                  <div className="flex flex-wrap items-start justify-between gap-3">
+                    <div>
+                      <p className="text-sm font-bold">
+                        {dispatch.projectName || "Sin proyecto"} · {dispatch.laboratory?.name ?? "Laboratorio"}
+                      </p>
+                      <p className="mt-1 text-xs text-[var(--color-on-surface-variant)]">
+                        Enviado: {formatDate(dispatch.sentAt)} · {DISPATCH_STATUS_LABELS[dispatch.status ?? "PENDING"]}
+                      </p>
+                    </div>
+                    <div className="flex flex-wrap gap-2">
                       <button
                         type="button"
                         className={secondaryButton}
-                        disabled={item.status === "COMPLETED"}
-                        onClick={() => onRegisterResults(dispatch, item)}
+                        onClick={() => onPrintDispatch(dispatch)}
                       >
-                        <Plus size={14} />
-                        Resultados
+                        <Printer size={14} />
+                        Imprimir nota
+                      </button>
+                      <button
+                        type="button"
+                        className={secondaryButton}
+                        disabled={dispatch.status === "COMPLETED" || isSaving}
+                        onClick={() => onDeleteDispatch(dispatch)}
+                      >
+                        <Trash2 size={14} />
+                        Eliminar
                       </button>
                     </div>
                   </div>
-                ))}
-              </div>
+                  <div className="mt-3 grid gap-2 md:grid-cols-2">
+                    {dispatch.items.map((item) => (
+                      <div key={item.id} className="rounded-lg border border-[var(--color-border-soft)] p-3">
+                        <div className="flex flex-wrap items-start justify-between gap-2">
+                          <div>
+                            <p className="text-sm font-bold">{item.sample?.code ?? item.interiorSampleId ?? item.surfaceSampleId}</p>
+                            <p className="mt-1 text-xs text-[var(--color-on-surface-variant)]">
+                              {DISPATCH_STATUS_LABELS[item.status ?? "PENDING"]} · {(item.requestedElements ?? []).map((requested) => requested.element?.symbol ?? requested.elementId).join(", ")}
+                            </p>
+                          </div>
+                          <button
+                            type="button"
+                            className={secondaryButton}
+                            disabled={item.status === "COMPLETED"}
+                            onClick={() => onRegisterResults(dispatch, item)}
+                          >
+                            <Plus size={14} />
+                            Resultados
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ))}
+              {dispatches.length === 0 ? (
+                <p className="text-sm text-[var(--color-on-surface-variant)]">
+                  Aún no hay lotes para {registerType === "interior" ? "Interior Mina" : "Superficie"}.
+                </p>
+              ) : null}
             </div>
-          ))}
-          {dispatches.length === 0 ? (
-            <p className="text-sm text-[var(--color-on-surface-variant)]">
-              Aún no hay lotes para {registerType === "interior" ? "Interior Mina" : "Superficie"}.
-            </p>
-          ) : null}
+          </div>
         </div>
-      </div>
-    </section>
+      </section>
+    </div>
   );
 }
 
