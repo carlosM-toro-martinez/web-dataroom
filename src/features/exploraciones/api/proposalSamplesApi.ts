@@ -12,6 +12,8 @@ import {
   sampleResultSchema,
   surfaceAreaSchema,
   surfaceHierarchyAreaSchema,
+  surfaceLaborSchema,
+  surfaceLevelSchema,
   surfaceSampleSchema,
   type CreateDispatchPayload,
   type CreateSampleResultPayload,
@@ -88,6 +90,18 @@ export async function createInteriorArea(payload: {
   return parseOne(response.data, (item) => interiorAreaSchema.parse(item));
 }
 
+export async function updateInteriorArea(
+  id: string,
+  payload: Partial<{ name: string; abbreviation: string; description?: string }>
+) {
+  const response = await httpClient.patch(apiEndpoints.exploraciones.interiorAreaById(id), payload);
+  return parseOne(response.data, (item) => interiorAreaSchema.parse(item));
+}
+
+export async function deleteInteriorArea(id: string) {
+  await httpClient.delete(apiEndpoints.exploraciones.interiorAreaById(id));
+}
+
 export async function getInteriorLevels(params?: {
   interiorAreaId?: string;
   search?: string;
@@ -111,6 +125,24 @@ export async function createInteriorLevel(payload: {
   return parseOne(response.data, (item) => interiorLevelSchema.parse(item));
 }
 
+export async function updateInteriorLevel(
+  id: string,
+  payload: Partial<{
+    interiorAreaId: string;
+    name: string;
+    abbreviation: string;
+    elevation?: number;
+    description?: string;
+  }>
+) {
+  const response = await httpClient.patch(apiEndpoints.exploraciones.interiorLevelById(id), payload);
+  return parseOne(response.data, (item) => interiorLevelSchema.parse(item));
+}
+
+export async function deleteInteriorLevel(id: string) {
+  await httpClient.delete(apiEndpoints.exploraciones.interiorLevelById(id));
+}
+
 export async function getInteriorLabors(params?: {
   interiorLevelId?: string;
   search?: string;
@@ -131,6 +163,18 @@ export async function createInteriorLabor(payload: {
 }) {
   const response = await httpClient.post(apiEndpoints.exploraciones.interiorLabors, payload);
   return parseOne(response.data, (item) => interiorLaborSchema.parse(item));
+}
+
+export async function updateInteriorLabor(
+  id: string,
+  payload: Partial<{ interiorLevelId: string; name: string; abbreviation: string; description?: string }>
+) {
+  const response = await httpClient.patch(apiEndpoints.exploraciones.interiorLaborById(id), payload);
+  return parseOne(response.data, (item) => interiorLaborSchema.parse(item));
+}
+
+export async function deleteInteriorLabor(id: string) {
+  await httpClient.delete(apiEndpoints.exploraciones.interiorLaborById(id));
 }
 
 export async function getInteriorObjectives(params?: { search?: string; page?: number; limit?: number }) {
@@ -268,6 +312,93 @@ export async function createSurfaceArea(payload: {
   return parseOne(response.data, (item) => surfaceAreaSchema.parse(item));
 }
 
+export async function updateSurfaceArea(
+  id: string,
+  payload: Partial<{ name: string; abbreviation: string; description?: string }>
+) {
+  const response = await httpClient.patch(apiEndpoints.exploraciones.surfaceSampleAreaById(id), payload);
+  return parseOne(response.data, (item) => surfaceAreaSchema.parse(item));
+}
+
+export async function deleteSurfaceArea(id: string) {
+  await httpClient.delete(apiEndpoints.exploraciones.surfaceSampleAreaById(id));
+}
+
+export async function getSurfaceLevels(params?: {
+  surfaceAreaId?: string;
+  search?: string;
+  page?: number;
+  limit?: number;
+}) {
+  const response = await httpClient.get(apiEndpoints.exploraciones.surfaceSampleLevels, {
+    params: buildParams(params)
+  });
+  return parseList(response.data, (item) => surfaceLevelSchema.parse(item));
+}
+
+export async function createSurfaceLevel(payload: {
+  surfaceAreaId: string;
+  name: string;
+  abbreviation: string;
+  elevation?: number;
+  description?: string;
+}) {
+  const response = await httpClient.post(apiEndpoints.exploraciones.surfaceSampleLevels, payload);
+  return parseOne(response.data, (item) => surfaceLevelSchema.parse(item));
+}
+
+export async function updateSurfaceLevel(
+  id: string,
+  payload: Partial<{
+    surfaceAreaId: string;
+    name: string;
+    abbreviation: string;
+    elevation?: number;
+    description?: string;
+  }>
+) {
+  const response = await httpClient.patch(apiEndpoints.exploraciones.surfaceSampleLevelById(id), payload);
+  return parseOne(response.data, (item) => surfaceLevelSchema.parse(item));
+}
+
+export async function deleteSurfaceLevel(id: string) {
+  await httpClient.delete(apiEndpoints.exploraciones.surfaceSampleLevelById(id));
+}
+
+export async function getSurfaceLabors(params?: {
+  surfaceLevelId?: string;
+  search?: string;
+  page?: number;
+  limit?: number;
+}) {
+  const response = await httpClient.get(apiEndpoints.exploraciones.surfaceSampleLabors, {
+    params: buildParams(params)
+  });
+  return parseList(response.data, (item) => surfaceLaborSchema.parse(item));
+}
+
+export async function createSurfaceLabor(payload: {
+  surfaceLevelId: string;
+  name: string;
+  abbreviation: string;
+  description?: string;
+}) {
+  const response = await httpClient.post(apiEndpoints.exploraciones.surfaceSampleLabors, payload);
+  return parseOne(response.data, (item) => surfaceLaborSchema.parse(item));
+}
+
+export async function updateSurfaceLabor(
+  id: string,
+  payload: Partial<{ surfaceLevelId: string; name: string; abbreviation: string; description?: string }>
+) {
+  const response = await httpClient.patch(apiEndpoints.exploraciones.surfaceSampleLaborById(id), payload);
+  return parseOne(response.data, (item) => surfaceLaborSchema.parse(item));
+}
+
+export async function deleteSurfaceLabor(id: string) {
+  await httpClient.delete(apiEndpoints.exploraciones.surfaceSampleLaborById(id));
+}
+
 export async function getSurfaceObjectives(params?: { search?: string; page?: number; limit?: number }) {
   const response = await httpClient.get(apiEndpoints.exploraciones.surfaceSampleObjectives, {
     params: buildParams(params)
@@ -302,7 +433,7 @@ export async function getSurfaceHierarchy() {
 }
 
 export async function getSurfaceSamples(params?: {
-  surfaceAreaId?: string;
+  surfaceLaborId?: string;
   surfaceObjectiveId?: string;
   category?: SampleCategory;
   status?: SampleStatus;
@@ -335,7 +466,7 @@ export async function createSurfaceSampleWithResults(payload: SurfaceSampleWithR
 
 export async function updateSurfaceSampleWithResults(
   id: string,
-  payload: Partial<Omit<SurfaceSampleWithResultsPayload, "surfaceAreaId">>
+  payload: Partial<Omit<SurfaceSampleWithResultsPayload, "surfaceLaborId">>
 ) {
   const response = await httpClient.patch(
     apiEndpoints.exploraciones.surfaceProposalSampleWithResultsById(id),

@@ -1,0 +1,26 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(curl -s -m 5 -X POST http://localhost:3000/api/auth/login -H \"Content-Type: application/json\" -d '{\"email\":\"carlostorom.96@gmail.com\",\"password\":\"admin123\"}')",
+      "Bash(curl -s -m 5 http://localhost:3000/api/surface-sample/areas -H 'Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6MSwicm9sZSI6IkFETUlOIiwiaWF0IjoxNzg0NTc4NDg5LCJleHAiOjE3ODQ2MDcyODl9.Ak69plZhGXZc55Xz6X7jh5tZv2NIR05vY7t_tkue5Ig')",
+      "Bash(curl -s -m 5 http://localhost:3000/api/surface-sample/hierarchy -H 'Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6MSwicm9sZSI6IkFETUlOIiwiaWF0IjoxNzg0NTc4NDg5LCJleHAiOjE3ODQ2MDcyODl9.Ak69plZhGXZc55Xz6X7jh5tZv2NIR05vY7t_tkue5Ig')",
+      "Bash(curl -s -m 5 http://localhost:3000/api/interior/areas -H 'Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6MSwicm9sZSI6IkFETUlOIiwiaWF0IjoxNzg0NTc4NDg5LCJleHAiOjE3ODQ2MDcyODl9.Ak69plZhGXZc55Xz6X7jh5tZv2NIR05vY7t_tkue5Ig')",
+      "Bash(curl -s -m 5 http://localhost:3000/api/interior/hierarchy -H 'Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6MSwicm9sZSI6IkFETUlOIiwiaWF0IjoxNzg0NTc4NDg5LCJleHAiOjE3ODQ2MDcyODl9.Ak69plZhGXZc55Xz6X7jh5tZv2NIR05vY7t_tkue5Ig')",
+      "Bash(echo \"EXIT:$?\")",
+      "Bash(npx vitest *)",
+      "Bash(taskkill //F //PID 35132)",
+      "Bash(curl -s -m 5 http://localhost:3000/api/interior/areas -H \"Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6MSwicm9sZSI6IkFETUlOIiwiaWF0IjoxNzg0NTc4NDg5LCJleHAiOjE3ODQ2MDcyODl9.Ak69plZhGXZc55Xz6X7jh5tZv2NIR05vY7t_tkue5Ig\")",
+      "Bash(cat /tmp/api_dev.log | tail -60)",
+      "Read(//tmp/**)",
+      "Bash(curl -s -m 5 -X DELETE http://localhost:3000/api/surface-sample/samples/fc0d596c-0089-463b-a69c-6bd950015dfc -H 'Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6MSwicm9sZSI6IkFETUlOIiwiaWF0IjoxNzg0NTc4NDg5LCJleHAiOjE3ODQ2MDcyODl9.Ak69plZhGXZc55Xz6X7jh5tZv2NIR05vY7t_tkue5Ig')",
+      "Bash(curl -s -m 5 -X DELETE http://localhost:3000/api/surface-sample/labors/2c1bc760-5d50-4d1e-9c68-df0227e347d3 -H 'Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6MSwicm9sZSI6IkFETUlOIiwiaWF0IjoxNzg0NTc4NDg5LCJleHAiOjE3ODQ2MDcyODl9.Ak69plZhGXZc55Xz6X7jh5tZv2NIR05vY7t_tkue5Ig')",
+      "Bash(curl -s -m 5 -X DELETE http://localhost:3000/api/surface-sample/levels/8963bb49-7f09-4a28-b87b-d69e6f94bb69 -H 'Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6MSwicm9sZSI6IkFETUlOIiwiaWF0IjoxNzg0NTc4NDg5LCJleHAiOjE3ODQ2MDcyODl9.Ak69plZhGXZc55Xz6X7jh5tZv2NIR05vY7t_tkue5Ig')",
+      "Bash(curl -s -m 5 -X DELETE http://localhost:3000/api/surface-sample/areas/9bf0a0e9-2e7e-4df3-8afd-17ccf73775be -H 'Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6MSwicm9sZSI6IkFETUlOIiwiaWF0IjoxNzg0NTc4NDg5LCJleHAiOjE3ODQ2MDcyODl9.Ak69plZhGXZc55Xz6X7jh5tZv2NIR05vY7t_tkue5Ig')",
+      "Bash(curl -s -m 5 -X DELETE http://localhost:3000/api/surface-sample/objectives/fc0ea5d3-787e-44f5-a433-758425d0231a -H 'Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6MSwicm9sZSI6IkFETUlOIiwiaWF0IjoxNzg0NTc4NDg5LCJleHAiOjE3ODQ2MDcyODl9.Ak69plZhGXZc55Xz6X7jh5tZv2NIR05vY7t_tkue5Ig')",
+      "Bash(curl -s -m 5 -X DELETE http://localhost:3000/api/surface-sample/labors/e5c1b646-f697-48c4-9924-37606912af73 -H 'Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6MSwicm9sZSI6IkFETUlOIiwiaWF0IjoxNzg0NTc4NDg5LCJleHAiOjE3ODQ2MDcyODl9.Ak69plZhGXZc55Xz6X7jh5tZv2NIR05vY7t_tkue5Ig')",
+      "Bash(curl -s -m 5 -X DELETE http://localhost:3000/api/surface-sample/levels/0731b6af-9e58-488e-9459-dabc9eb44480 -H 'Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6MSwicm9sZSI6IkFETUlOIiwiaWF0IjoxNzg0NTc4NDg5LCJleHAiOjE3ODQ2MDcyODl9.Ak69plZhGXZc55Xz6X7jh5tZv2NIR05vY7t_tkue5Ig')",
+      "Bash(curl -s -m 5 -X DELETE http://localhost:3000/api/surface-sample/areas/6f36c7d7-d288-4d67-9caa-e8ad0e323ae2 -H 'Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6MSwicm9sZSI6IkFETUlOIiwiaWF0IjoxNzg0NTc4NDg5LCJleHAiOjE3ODQ2MDcyODl9.Ak69plZhGXZc55Xz6X7jh5tZv2NIR05vY7t_tkue5Ig')",
+      "Bash(tail -20 /tmp/api_dev.log)"
+    ]
+  }
+}

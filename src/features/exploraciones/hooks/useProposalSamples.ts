@@ -11,12 +11,20 @@ import {
   createSurfaceDispatch,
   createSharedElement,
   createSurfaceArea,
+  createSurfaceLabor,
   createSurfaceLaboratory,
+  createSurfaceLevel,
   createSurfaceObjective,
   createSurfaceSampleResult,
   createSurfaceSampleWithResults,
+  deleteInteriorArea,
   deleteInteriorDispatch,
+  deleteInteriorLabor,
+  deleteInteriorLevel,
+  deleteSurfaceArea,
   deleteSurfaceDispatch,
+  deleteSurfaceLabor,
+  deleteSurfaceLevel,
   getInteriorDispatches,
   getInteriorAreas,
   getInteriorHierarchy,
@@ -29,12 +37,20 @@ import {
   getSurfaceDispatches,
   getSurfaceAreas,
   getSurfaceHierarchy,
+  getSurfaceLabors,
   getSurfaceLaboratories,
+  getSurfaceLevels,
   getSurfaceObjectives,
   getSurfaceSamples,
+  updateInteriorArea,
   updateInteriorDispatch,
+  updateInteriorLabor,
+  updateInteriorLevel,
   updateInteriorSampleWithResults,
+  updateSurfaceArea,
   updateSurfaceDispatch,
+  updateSurfaceLabor,
+  updateSurfaceLevel,
   updateSurfaceSampleWithResults
 } from "@/features/exploraciones/api/proposalSamplesApi";
 import {
@@ -67,6 +83,11 @@ import type {
 } from "@/features/exploraciones/model/proposalSamples.schema";
 
 const base = ["exploraciones", "proposal-samples"] as const;
+const catalogQueryOptions = {
+  staleTime: 30 * 60_000,
+  gcTime: 24 * 60 * 60_000,
+  refetchOnWindowFocus: false
+} as const;
 
 function useInvalidateProposalSamples() {
   const queryClient = useQueryClient();
@@ -196,21 +217,24 @@ export function useQueueRemoteProposalSampleEditMutation() {
 export function useSharedElementsQuery() {
   return useQuery({
     queryKey: [...base, "elements"],
-    queryFn: () => getSharedElements({ page: 1, limit: 500 })
+    queryFn: () => getSharedElements({ page: 1, limit: 500 }),
+    ...catalogQueryOptions
   });
 }
 
 export function useInteriorAreasQuery() {
   return useQuery({
     queryKey: [...base, "interior", "areas"],
-    queryFn: () => getInteriorAreas({ page: 1, limit: 300 })
+    queryFn: () => getInteriorAreas({ page: 1, limit: 300 }),
+    ...catalogQueryOptions
   });
 }
 
 export function useInteriorHierarchyQuery() {
   return useQuery({
     queryKey: [...base, "interior", "hierarchy"],
-    queryFn: getInteriorHierarchy
+    queryFn: getInteriorHierarchy,
+    ...catalogQueryOptions
   });
 }
 
@@ -218,7 +242,8 @@ export function useInteriorLevelsQuery(interiorAreaId?: string) {
   return useQuery({
     queryKey: [...base, "interior", "levels", interiorAreaId],
     queryFn: () => getInteriorLevels({ interiorAreaId, page: 1, limit: 300 }),
-    enabled: Boolean(interiorAreaId)
+    enabled: Boolean(interiorAreaId),
+    ...catalogQueryOptions
   });
 }
 
@@ -226,21 +251,24 @@ export function useInteriorLaborsQuery(interiorLevelId?: string) {
   return useQuery({
     queryKey: [...base, "interior", "labors", interiorLevelId],
     queryFn: () => getInteriorLabors({ interiorLevelId, page: 1, limit: 300 }),
-    enabled: Boolean(interiorLevelId)
+    enabled: Boolean(interiorLevelId),
+    ...catalogQueryOptions
   });
 }
 
 export function useInteriorObjectivesQuery() {
   return useQuery({
     queryKey: [...base, "interior", "objectives"],
-    queryFn: () => getInteriorObjectives({ page: 1, limit: 300 })
+    queryFn: () => getInteriorObjectives({ page: 1, limit: 300 }),
+    ...catalogQueryOptions
   });
 }
 
 export function useInteriorLaboratoriesQuery() {
   return useQuery({
     queryKey: [...base, "interior", "laboratories"],
-    queryFn: () => getInteriorLaboratories({ page: 1, limit: 300 })
+    queryFn: () => getInteriorLaboratories({ page: 1, limit: 300 }),
+    ...catalogQueryOptions
   });
 }
 
@@ -261,33 +289,55 @@ export function useInteriorSamplesQuery(params: {
 export function useSurfaceAreasQuery() {
   return useQuery({
     queryKey: [...base, "surface", "areas"],
-    queryFn: () => getSurfaceAreas({ page: 1, limit: 300 })
+    queryFn: () => getSurfaceAreas({ page: 1, limit: 300 }),
+    ...catalogQueryOptions
   });
 }
 
 export function useSurfaceHierarchyQuery() {
   return useQuery({
     queryKey: [...base, "surface", "hierarchy"],
-    queryFn: getSurfaceHierarchy
+    queryFn: getSurfaceHierarchy,
+    ...catalogQueryOptions
   });
 }
 
 export function useSurfaceObjectivesQuery() {
   return useQuery({
     queryKey: [...base, "surface", "objectives"],
-    queryFn: () => getSurfaceObjectives({ page: 1, limit: 300 })
+    queryFn: () => getSurfaceObjectives({ page: 1, limit: 300 }),
+    ...catalogQueryOptions
+  });
+}
+
+export function useSurfaceLevelsQuery(surfaceAreaId?: string) {
+  return useQuery({
+    queryKey: [...base, "surface", "levels", surfaceAreaId],
+    queryFn: () => getSurfaceLevels({ surfaceAreaId, page: 1, limit: 300 }),
+    enabled: Boolean(surfaceAreaId),
+    ...catalogQueryOptions
+  });
+}
+
+export function useSurfaceLaborsQuery(surfaceLevelId?: string) {
+  return useQuery({
+    queryKey: [...base, "surface", "labors", surfaceLevelId],
+    queryFn: () => getSurfaceLabors({ surfaceLevelId, page: 1, limit: 300 }),
+    enabled: Boolean(surfaceLevelId),
+    ...catalogQueryOptions
   });
 }
 
 export function useSurfaceLaboratoriesQuery() {
   return useQuery({
     queryKey: [...base, "surface", "laboratories"],
-    queryFn: () => getSurfaceLaboratories({ page: 1, limit: 300 })
+    queryFn: () => getSurfaceLaboratories({ page: 1, limit: 300 }),
+    ...catalogQueryOptions
   });
 }
 
 export function useSurfaceSamplesQuery(params: {
-  surfaceAreaId?: string;
+  surfaceLaborId?: string;
   createdById?: number;
   category?: SampleCategory;
   status?: SampleStatus;
@@ -330,14 +380,66 @@ export function useCreateInteriorAreaMutation() {
   return useMutation({ mutationFn: createInteriorArea, onSuccess: invalidate });
 }
 
+export function useUpdateInteriorAreaMutation() {
+  const invalidate = useInvalidateProposalSamples();
+  return useMutation({
+    mutationFn: ({ id, payload }: { id: string; payload: Partial<{ name: string; abbreviation: string; description?: string }> }) =>
+      updateInteriorArea(id, payload),
+    onSuccess: invalidate
+  });
+}
+
+export function useDeleteInteriorAreaMutation() {
+  const invalidate = useInvalidateProposalSamples();
+  return useMutation({ mutationFn: deleteInteriorArea, onSuccess: invalidate });
+}
+
 export function useCreateInteriorLevelMutation() {
   const invalidate = useInvalidateProposalSamples();
   return useMutation({ mutationFn: createInteriorLevel, onSuccess: invalidate });
 }
 
+export function useUpdateInteriorLevelMutation() {
+  const invalidate = useInvalidateProposalSamples();
+  return useMutation({
+    mutationFn: ({
+      id,
+      payload
+    }: {
+      id: string;
+      payload: Partial<{ interiorAreaId: string; name: string; abbreviation: string; elevation?: number; description?: string }>;
+    }) => updateInteriorLevel(id, payload),
+    onSuccess: invalidate
+  });
+}
+
+export function useDeleteInteriorLevelMutation() {
+  const invalidate = useInvalidateProposalSamples();
+  return useMutation({ mutationFn: deleteInteriorLevel, onSuccess: invalidate });
+}
+
 export function useCreateInteriorLaborMutation() {
   const invalidate = useInvalidateProposalSamples();
   return useMutation({ mutationFn: createInteriorLabor, onSuccess: invalidate });
+}
+
+export function useUpdateInteriorLaborMutation() {
+  const invalidate = useInvalidateProposalSamples();
+  return useMutation({
+    mutationFn: ({
+      id,
+      payload
+    }: {
+      id: string;
+      payload: Partial<{ interiorLevelId: string; name: string; abbreviation: string; description?: string }>;
+    }) => updateInteriorLabor(id, payload),
+    onSuccess: invalidate
+  });
+}
+
+export function useDeleteInteriorLaborMutation() {
+  const invalidate = useInvalidateProposalSamples();
+  return useMutation({ mutationFn: deleteInteriorLabor, onSuccess: invalidate });
 }
 
 export function useCreateInteriorObjectiveMutation() {
@@ -358,6 +460,68 @@ export function useCreateInteriorSampleWithResultsMutation() {
 export function useCreateSurfaceAreaMutation() {
   const invalidate = useInvalidateProposalSamples();
   return useMutation({ mutationFn: createSurfaceArea, onSuccess: invalidate });
+}
+
+export function useUpdateSurfaceAreaMutation() {
+  const invalidate = useInvalidateProposalSamples();
+  return useMutation({
+    mutationFn: ({ id, payload }: { id: string; payload: Partial<{ name: string; abbreviation: string; description?: string }> }) =>
+      updateSurfaceArea(id, payload),
+    onSuccess: invalidate
+  });
+}
+
+export function useDeleteSurfaceAreaMutation() {
+  const invalidate = useInvalidateProposalSamples();
+  return useMutation({ mutationFn: deleteSurfaceArea, onSuccess: invalidate });
+}
+
+export function useCreateSurfaceLevelMutation() {
+  const invalidate = useInvalidateProposalSamples();
+  return useMutation({ mutationFn: createSurfaceLevel, onSuccess: invalidate });
+}
+
+export function useUpdateSurfaceLevelMutation() {
+  const invalidate = useInvalidateProposalSamples();
+  return useMutation({
+    mutationFn: ({
+      id,
+      payload
+    }: {
+      id: string;
+      payload: Partial<{ surfaceAreaId: string; name: string; abbreviation: string; elevation?: number; description?: string }>;
+    }) => updateSurfaceLevel(id, payload),
+    onSuccess: invalidate
+  });
+}
+
+export function useDeleteSurfaceLevelMutation() {
+  const invalidate = useInvalidateProposalSamples();
+  return useMutation({ mutationFn: deleteSurfaceLevel, onSuccess: invalidate });
+}
+
+export function useCreateSurfaceLaborMutation() {
+  const invalidate = useInvalidateProposalSamples();
+  return useMutation({ mutationFn: createSurfaceLabor, onSuccess: invalidate });
+}
+
+export function useUpdateSurfaceLaborMutation() {
+  const invalidate = useInvalidateProposalSamples();
+  return useMutation({
+    mutationFn: ({
+      id,
+      payload
+    }: {
+      id: string;
+      payload: Partial<{ surfaceLevelId: string; name: string; abbreviation: string; description?: string }>;
+    }) => updateSurfaceLabor(id, payload),
+    onSuccess: invalidate
+  });
+}
+
+export function useDeleteSurfaceLaborMutation() {
+  const invalidate = useInvalidateProposalSamples();
+  return useMutation({ mutationFn: deleteSurfaceLabor, onSuccess: invalidate });
 }
 
 export function useCreateSurfaceObjectiveMutation() {
@@ -397,7 +561,7 @@ export function useUpdateSurfaceSampleWithResultsMutation() {
       payload
     }: {
       id: string;
-      payload: Partial<Omit<SurfaceSampleWithResultsPayload, "surfaceAreaId">>;
+      payload: Partial<Omit<SurfaceSampleWithResultsPayload, "surfaceLaborId">>;
     }) => updateSurfaceSampleWithResults(id, payload),
     onSuccess: invalidate
   });

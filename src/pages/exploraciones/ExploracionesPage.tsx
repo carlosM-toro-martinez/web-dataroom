@@ -37,6 +37,7 @@ import {
   useDeleteSurfaceDispatchMutation,
   useInteriorDispatchesQuery,
   useInteriorAreasQuery,
+  useInteriorHierarchyQuery,
   useInteriorLaborsQuery,
   useInteriorLaboratoriesQuery,
   useInteriorLevelsQuery,
@@ -50,7 +51,10 @@ import {
   useSharedElementsQuery,
   useSurfaceDispatchesQuery,
   useSurfaceAreasQuery,
+  useSurfaceHierarchyQuery,
+  useSurfaceLaborsQuery,
   useSurfaceLaboratoriesQuery,
+  useSurfaceLevelsQuery,
   useSurfaceObjectivesQuery,
   useSurfaceSamplesQuery,
   useSyncProposalSamplesMutation,
@@ -61,6 +65,7 @@ import {
 import type {
   CatalogItem,
   ElementCatalogItem,
+  InteriorHierarchyArea,
   InteriorLabor,
   InteriorSample,
   LaboratorySlot,
@@ -68,10 +73,12 @@ import type {
   SampleCategory,
   SamplePriority,
   SampleStatus,
+  SurfaceHierarchyArea,
+  SurfaceLabor,
   SurfaceSample
 } from "@/features/exploraciones/model/proposalSamples.schema";
 import type { OfflineProposalCatalog, OfflineProposalSample } from "@/features/exploraciones/db/exploracionesDb";
-import { cacheProposalCatalogs } from "@/features/exploraciones/db/exploracionesDb";
+import { cacheProposalCatalogs, pruneMissingProposalCatalogs } from "@/features/exploraciones/db/exploracionesDb";
 
 const pageShell =
   "exploraciones-page mx-auto w-full max-w-7xl space-y-6 px-4 pb-8 sm:px-6 lg:px-8";
@@ -113,6 +120,8 @@ type ModalKind =
   | "interior-objective"
   | "interior-laboratory"
   | "surface-area"
+  | "surface-level"
+  | "surface-labor"
   | "surface-objective"
   | "surface-laboratory";
 
@@ -132,6 +141,8 @@ interface SampleForm {
   interiorLaborId: string;
   interiorObjectiveId: string;
   surfaceAreaId: string;
+  surfaceLevelId: string;
+  surfaceLaborId: string;
   surfaceObjectiveId: string;
   priority: SamplePriority | "";
   sampleNameSuffix: string;
@@ -296,6 +307,16 @@ const INTERIOR_DEFAULT_LABORS = [
   localId: `seed-interior-labor-${item.levelLocalId}-${item.abbreviation.toLowerCase()}-${item.name.toLowerCase()}`
 }));
 
+const DEFAULT_ELEMENTS = [
+  { name: "Oro", symbol: "Au", defaultUnit: "g/t" },
+  { name: "Plata", symbol: "Ag", defaultUnit: "g/t" },
+  { name: "Cobre", symbol: "Cu", defaultUnit: "%" },
+  { name: "Plomo", symbol: "Pb", defaultUnit: "%" },
+  { name: "Zinc", symbol: "Zn", defaultUnit: "%" },
+  { name: "Antimonio", symbol: "Sb", defaultUnit: "%" },
+  { name: "Bismuto", symbol: "Bi", defaultUnit: "%" }
+] as const;
+
 const DEFAULT_LABORATORIES = [
   { name: "LIPEÑA (LIPEÑA)", abbreviation: "LIP" },
   { name: "CHILCOBIJA (CHILCOBIJA)", abbreviation: "CHI" },
@@ -305,12 +326,12 @@ const DEFAULT_LABORATORIES = [
 ] as const;
 
 const SURFACE_DEFAULT_AREAS = [
-  { localId: "seed-surface-area-mosa", name: "MOSA", abbreviation: "MS/SUP" },
-  { localId: "seed-surface-area-central", name: "CENTRAL", abbreviation: "CEN/SUP" },
-  { localId: "seed-surface-area-lipena", name: "LIPEÑA", abbreviation: "LIP/SUP" },
-  { localId: "seed-surface-area-ayda", name: "AYDA", abbreviation: "AY/SUP" },
-  { localId: "seed-surface-area-progreso", name: "EL PROGRESO", abbreviation: "EP/SUP" },
-  { localId: "seed-surface-area-horizonte", name: "HORIZONTE", abbreviation: "HZ/SUP" }
+  { localId: "seed-surface-area-mosa", name: "MOSA", abbreviation: "MS" },
+  { localId: "seed-surface-area-central", name: "CENTRAL", abbreviation: "CEN" },
+  { localId: "seed-surface-area-lipena", name: "LIPEÑA", abbreviation: "LIP" },
+  { localId: "seed-surface-area-ayda", name: "AYDA", abbreviation: "AY" },
+  { localId: "seed-surface-area-progreso", name: "EL PROGRESO", abbreviation: "EP" },
+  { localId: "seed-surface-area-horizonte", name: "HORIZONTE", abbreviation: "HZ" }
 ] as const;
 
 const INTERIOR_OBJECTIVE = {
@@ -340,6 +361,8 @@ function initialSampleForm(): SampleForm {
     interiorLaborId: "",
     interiorObjectiveId: "",
     surfaceAreaId: "",
+    surfaceLevelId: "",
+    surfaceLaborId: "",
     surfaceObjectiveId: "",
     priority: "",
     sampleNameSuffix: "",
@@ -466,8 +489,179 @@ function localElementToItem(item: OfflineProposalCatalog): ElementCatalogItem {
   };
 }
 
+function isUsableCatalog(item: OfflineProposalCatalog) {
+  if (!item.localId.startsWith("seed-")) return true;
+  return item.entity === "element" || item.entity === "laboratory";
+}
+
 function mergeById<T extends { id: string }>(remote: T[], local: T[]) {
   return Array.from(new Map([...remote, ...local].map((item) => [item.id, item])).values());
+}
+
+function flattenInteriorHierarchyAreas(items: InteriorHierarchyArea[]): CatalogItem[] {
+  return items.map((area) => ({
+    id: area.id,
+    name: area.name,
+    abbreviation: area.abbreviation,
+    description: area.description
+  }));
+}
+
+function flattenInteriorHierarchyLevels(items: InteriorHierarchyArea[]) {
+  return items.flatMap((area) =>
+    (area.levels ?? []).map((level) => ({
+      id: level.id,
+      name: level.name,
+      abbreviation: level.abbreviation,
+      description: level.description,
+      interiorAreaId: area.id,
+      elevation: level.elevation,
+      area: {
+        id: area.id,
+        name: area.name,
+        abbreviation: area.abbreviation,
+        description: area.description
+      }
+    }))
+  );
+}
+
+function flattenInteriorHierarchyLabors(items: InteriorHierarchyArea[]) {
+  return items.flatMap((area) =>
+    (area.levels ?? []).flatMap((level) =>
+      (level.labors ?? []).map((labor) => ({
+        id: labor.id,
+        name: labor.name,
+        abbreviation: labor.abbreviation,
+        description: labor.description,
+        interiorLevelId: level.id,
+        level: {
+          id: level.id,
+          name: level.name,
+          abbreviation: level.abbreviation,
+          description: level.description,
+          interiorAreaId: area.id,
+          elevation: level.elevation,
+          area: {
+            id: area.id,
+            name: area.name,
+            abbreviation: area.abbreviation,
+            description: area.description
+          }
+        }
+      }))
+    )
+  );
+}
+
+function flattenSurfaceHierarchyAreas(items: SurfaceHierarchyArea[]): CatalogItem[] {
+  return items.map((area) => ({
+    id: area.id,
+    name: area.name,
+    abbreviation: area.abbreviation,
+    description: area.description
+  }));
+}
+
+function flattenSurfaceHierarchyLevels(items: SurfaceHierarchyArea[]) {
+  return items.flatMap((area) =>
+    (area.levels ?? []).map((level) => ({
+      id: level.id,
+      name: level.name,
+      abbreviation: level.abbreviation,
+      description: level.description,
+      surfaceAreaId: area.id,
+      elevation: level.elevation,
+      area: {
+        id: area.id,
+        name: area.name,
+        abbreviation: area.abbreviation,
+        description: area.description
+      }
+    }))
+  );
+}
+
+function flattenSurfaceHierarchyLabors(items: SurfaceHierarchyArea[]) {
+  return items.flatMap((area) =>
+    (area.levels ?? []).flatMap((level) =>
+      (level.labors ?? []).map((labor) => ({
+        id: labor.id,
+        name: labor.name,
+        abbreviation: labor.abbreviation,
+        description: labor.description,
+        surfaceLevelId: level.id,
+        level: {
+          id: level.id,
+          name: level.name,
+          abbreviation: level.abbreviation,
+          description: level.description,
+          surfaceAreaId: area.id,
+          elevation: level.elevation,
+          area: {
+            id: area.id,
+            name: area.name,
+            abbreviation: area.abbreviation,
+            description: area.description
+          }
+        }
+      }))
+    )
+  );
+}
+
+const LEGACY_SEEDED_INTERIOR_AREAS = new Set(["MOSA|MS", "CENTRAL|CEN"]);
+const LEGACY_SEEDED_SURFACE_AREAS = new Set([
+  "MOSA|MS",
+  "CENTRAL|CEN",
+  "LIPEÑA|LIP",
+  "LIPEÑA|LIP/SUP",
+  "AYDA|AY",
+  "EL PROGRESO|EP",
+  "HORIZONTE|HZ"
+]);
+const LEGACY_SEEDED_LEVELS = new Set([
+  "ESPERANZA|ESP",
+  "LUZ|LZ",
+  "PORVENIR|PV",
+  "CUADRO|CD",
+  "NIVEL 0|NIV0",
+  "NIVEL 40|NIV40",
+  "NIVEL80|NIV80",
+  "NIVEL 80|NIV80"
+]);
+const LEGACY_SEEDED_LABORS = new Set([
+  "RECORTE_1|R1",
+  "CANDELARIA|CAN",
+  "RAJO1|RJ1",
+  "RAJO2|RJ2",
+  "RAJO3|RJ3",
+  "RAJO4|RJ4",
+  "RECORTE_SUR_1|RS1",
+  "RECORTE_SUR_2|RS2",
+  "RECORTE_NORTE_1|RN1",
+  "BANCA_NORTE|BN",
+  "BANCA_CENTRO|BC",
+  "BANCA_SUR|BS"
+]);
+
+function legacyStructureKey(item: { name?: string | null; abbreviation?: string | null }) {
+  return `${(item.name ?? "").trim().toUpperCase()}|${(item.abbreviation ?? "").trim().toUpperCase()}`;
+}
+
+function isLegacySeededArea(item: { name?: string | null; abbreviation?: string | null }, module: RegisterType) {
+  const key = legacyStructureKey(item);
+  return module === "interior" ? LEGACY_SEEDED_INTERIOR_AREAS.has(key) : LEGACY_SEEDED_SURFACE_AREAS.has(key);
+}
+
+function isVisibleStructureCatalog(item: OfflineProposalCatalog) {
+  if (!isUsableCatalog(item)) return false;
+  if (item.entity === "area" && (item.module === "interior" || item.module === "surface")) {
+    return !isLegacySeededArea(item, item.module);
+  }
+  if (item.entity === "level") return !LEGACY_SEEDED_LEVELS.has(legacyStructureKey(item));
+  if (item.entity === "labor") return !LEGACY_SEEDED_LABORS.has(legacyStructureKey(item));
+  return true;
 }
 
 function normalizeCatalogText(value?: string | null) {
@@ -478,7 +672,7 @@ function normalizeCatalogText(value?: string | null) {
     .replace(/[\u0300-\u036f]/g, "");
 }
 
-function getLaborPath(labor?: InteriorLabor) {
+function getLaborPath(labor?: InteriorLabor | SurfaceLabor) {
   const level = labor?.level;
   const area = level?.area;
   return [area?.abbreviation ?? area?.name, level?.abbreviation ?? level?.name, labor?.abbreviation ?? labor?.name]
@@ -560,6 +754,8 @@ function modalTitle(kind: ModalKind) {
     "interior-objective": "Crear objetivo interior",
     "interior-laboratory": "Crear laboratorio interior",
     "surface-area": "Crear área de superficie",
+    "surface-level": "Crear nivel de superficie",
+    "surface-labor": "Crear labor de superficie",
     "surface-objective": "Crear objetivo de superficie",
     "surface-laboratory": "Crear laboratorio de superficie"
   };
@@ -683,6 +879,7 @@ function ExploracionesRegisterPage({ sampleCategory }: { sampleCategory: SampleC
 
   const remoteElements = useSharedElementsQuery();
   const remoteInteriorAreas = useInteriorAreasQuery();
+  const remoteInteriorHierarchy = useInteriorHierarchyQuery();
   const remoteInteriorLevels = useInteriorLevelsQuery(sampleForm.interiorAreaId);
   const remoteInteriorLabors = useInteriorLaborsQuery(sampleForm.interiorLevelId);
   const remoteInteriorObjectives = useInteriorObjectivesQuery();
@@ -701,10 +898,13 @@ function ExploracionesRegisterPage({ sampleCategory }: { sampleCategory: SampleC
     status: "REGISTERED"
   });
   const remoteSurfaceAreas = useSurfaceAreasQuery();
+  const remoteSurfaceHierarchy = useSurfaceHierarchyQuery();
+  const remoteSurfaceLevels = useSurfaceLevelsQuery(sampleForm.surfaceAreaId);
+  const remoteSurfaceLabors = useSurfaceLaborsQuery(sampleForm.surfaceLevelId);
   const remoteSurfaceObjectives = useSurfaceObjectivesQuery();
   const remoteSurfaceLaboratories = useSurfaceLaboratoriesQuery();
   const remoteSurfaceSamples = useSurfaceSamplesQuery({
-    surfaceAreaId: sampleForm.surfaceAreaId || undefined,
+    surfaceLaborId: sampleForm.surfaceLaborId || undefined,
     category: sampleCategory,
     createdById: onlyMine ? user?.id : undefined,
     priority: priorityFilter || undefined,
@@ -712,7 +912,7 @@ function ExploracionesRegisterPage({ sampleCategory }: { sampleCategory: SampleC
     search: search.trim() && !/^\d+$/.test(search.trim()) ? search : undefined
   });
   const registeredSurfaceSamples = useSurfaceSamplesQuery({
-    surfaceAreaId: sampleForm.surfaceAreaId || undefined,
+    surfaceLaborId: sampleForm.surfaceLaborId || undefined,
     category: sampleCategory,
     status: "REGISTERED"
   });
@@ -741,6 +941,30 @@ function ExploracionesRegisterPage({ sampleCategory }: { sampleCategory: SampleC
   const localCatalogs = offlineCatalogs.data ?? [];
   const localSamples = offlineSamples.data ?? [];
   const pendingOfflineSamples = localSamples.filter((item) => !item.synced).length;
+  const hierarchyInteriorAreas = useMemo(
+    () => flattenInteriorHierarchyAreas(remoteInteriorHierarchy.data ?? []),
+    [remoteInteriorHierarchy.data]
+  );
+  const hierarchyInteriorLevels = useMemo(
+    () => flattenInteriorHierarchyLevels(remoteInteriorHierarchy.data ?? []),
+    [remoteInteriorHierarchy.data]
+  );
+  const hierarchyInteriorLabors = useMemo(
+    () => flattenInteriorHierarchyLabors(remoteInteriorHierarchy.data ?? []),
+    [remoteInteriorHierarchy.data]
+  );
+  const hierarchySurfaceAreas = useMemo(
+    () => flattenSurfaceHierarchyAreas(remoteSurfaceHierarchy.data ?? []),
+    [remoteSurfaceHierarchy.data]
+  );
+  const hierarchySurfaceLevels = useMemo(
+    () => flattenSurfaceHierarchyLevels(remoteSurfaceHierarchy.data ?? []),
+    [remoteSurfaceHierarchy.data]
+  );
+  const hierarchySurfaceLabors = useMemo(
+    () => flattenSurfaceHierarchyLabors(remoteSurfaceHierarchy.data ?? []),
+    [remoteSurfaceHierarchy.data]
+  );
 
   const runSync = async (options: { silent?: boolean } = {}) => {
     if (syncInFlightRef.current) return;
@@ -795,115 +1019,25 @@ function ExploracionesRegisterPage({ sampleCategory }: { sampleCategory: SampleC
     const hasLocalSeed = (localId: string) => localCatalogs.some((item) => item.localId === localId);
 
     async function seedDefaults() {
-      for (const area of INTERIOR_DEFAULT_AREAS) {
-        if (hasLocalSeed(area.localId)) continue;
+      for (const element of DEFAULT_ELEMENTS) {
+        const localId = `seed-element-${element.symbol.toLowerCase()}`;
+        if (hasLocalSeed(localId)) continue;
         await queueCatalog.mutateAsync({
-          module: "interior",
-          entity: "area",
-          payload: { name: area.name, abbreviation: area.abbreviation },
-          queueAction: false,
-          catalog: {
-            localId: area.localId,
-            module: "interior",
-            entity: "area",
-            name: area.name,
-            abbreviation: area.abbreviation,
-            synced: true
-          }
-        });
-      }
-
-      for (const level of INTERIOR_DEFAULT_LEVELS) {
-        if (hasLocalSeed(level.localId)) continue;
-        await queueCatalog.mutateAsync({
-          module: "interior",
-          entity: "level",
+          module: "shared",
+          entity: "element",
           payload: {
-            interiorAreaId: level.areaLocalId,
-            name: level.name,
-            abbreviation: level.abbreviation
+            name: element.name,
+            symbol: element.symbol,
+            defaultUnit: element.defaultUnit
           },
           queueAction: false,
           catalog: {
-            localId: level.localId,
-            module: "interior",
-            entity: "level",
-            name: level.name,
-            abbreviation: level.abbreviation,
-            parentLocalId: level.areaLocalId,
-            synced: true
-          }
-        });
-      }
-
-      for (const labor of INTERIOR_DEFAULT_LABORS) {
-        if (hasLocalSeed(labor.localId)) continue;
-        await queueCatalog.mutateAsync({
-          module: "interior",
-          entity: "labor",
-          payload: {
-            interiorLevelId: labor.levelLocalId,
-            name: labor.name,
-            abbreviation: labor.abbreviation
-          },
-          queueAction: false,
-          catalog: {
-            localId: labor.localId,
-            module: "interior",
-            entity: "labor",
-            name: labor.name,
-            abbreviation: labor.abbreviation,
-            parentLocalId: labor.levelLocalId,
-            synced: true
-          }
-        });
-      }
-
-      if (!hasLocalSeed(INTERIOR_OBJECTIVE.localId)) {
-        await queueCatalog.mutateAsync({
-          module: "interior",
-          entity: "objective",
-          payload: { name: INTERIOR_OBJECTIVE.name },
-          queueAction: false,
-          catalog: {
-            localId: INTERIOR_OBJECTIVE.localId,
-            module: "interior",
-            entity: "objective",
-            name: INTERIOR_OBJECTIVE.name,
-            synced: true
-          }
-        });
-      }
-
-      for (const area of SURFACE_DEFAULT_AREAS) {
-        if (hasLocalSeed(area.localId)) continue;
-        await queueCatalog.mutateAsync({
-          module: "surface",
-          entity: "area",
-          payload: { name: area.name, abbreviation: area.abbreviation },
-          queueAction: false,
-          catalog: {
-            localId: area.localId,
-            module: "surface",
-            entity: "area",
-            name: area.name,
-            abbreviation: area.abbreviation,
-            synced: true
-          }
-        });
-      }
-
-      if (!hasLocalSeed(SURFACE_OBJECTIVE.localId)) {
-        await queueCatalog.mutateAsync({
-          module: "surface",
-          entity: "objective",
-          payload: { name: SURFACE_OBJECTIVE.name },
-          queueAction: false,
-          catalog: {
-            localId: SURFACE_OBJECTIVE.localId,
-            module: "surface",
-            entity: "objective",
-            name: SURFACE_OBJECTIVE.name,
+            localId,
+            module: "shared",
+            entity: "element",
+            name: element.name,
+            symbol: element.symbol,
+            defaultUnit: element.defaultUnit,
             synced: true
           }
         });
@@ -936,7 +1070,8 @@ function ExploracionesRegisterPage({ sampleCategory }: { sampleCategory: SampleC
 
   const selectedInteriorArea = [
     ...(remoteInteriorAreas.data ?? []),
-    ...localCatalogs.filter((item) => item.module === "interior" && item.entity === "area").map(localCatalogToItem)
+    ...hierarchyInteriorAreas,
+    ...localCatalogs.filter(isVisibleStructureCatalog).filter((item) => item.module === "interior" && item.entity === "area").map(localCatalogToItem)
   ].find((item) => item.id === sampleForm.interiorAreaId);
 
   const selectedInteriorAreaIds = new Set<string>(sampleForm.interiorAreaId ? [sampleForm.interiorAreaId] : []);
@@ -944,6 +1079,7 @@ function ExploracionesRegisterPage({ sampleCategory }: { sampleCategory: SampleC
     const selectedName = normalizeCatalogText(selectedInteriorArea.name);
     const selectedAbbreviation = normalizeCatalogText(selectedInteriorArea.abbreviation);
     localCatalogs
+      .filter(isVisibleStructureCatalog)
       .filter((item) => item.module === "interior" && item.entity === "area")
       .filter(
         (item) =>
@@ -958,15 +1094,18 @@ function ExploracionesRegisterPage({ sampleCategory }: { sampleCategory: SampleC
 
   const elements = mergeById(
     remoteElements.data ?? [],
-    localCatalogs.filter((item) => item.entity === "element").map(localElementToItem)
+    localCatalogs.filter(isUsableCatalog).filter((item) => item.entity === "element").map(localElementToItem)
   );
   const interiorAreas = mergeById(
-    remoteInteriorAreas.data ?? [],
-    localCatalogs.filter((item) => item.module === "interior" && item.entity === "area").map(localCatalogToItem)
+    mergeById(remoteInteriorAreas.data ?? [], hierarchyInteriorAreas),
+    localCatalogs.filter(isVisibleStructureCatalog).filter((item) => item.module === "interior" && item.entity === "area").map(localCatalogToItem)
   );
   const interiorLevels = mergeById(
-    remoteInteriorLevels.data ?? [],
+    mergeById(remoteInteriorLevels.data ?? [], hierarchyInteriorLevels).filter(
+      (item) => !sampleForm.interiorAreaId || selectedInteriorAreaIds.has(item.interiorAreaId ?? "")
+    ),
     localCatalogs
+      .filter(isVisibleStructureCatalog)
       .filter((item) => item.module === "interior" && item.entity === "level")
       .filter(
         (item) =>
@@ -983,7 +1122,9 @@ function ExploracionesRegisterPage({ sampleCategory }: { sampleCategory: SampleC
 
   const selectedInteriorLevel = [
     ...(remoteInteriorLevels.data ?? []),
+    ...hierarchyInteriorLevels,
     ...localCatalogs
+      .filter(isVisibleStructureCatalog)
       .filter((item) => item.module === "interior" && item.entity === "level")
       .map((item) => ({
         ...localCatalogToItem(item),
@@ -997,6 +1138,7 @@ function ExploracionesRegisterPage({ sampleCategory }: { sampleCategory: SampleC
     const selectedName = normalizeCatalogText(selectedInteriorLevel.name);
     const selectedAbbreviation = normalizeCatalogText(selectedInteriorLevel.abbreviation);
     localCatalogs
+      .filter(isVisibleStructureCatalog)
       .filter((item) => item.module === "interior" && item.entity === "level")
       .filter(
         (item) =>
@@ -1010,8 +1152,11 @@ function ExploracionesRegisterPage({ sampleCategory }: { sampleCategory: SampleC
   }
 
   const interiorLabors = mergeById(
-    remoteInteriorLabors.data ?? [],
+    mergeById(remoteInteriorLabors.data ?? [], hierarchyInteriorLabors).filter(
+      (item) => !sampleForm.interiorLevelId || selectedInteriorLevelIds.has(item.interiorLevelId ?? "")
+    ),
     localCatalogs
+      .filter(isVisibleStructureCatalog)
       .filter((item) => item.module === "interior" && item.entity === "labor")
       .filter(
         (item) =>
@@ -1026,25 +1171,116 @@ function ExploracionesRegisterPage({ sampleCategory }: { sampleCategory: SampleC
   );
   const interiorObjectives = mergeById(
     remoteInteriorObjectives.data ?? [],
-    localCatalogs.filter((item) => item.module === "interior" && item.entity === "objective").map(localCatalogToItem)
+    localCatalogs.filter(isUsableCatalog).filter((item) => item.module === "interior" && item.entity === "objective").map(localCatalogToItem)
   );
   const selectedInteriorLevelOption = interiorLevels.find((item) => item.id === sampleForm.interiorLevelId);
   const selectedInteriorLaborOption = interiorLabors.find((item) => item.id === sampleForm.interiorLaborId);
   const interiorLaboratories = mergeById(
     remoteInteriorLaboratories.data ?? [],
-    localCatalogs.filter((item) => item.module === "interior" && item.entity === "laboratory").map(localCatalogToItem)
+    localCatalogs.filter(isUsableCatalog).filter((item) => item.module === "interior" && item.entity === "laboratory").map(localCatalogToItem)
   );
   const surfaceAreas = mergeById(
-    remoteSurfaceAreas.data ?? [],
-    localCatalogs.filter((item) => item.module === "surface" && item.entity === "area").map(localCatalogToItem)
+    mergeById(remoteSurfaceAreas.data ?? [], hierarchySurfaceAreas),
+    localCatalogs.filter(isVisibleStructureCatalog).filter((item) => item.module === "surface" && item.entity === "area").map(localCatalogToItem)
+  );
+
+  const selectedSurfaceArea = surfaceAreas.find((item) => item.id === sampleForm.surfaceAreaId);
+  const selectedSurfaceAreaIds = new Set<string>(sampleForm.surfaceAreaId ? [sampleForm.surfaceAreaId] : []);
+  if (selectedSurfaceArea) {
+    const selectedName = normalizeCatalogText(selectedSurfaceArea.name);
+    const selectedAbbreviation = normalizeCatalogText(selectedSurfaceArea.abbreviation);
+    localCatalogs
+      .filter(isVisibleStructureCatalog)
+      .filter((item) => item.module === "surface" && item.entity === "area")
+      .filter(
+        (item) =>
+          normalizeCatalogText(item.name) === selectedName ||
+          normalizeCatalogText(item.abbreviation) === selectedAbbreviation
+      )
+      .forEach((item) => {
+        selectedSurfaceAreaIds.add(item.localId);
+        if (item.remoteId) selectedSurfaceAreaIds.add(item.remoteId);
+      });
+  }
+
+  const surfaceLevels = mergeById(
+    mergeById(remoteSurfaceLevels.data ?? [], hierarchySurfaceLevels).filter(
+      (item) => !sampleForm.surfaceAreaId || selectedSurfaceAreaIds.has(item.surfaceAreaId ?? "")
+    ),
+    localCatalogs
+      .filter(isVisibleStructureCatalog)
+      .filter((item) => item.module === "surface" && item.entity === "level")
+      .filter(
+        (item) =>
+          !sampleForm.surfaceAreaId ||
+          selectedSurfaceAreaIds.has(item.parentRemoteId ?? "") ||
+          selectedSurfaceAreaIds.has(item.parentLocalId ?? "")
+      )
+      .map((item) => ({
+        ...localCatalogToItem(item),
+        surfaceAreaId: item.parentRemoteId ?? item.parentLocalId ?? "",
+        elevation: item.elevation
+      }))
+  );
+
+  const selectedSurfaceLevel = [
+    ...(remoteSurfaceLevels.data ?? []),
+    ...hierarchySurfaceLevels,
+    ...localCatalogs
+      .filter(isVisibleStructureCatalog)
+      .filter((item) => item.module === "surface" && item.entity === "level")
+      .map((item) => ({
+        ...localCatalogToItem(item),
+        surfaceAreaId: item.parentRemoteId ?? item.parentLocalId ?? "",
+        elevation: item.elevation
+      }))
+  ].find((item) => item.id === sampleForm.surfaceLevelId);
+
+  const selectedSurfaceLevelIds = new Set<string>(sampleForm.surfaceLevelId ? [sampleForm.surfaceLevelId] : []);
+  if (selectedSurfaceLevel) {
+    const selectedName = normalizeCatalogText(selectedSurfaceLevel.name);
+    const selectedAbbreviation = normalizeCatalogText(selectedSurfaceLevel.abbreviation);
+    localCatalogs
+      .filter(isVisibleStructureCatalog)
+      .filter((item) => item.module === "surface" && item.entity === "level")
+      .filter(
+        (item) =>
+          normalizeCatalogText(item.name) === selectedName ||
+          normalizeCatalogText(item.abbreviation) === selectedAbbreviation
+      )
+      .forEach((item) => {
+        selectedSurfaceLevelIds.add(item.localId);
+        if (item.remoteId) selectedSurfaceLevelIds.add(item.remoteId);
+      });
+  }
+
+  const surfaceLabors = mergeById(
+    mergeById(remoteSurfaceLabors.data ?? [], hierarchySurfaceLabors).filter(
+      (item) => !sampleForm.surfaceLevelId || selectedSurfaceLevelIds.has(item.surfaceLevelId ?? "")
+    ),
+    localCatalogs
+      .filter(isVisibleStructureCatalog)
+      .filter((item) => item.module === "surface" && item.entity === "labor")
+      .filter(
+        (item) =>
+          !sampleForm.surfaceLevelId ||
+          selectedSurfaceLevelIds.has(item.parentRemoteId ?? "") ||
+          selectedSurfaceLevelIds.has(item.parentLocalId ?? "")
+      )
+      .map((item) => ({
+        ...localCatalogToItem(item),
+        surfaceLevelId: item.parentRemoteId ?? item.parentLocalId ?? ""
+      }))
   );
   const surfaceObjectives = mergeById(
     remoteSurfaceObjectives.data ?? [],
-    localCatalogs.filter((item) => item.module === "surface" && item.entity === "objective").map(localCatalogToItem)
+    localCatalogs.filter(isUsableCatalog).filter((item) => item.module === "surface" && item.entity === "objective").map(localCatalogToItem)
   );
+  const selectedSurfaceLevelOption = surfaceLevels.find((item) => item.id === sampleForm.surfaceLevelId);
+  const selectedSurfaceLaborOption = surfaceLabors.find((item) => item.id === sampleForm.surfaceLaborId);
   const surfaceLaboratories = mergeById(
     remoteSurfaceLaboratories.data ?? [],
-    localCatalogs.filter((item) => item.module === "surface" && item.entity === "laboratory").map(localCatalogToItem)
+    localCatalogs.filter(isUsableCatalog).filter((item) => item.module === "surface" && item.entity === "laboratory").map(localCatalogToItem)
   );
   const selectedSurfaceAreaOption = surfaceAreas.find((item) => item.id === sampleForm.surfaceAreaId);
 
@@ -1063,9 +1299,13 @@ function ExploracionesRegisterPage({ sampleCategory }: { sampleCategory: SampleC
   ]
     .filter(Boolean)
     .join("-");
-  const surfaceNamePrefix = normalizeNameToken(
-    selectedSurfaceAreaOption?.abbreviation ?? selectedSurfaceAreaOption?.name
-  );
+  const surfaceNamePrefix = [
+    normalizeNameToken(selectedSurfaceAreaOption?.abbreviation ?? selectedSurfaceAreaOption?.name),
+    normalizeNameToken(selectedSurfaceLevelOption?.abbreviation ?? selectedSurfaceLevelOption?.name),
+    normalizeNameToken(selectedSurfaceLaborOption?.abbreviation ?? selectedSurfaceLaborOption?.name)
+  ]
+    .filter(Boolean)
+    .join("-");
   const sampleNamePrefix = registerType === "interior" ? interiorNamePrefix : surfaceNamePrefix;
   const normalizedSuffix = normalizeNameToken(sampleForm.sampleNameSuffix);
   const sampleName = [sampleNamePrefix, normalizedSuffix].filter(Boolean).join("-");
@@ -1108,7 +1348,7 @@ function ExploracionesRegisterPage({ sampleCategory }: { sampleCategory: SampleC
         priority: sample.priority ?? "NORMAL",
         sampledAt: sample.sampledAt,
         objectiveName: (isInterior ? interiorSample.objective?.name : surfaceSample.objective?.name) ?? "-",
-        location: isInterior ? getLaborPath(interiorSample.labor) || "-" : surfaceSample.area?.name ?? "-",
+        location: isInterior ? getLaborPath(interiorSample.labor) || "-" : getLaborPath(surfaceSample.labor) || "-",
         createdByName: sample.createdBy?.nombre ?? "-",
         results: flattenAssignmentResults((sample as any).labAssignments, sample.results),
         labAssignments: (sample as any).labAssignments ?? [],
@@ -1210,6 +1450,15 @@ function ExploracionesRegisterPage({ sampleCategory }: { sampleCategory: SampleC
         abbreviation: item.abbreviation ?? undefined,
         description: item.description ?? undefined
       })),
+      ...hierarchyInteriorAreas.map((item) => ({
+        localId: `cache-interior-area-${item.id}`,
+        remoteId: item.id,
+        module: "interior" as const,
+        entity: "area" as const,
+        name: item.name,
+        abbreviation: item.abbreviation ?? undefined,
+        description: item.description ?? undefined
+      })),
       ...(remoteInteriorLevels.data ?? []).map((item) => ({
         localId: `cache-interior-level-${item.id}`,
         remoteId: item.id,
@@ -1221,7 +1470,28 @@ function ExploracionesRegisterPage({ sampleCategory }: { sampleCategory: SampleC
         parentRemoteId: item.interiorAreaId,
         elevation: item.elevation ?? undefined
       })),
+      ...hierarchyInteriorLevels.map((item) => ({
+        localId: `cache-interior-level-${item.id}`,
+        remoteId: item.id,
+        module: "interior" as const,
+        entity: "level" as const,
+        name: item.name,
+        abbreviation: item.abbreviation ?? undefined,
+        description: item.description ?? undefined,
+        parentRemoteId: item.interiorAreaId,
+        elevation: item.elevation ?? undefined
+      })),
       ...(remoteInteriorLabors.data ?? []).map((item) => ({
+        localId: `cache-interior-labor-${item.id}`,
+        remoteId: item.id,
+        module: "interior" as const,
+        entity: "labor" as const,
+        name: item.name,
+        abbreviation: item.abbreviation ?? undefined,
+        description: item.description ?? undefined,
+        parentRemoteId: item.interiorLevelId
+      })),
+      ...hierarchyInteriorLabors.map((item) => ({
         localId: `cache-interior-labor-${item.id}`,
         remoteId: item.id,
         module: "interior" as const,
@@ -1258,6 +1528,57 @@ function ExploracionesRegisterPage({ sampleCategory }: { sampleCategory: SampleC
         abbreviation: item.abbreviation ?? undefined,
         description: item.description ?? undefined
       })),
+      ...hierarchySurfaceAreas.map((item) => ({
+        localId: `cache-surface-area-${item.id}`,
+        remoteId: item.id,
+        module: "surface" as const,
+        entity: "area" as const,
+        name: item.name,
+        abbreviation: item.abbreviation ?? undefined,
+        description: item.description ?? undefined
+      })),
+      ...(remoteSurfaceLevels.data ?? []).map((item) => ({
+        localId: `cache-surface-level-${item.id}`,
+        remoteId: item.id,
+        module: "surface" as const,
+        entity: "level" as const,
+        name: item.name,
+        abbreviation: item.abbreviation ?? undefined,
+        description: item.description ?? undefined,
+        parentRemoteId: item.surfaceAreaId,
+        elevation: item.elevation ?? undefined
+      })),
+      ...(remoteSurfaceLabors.data ?? []).map((item) => ({
+        localId: `cache-surface-labor-${item.id}`,
+        remoteId: item.id,
+        module: "surface" as const,
+        entity: "labor" as const,
+        name: item.name,
+        abbreviation: item.abbreviation ?? undefined,
+        description: item.description ?? undefined,
+        parentRemoteId: item.surfaceLevelId
+      })),
+      ...hierarchySurfaceLevels.map((item) => ({
+        localId: `cache-surface-level-${item.id}`,
+        remoteId: item.id,
+        module: "surface" as const,
+        entity: "level" as const,
+        name: item.name,
+        abbreviation: item.abbreviation ?? undefined,
+        description: item.description ?? undefined,
+        parentRemoteId: item.surfaceAreaId,
+        elevation: item.elevation ?? undefined
+      })),
+      ...hierarchySurfaceLabors.map((item) => ({
+        localId: `cache-surface-labor-${item.id}`,
+        remoteId: item.id,
+        module: "surface" as const,
+        entity: "labor" as const,
+        name: item.name,
+        abbreviation: item.abbreviation ?? undefined,
+        description: item.description ?? undefined,
+        parentRemoteId: item.surfaceLevelId
+      })),
       ...(remoteSurfaceObjectives.data ?? []).map((item) => ({
         localId: `cache-surface-objective-${item.id}`,
         remoteId: item.id,
@@ -1279,14 +1600,65 @@ function ExploracionesRegisterPage({ sampleCategory }: { sampleCategory: SampleC
 ];
 
     if (items.length > 0) void cacheProposalCatalogs(items);
+
+    if (remoteInteriorHierarchy.isSuccess) {
+      const hierarchy = remoteInteriorHierarchy.data ?? [];
+      const levelIds = hierarchy.flatMap((area) => (area.levels ?? []).map((level) => level.id));
+      const laborIds = hierarchy.flatMap((area) =>
+        (area.levels ?? []).flatMap((level) => (level.labors ?? []).map((labor) => labor.id))
+      );
+      void pruneMissingProposalCatalogs("interior", "level", levelIds);
+      void pruneMissingProposalCatalogs("interior", "labor", laborIds);
+    }
+    if (remoteInteriorHierarchy.isSuccess && remoteInteriorAreas.isSuccess) {
+      const areaIds = Array.from(
+        new Set([
+          ...(remoteInteriorHierarchy.data ?? []).map((area) => area.id),
+          ...(remoteInteriorAreas.data ?? []).map((area) => area.id)
+        ])
+      );
+      void pruneMissingProposalCatalogs("interior", "area", areaIds);
+    }
+    if (remoteSurfaceHierarchy.isSuccess) {
+      const hierarchy = remoteSurfaceHierarchy.data ?? [];
+      const levelIds = hierarchy.flatMap((area) => (area.levels ?? []).map((level) => level.id));
+      const laborIds = hierarchy.flatMap((area) =>
+        (area.levels ?? []).flatMap((level) => (level.labors ?? []).map((labor) => labor.id))
+      );
+      void pruneMissingProposalCatalogs("surface", "level", levelIds);
+      void pruneMissingProposalCatalogs("surface", "labor", laborIds);
+    }
+    if (remoteSurfaceHierarchy.isSuccess && remoteSurfaceAreas.isSuccess) {
+      const areaIds = Array.from(
+        new Set([
+          ...(remoteSurfaceHierarchy.data ?? []).map((area) => area.id),
+          ...(remoteSurfaceAreas.data ?? []).map((area) => area.id)
+        ])
+      );
+      void pruneMissingProposalCatalogs("surface", "area", areaIds);
+    }
   }, [
     remoteElements.data,
     remoteInteriorAreas.data,
+    remoteInteriorAreas.isSuccess,
+    remoteInteriorHierarchy.data,
+    remoteInteriorHierarchy.isSuccess,
+    hierarchyInteriorAreas,
+    hierarchyInteriorLabors,
+    hierarchyInteriorLevels,
     remoteInteriorLabors.data,
     remoteInteriorLaboratories.data,
     remoteInteriorLevels.data,
     remoteInteriorObjectives.data,
     remoteSurfaceAreas.data,
+    remoteSurfaceAreas.isSuccess,
+    remoteSurfaceHierarchy.data,
+    remoteSurfaceHierarchy.isSuccess,
+    remoteSurfaceLabors.data,
+    remoteSurfaceLevels.data,
+    hierarchySurfaceAreas,
+    hierarchySurfaceLabors,
+    hierarchySurfaceLevels,
     remoteSurfaceLaboratories.data,
     remoteSurfaceObjectives.data
   ]);
@@ -1298,6 +1670,12 @@ function ExploracionesRegisterPage({ sampleCategory }: { sampleCategory: SampleC
       }
       if (field === "interiorLevelId") {
         return { ...current, interiorLevelId: value, interiorLaborId: "" };
+      }
+      if (field === "surfaceAreaId") {
+        return { ...current, surfaceAreaId: value, surfaceLevelId: "", surfaceLaborId: "" };
+      }
+      if (field === "surfaceLevelId") {
+        return { ...current, surfaceLevelId: value, surfaceLaborId: "" };
       }
       return { ...current, [field]: value };
     });
@@ -1316,9 +1694,17 @@ function ExploracionesRegisterPage({ sampleCategory }: { sampleCategory: SampleC
       .join("-");
   }
 
-  function getSurfacePrefixFromId(areaId?: string) {
+  function getSurfacePrefixFromIds(areaId?: string, levelId?: string, laborId?: string) {
     const area = surfaceAreas.find((item) => item.id === areaId);
-    return normalizeNameToken(area?.abbreviation ?? area?.name);
+    const level = surfaceLevels.find((item) => item.id === levelId);
+    const labor = surfaceLabors.find((item) => item.id === laborId);
+    return [
+      normalizeNameToken(area?.abbreviation ?? area?.name),
+      normalizeNameToken(level?.abbreviation ?? level?.name),
+      normalizeNameToken(labor?.abbreviation ?? labor?.name)
+    ]
+      .filter(Boolean)
+      .join("-");
   }
 
   function resetSampleForm() {
@@ -1381,10 +1767,16 @@ function ExploracionesRegisterPage({ sampleCategory }: { sampleCategory: SampleC
         });
       } else {
         const payload = sample.payload as any;
-        const prefix = getSurfacePrefixFromId(payload.surfaceAreaId);
+        const labor = surfaceLabors.find((item) => item.id === payload.surfaceLaborId);
+        const levelId = labor?.surfaceLevelId;
+        const level = surfaceLevels.find((item) => item.id === levelId);
+        const areaId = level?.surfaceAreaId;
+        const prefix = getSurfacePrefixFromIds(areaId, levelId, payload.surfaceLaborId);
         setSampleForm({
           ...initialSampleForm(),
-          surfaceAreaId: payload.surfaceAreaId ?? "",
+          surfaceAreaId: areaId ?? "",
+          surfaceLevelId: levelId ?? "",
+          surfaceLaborId: payload.surfaceLaborId ?? "",
           surfaceObjectiveId: objectiveTextFromId("surface", payload.surfaceObjectiveId),
           priority: payload.priority ?? "NORMAL",
           sampleNameSuffix: extractEditableSuffix(payload.name, prefix),
@@ -1427,10 +1819,16 @@ function ExploracionesRegisterPage({ sampleCategory }: { sampleCategory: SampleC
         labL3: sample.labAssignments?.find((item: any) => item.slot === "L3")?.laboratory?.id ?? ""
       });
     } else {
-      const prefix = getSurfacePrefixFromId(sample.area?.id);
+      const prefix = getSurfacePrefixFromIds(
+        sample.labor?.level?.area?.id,
+        sample.labor?.level?.id,
+        sample.labor?.id
+      );
       setSampleForm({
         ...initialSampleForm(),
-        surfaceAreaId: sample.area?.id ?? "",
+        surfaceAreaId: sample.labor?.level?.area?.id ?? "",
+        surfaceLevelId: sample.labor?.level?.id ?? "",
+        surfaceLaborId: sample.labor?.id ?? "",
         surfaceObjectiveId: sample.objective?.name ?? "",
         priority: sample.priority ?? "NORMAL",
         sampleNameSuffix: extractEditableSuffix(sample.name, prefix),
@@ -1745,13 +2143,25 @@ function ExploracionesRegisterPage({ sampleCategory }: { sampleCategory: SampleC
   }
 
   function validateSurfaceLocationSelection() {
-    if (!sampleForm.surfaceAreaId || !sampleForm.surfaceObjectiveId.trim()) {
-      showError("Completa area y objetivo para Superficie.");
+    if (!sampleForm.surfaceAreaId || !sampleForm.surfaceLevelId || !sampleForm.surfaceLaborId || !sampleForm.surfaceObjectiveId.trim()) {
+      showError("Completa area, nivel, labor y objetivo para Superficie.");
       return false;
     }
 
     if (!selectedSurfaceAreaOption) {
       showError("El area seleccionada ya no es valida. Vuelve a seleccionar el area.");
+      return false;
+    }
+
+    if (!selectedSurfaceLevelOption || !selectedSurfaceAreaIds.has(selectedSurfaceLevelOption.surfaceAreaId ?? "")) {
+      showError("El nivel no corresponde al area seleccionada. Vuelve a seleccionar nivel.");
+      setSampleForm((current) => ({ ...current, surfaceLevelId: "", surfaceLaborId: "" }));
+      return false;
+    }
+
+    if (!selectedSurfaceLaborOption || !selectedSurfaceLevelIds.has(selectedSurfaceLaborOption.surfaceLevelId ?? "")) {
+      showError("La labor no corresponde al nivel seleccionado. Vuelve a seleccionar labor.");
+      setSampleForm((current) => ({ ...current, surfaceLaborId: "" }));
       return false;
     }
 
@@ -1811,7 +2221,7 @@ function ExploracionesRegisterPage({ sampleCategory }: { sampleCategory: SampleC
             labAssignments?: ReturnType<typeof buildInteriorLabAssignmentsPayload>;
           })
         | (typeof common & {
-            surfaceAreaId: string;
+            surfaceLaborId: string;
             surfaceObjectiveId: string;
             labAssignments?: ReturnType<typeof buildSurfaceLabAssignmentsPayload>;
           });
@@ -1831,7 +2241,7 @@ function ExploracionesRegisterPage({ sampleCategory }: { sampleCategory: SampleC
         const surfaceObjectiveId = await resolveObjectiveId("surface", sampleForm.surfaceObjectiveId);
         payload = {
           ...common,
-          surfaceAreaId: sampleForm.surfaceAreaId,
+          surfaceLaborId: sampleForm.surfaceLaborId,
           surfaceObjectiveId,
           labAssignments: buildSurfaceLabAssignmentsPayload()
         };
@@ -1860,9 +2270,9 @@ function ExploracionesRegisterPage({ sampleCategory }: { sampleCategory: SampleC
                 return patchPayload;
               })()
             : (() => {
-                const { surfaceAreaId: _surfaceAreaId, ...patchPayload } = payload as Extract<
+                const { surfaceLaborId: _surfaceLaborId, ...patchPayload } = payload as Extract<
                   typeof payload,
-                  { surfaceAreaId: string }
+                  { surfaceLaborId: string }
                 >;
                 return patchPayload;
               })();
@@ -2155,6 +2565,54 @@ function ExploracionesRegisterPage({ sampleCategory }: { sampleCategory: SampleC
         });
       }
 
+      if (modalKind === "surface-level") {
+        await queueCatalog.mutateAsync({
+          module: "surface",
+          entity: "level",
+          payload: {
+            surfaceAreaId: catalogForm.parentId,
+            name,
+            abbreviation,
+            elevation,
+            description
+          },
+          catalog: {
+            localId,
+            module: "surface",
+            entity: "level",
+            name,
+            abbreviation,
+            description,
+            elevation,
+            parentLocalId: catalogForm.parentId,
+            parentRemoteId: catalogForm.parentId
+          }
+        });
+      }
+
+      if (modalKind === "surface-labor") {
+        await queueCatalog.mutateAsync({
+          module: "surface",
+          entity: "labor",
+          payload: {
+            surfaceLevelId: catalogForm.parentId,
+            name,
+            abbreviation,
+            description
+          },
+          catalog: {
+            localId,
+            module: "surface",
+            entity: "labor",
+            name,
+            abbreviation,
+            description,
+            parentLocalId: catalogForm.parentId,
+            parentRemoteId: catalogForm.parentId
+          }
+        });
+      }
+
       if (modalKind === "interior-objective" || modalKind === "surface-objective") {
         const module = modalKind === "interior-objective" ? "interior" : "surface";
         await queueCatalog.mutateAsync({
@@ -2184,8 +2642,8 @@ function ExploracionesRegisterPage({ sampleCategory }: { sampleCategory: SampleC
   }
 
   const areaOptions = registerType === "interior" ? labelOptions(interiorAreas) : labelOptions(surfaceAreas);
-  const levelOptions = labelOptions(interiorLevels);
-  const laborOptions = labelOptions(interiorLabors);
+  const levelOptions = registerType === "interior" ? labelOptions(interiorLevels) : labelOptions(surfaceLevels);
+  const laborOptions = registerType === "interior" ? labelOptions(interiorLabors) : labelOptions(surfaceLabors);
   const laboratoryOptions = labelOptions(activeLaboratories);
   const selectedInteriorLabGroups = ([
     ["L1", sampleForm.labL1],
@@ -2307,7 +2765,16 @@ function ExploracionesRegisterPage({ sampleCategory }: { sampleCategory: SampleC
                   Labor
                 </CatalogButton>
               </>
-            ) : null}
+            ) : (
+              <>
+                <CatalogButton icon={MapPinned} onClick={() => openModal("surface-level", sampleForm.surfaceAreaId)}>
+                  Nivel
+                </CatalogButton>
+                <CatalogButton icon={Layers3} onClick={() => openModal("surface-labor", sampleForm.surfaceLevelId)}>
+                  Labor
+                </CatalogButton>
+              </>
+            )}
             <CatalogButton
               icon={Target}
               onClick={() => openModal(registerType === "interior" ? "interior-objective" : "surface-objective")}
@@ -2373,8 +2840,10 @@ function ExploracionesRegisterPage({ sampleCategory }: { sampleCategory: SampleC
               <TextField label="Objetivo" value={sampleForm.interiorObjectiveId} onChange={(value) => setSampleField("interiorObjectiveId", value.toUpperCase())} placeholder="Escribe el objetivo" />
             </div>
           ) : (
-            <div className="exploraciones-main-grid grid gap-3 md:grid-cols-2">
+            <div className="exploraciones-main-grid grid gap-3 md:grid-cols-2 xl:grid-cols-4">
               <FormSelect label="Área" value={sampleForm.surfaceAreaId} options={areaOptions} onChange={(value) => setSampleField("surfaceAreaId", value)} disabled={isEditingRemote} />
+              <FormSelect label="Nivel" value={sampleForm.surfaceLevelId} options={levelOptions} onChange={(value) => setSampleField("surfaceLevelId", value)} disabled={!sampleForm.surfaceAreaId || isEditingRemote} />
+              <FormSelect label="Labor" value={sampleForm.surfaceLaborId} options={laborOptions} onChange={(value) => setSampleField("surfaceLaborId", value)} disabled={!sampleForm.surfaceLevelId || isEditingRemote} />
               <TextField label="Objetivo" value={sampleForm.surfaceObjectiveId} onChange={(value) => setSampleField("surfaceObjectiveId", value.toUpperCase())} placeholder="Escribe el objetivo" />
             </div>
           )}
@@ -2628,8 +3097,8 @@ function ExploracionesRegisterPage({ sampleCategory }: { sampleCategory: SampleC
         <CatalogModal
           kind={modalKind}
           form={catalogForm}
-          areaOptions={labelOptions(interiorAreas)}
-          levelOptions={labelOptions(interiorLevels)}
+          areaOptions={modalKind.startsWith("surface") ? labelOptions(surfaceAreas) : labelOptions(interiorAreas)}
+          levelOptions={modalKind.startsWith("surface") ? labelOptions(surfaceLevels) : labelOptions(interiorLevels)}
           onChange={setCatalogField}
           onClose={closeModal}
           onSubmit={onSubmitCatalog}
@@ -4543,10 +5012,11 @@ function CatalogModal({
   onClose: () => void;
   onSubmit: (event: FormEvent<HTMLFormElement>) => void;
 }) {
-  const needsAbbreviation = kind.includes("area") || kind === "interior-level" || kind === "interior-labor";
+  const needsAbbreviation =
+    kind.includes("area") || kind === "interior-level" || kind === "interior-labor" || kind === "surface-level" || kind === "surface-labor";
   const isElement = kind === "element";
-  const needsAreaParent = kind === "interior-level";
-  const needsLevelParent = kind === "interior-labor";
+  const needsAreaParent = kind === "interior-level" || kind === "surface-level";
+  const needsLevelParent = kind === "interior-labor" || kind === "surface-labor";
 
   return (
     <div className="exploraciones-modal fixed inset-0 z-[100] flex items-center justify-center bg-black/55 p-4">
@@ -4574,7 +5044,7 @@ function CatalogModal({
           {needsAbbreviation || kind.includes("laboratory") ? (
             <TextField label="Abreviatura" value={form.abbreviation} onChange={(value) => onChange("abbreviation", value)} />
           ) : null}
-          {kind === "interior-level" ? (
+          {kind === "interior-level" || kind === "surface-level" ? (
             <TextField label="Elevación" value={form.elevation} onChange={(value) => onChange("elevation", value)} />
           ) : null}
           <TextField label="Descripción" value={form.description} onChange={(value) => onChange("description", value)} />

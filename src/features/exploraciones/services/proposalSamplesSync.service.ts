@@ -8,7 +8,9 @@ import {
   createInteriorSampleWithResults,
   createSharedElement,
   createSurfaceArea,
+  createSurfaceLabor,
   createSurfaceLaboratory,
+  createSurfaceLevel,
   createSurfaceObjective,
   createSurfaceSampleWithResults,
   updateInteriorSampleWithResults,
@@ -142,6 +144,8 @@ function getFieldLabel(field: string) {
     interiorObjectiveId: "objetivo",
     interiorLaboratoryId: "laboratorio",
     surfaceAreaId: "area",
+    surfaceLevelId: "nivel",
+    surfaceLaborId: "labor",
     surfaceObjectiveId: "objetivo",
     surfaceLaboratoryId: "laboratorio"
   };
@@ -312,11 +316,11 @@ function sanitizeSamplePayload(action: OfflineProposalAction, payload: ProposalP
   }
 
   if (action.module === "surface") {
-    assertUuid(source.surfaceAreaId, "surfaceAreaId");
+    assertUuid(source.surfaceLaborId, "surfaceLaborId");
     assertUuid(source.surfaceObjectiveId, "surfaceObjectiveId");
     return {
       ...common,
-      surfaceAreaId: source.surfaceAreaId,
+      surfaceLaborId: source.surfaceLaborId,
       surfaceObjectiveId: source.surfaceObjectiveId,
       labAssignments: sanitizeSurfaceAssignments(source.labAssignments)
     } as ProposalPayload;
@@ -362,12 +366,18 @@ function findExistingCatalog(
     if (!sameName || !sameAbbreviation) return false;
 
     if (action.entity === "level") {
-      const parentId = resolveId(source.interiorAreaId, idMap);
+      const parentId = resolveId(
+        action.module === "surface" ? source.surfaceAreaId : source.interiorAreaId,
+        idMap
+      );
       return !parentId || catalog.parentRemoteId === parentId || catalog.parentLocalId === parentId;
     }
 
     if (action.entity === "labor") {
-      const parentId = resolveId(source.interiorLevelId, idMap);
+      const parentId = resolveId(
+        action.module === "surface" ? source.surfaceLevelId : source.interiorLevelId,
+        idMap
+      );
       return !parentId || catalog.parentRemoteId === parentId || catalog.parentLocalId === parentId;
     }
 
@@ -390,7 +400,9 @@ function findExistingCatalogForLocalCatalog(
         abbreviation: localCatalog.abbreviation,
         symbol: localCatalog.symbol,
         interiorAreaId: localCatalog.parentLocalId ?? localCatalog.parentRemoteId,
-        interiorLevelId: localCatalog.parentLocalId ?? localCatalog.parentRemoteId
+        interiorLevelId: localCatalog.parentLocalId ?? localCatalog.parentRemoteId,
+        surfaceAreaId: localCatalog.parentLocalId ?? localCatalog.parentRemoteId,
+        surfaceLevelId: localCatalog.parentLocalId ?? localCatalog.parentRemoteId
       },
       synced: false,
       createdAt: localCatalog.createdAt,
@@ -401,7 +413,9 @@ function findExistingCatalogForLocalCatalog(
       abbreviation: localCatalog.abbreviation,
       symbol: localCatalog.symbol,
       interiorAreaId: localCatalog.parentLocalId ?? localCatalog.parentRemoteId,
-      interiorLevelId: localCatalog.parentLocalId ?? localCatalog.parentRemoteId
+      interiorLevelId: localCatalog.parentLocalId ?? localCatalog.parentRemoteId,
+      surfaceAreaId: localCatalog.parentLocalId ?? localCatalog.parentRemoteId,
+      surfaceLevelId: localCatalog.parentLocalId ?? localCatalog.parentRemoteId
     },
     catalogs,
     idMap
@@ -465,6 +479,22 @@ async function runCreate(action: OfflineProposalAction, payload: ProposalPayload
   if (action.module === "surface") {
     if (action.entity === "area") {
       return createSurfaceArea(payload as { name: string; abbreviation: string; description?: string });
+    }
+    if (action.entity === "level") {
+      return createSurfaceLevel(
+        payload as {
+          surfaceAreaId: string;
+          name: string;
+          abbreviation: string;
+          elevation?: number;
+          description?: string;
+        }
+      );
+    }
+    if (action.entity === "labor") {
+      return createSurfaceLabor(
+        payload as { surfaceLevelId: string; name: string; abbreviation: string; description?: string }
+      );
     }
     if (action.entity === "objective") {
       return createSurfaceObjective(payload as { name: string; description?: string });

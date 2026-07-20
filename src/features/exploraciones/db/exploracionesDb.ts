@@ -329,6 +329,27 @@ export async function cacheProposalCatalogs(items: Array<Omit<OfflineProposalCat
   }
 }
 
+export async function pruneMissingProposalCatalogs(
+  module: ProposalModule,
+  entity: Exclude<ProposalEntity, "sample">,
+  validRemoteIds: string[]
+) {
+  const validSet = new Set(validRemoteIds);
+  const stale = await exploracionesDb.proposalCatalogs
+    .filter(
+      (item) =>
+        item.module === module &&
+        item.entity === entity &&
+        Boolean(item.remoteId) &&
+        !validSet.has(item.remoteId as string)
+    )
+    .toArray();
+  if (stale.length === 0) return;
+  await exploracionesDb.proposalCatalogs.bulkDelete(
+    stale.map((item) => item.id).filter((id): id is number => id !== undefined)
+  );
+}
+
 export async function saveProposalSample(item: Omit<OfflineProposalSample, "id" | "createdAt" | "updatedAt">) {
   const now = new Date().toISOString();
   const id = await exploracionesDb.proposalSamples.add({

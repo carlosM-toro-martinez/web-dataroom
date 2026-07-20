@@ -51,6 +51,18 @@ export const interiorLaborSchema = catalogItemSchema.extend({
   level: interiorLevelSchema.optional()
 });
 
+export const surfaceLevelSchema = catalogItemSchema.extend({
+  surfaceAreaId: z.string(),
+  elevation: optionalNumber,
+  codeStart: optionalNumber,
+  area: catalogItemSchema.optional()
+});
+
+export const surfaceLaborSchema = catalogItemSchema.extend({
+  surfaceLevelId: z.string(),
+  level: surfaceLevelSchema.optional()
+});
+
 export const sampleResultSchema = z
   .object({
     id: z.string().optional(),
@@ -109,7 +121,8 @@ export const interiorSampleSchema = z
   .passthrough();
 
 export const surfaceAreaSchema = catalogItemSchema.extend({
-  _count: z.unknown().optional()
+  _count: z.unknown().optional(),
+  levels: z.array(z.unknown()).optional()
 });
 
 export const surfaceSampleSchema = z
@@ -127,7 +140,7 @@ export const surfaceSampleSchema = z
     north: optionalNumber,
     elevation: optionalNumber,
     sampledAt: optionalDate,
-    area: surfaceAreaSchema.optional(),
+    labor: surfaceLaborSchema.optional(),
     objective: catalogItemSchema.optional(),
     createdBy: createdBySchema.optional(),
     labAssignments: z.array(sampleLabAssignmentSchema).optional().default([]),
@@ -240,7 +253,8 @@ export const surfaceHierarchyAreaSchema = z
     name: z.string(),
     abbreviation: optionalText,
     description: optionalText,
-    samples: hierarchySampleCountsSchema.optional().default(emptyHierarchySampleCounts)
+    samples: hierarchySampleCountsSchema.optional().default(emptyHierarchySampleCounts),
+    levels: z.array(interiorHierarchyLevelSchema).optional().default([])
   })
   .passthrough();
 
@@ -262,6 +276,8 @@ export type InteriorLevel = z.infer<typeof interiorLevelSchema>;
 export type InteriorLabor = z.infer<typeof interiorLaborSchema>;
 export type InteriorSample = z.infer<typeof interiorSampleSchema>;
 export type SurfaceArea = z.infer<typeof surfaceAreaSchema>;
+export type SurfaceLevel = z.infer<typeof surfaceLevelSchema>;
+export type SurfaceLabor = z.infer<typeof surfaceLaborSchema>;
 export type SurfaceSample = z.infer<typeof surfaceSampleSchema>;
 
 export interface SampleResultPayload {
@@ -332,7 +348,7 @@ export interface CreateSampleResultPayload {
 }
 
 export interface SurfaceSampleWithResultsPayload {
-  surfaceAreaId: string;
+  surfaceLaborId: string;
   surfaceObjectiveId: string;
   category?: SampleCategory;
   name?: string;
