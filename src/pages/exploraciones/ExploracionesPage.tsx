@@ -654,13 +654,18 @@ function isLegacySeededArea(item: { name?: string | null; abbreviation?: string 
   return module === "interior" ? LEGACY_SEEDED_INTERIOR_AREAS.has(key) : LEGACY_SEEDED_SURFACE_AREAS.has(key);
 }
 
-function isVisibleStructureCatalog(item: OfflineProposalCatalog) {
+function isVisibleStructureCatalog(item: OfflineProposalCatalog, category?: SampleCategory) {
   if (!isUsableCatalog(item)) return false;
   if (item.entity === "area" && (item.module === "interior" || item.module === "surface")) {
-    return !isLegacySeededArea(item, item.module);
+    if (isLegacySeededArea(item, item.module)) return false;
+  } else if (item.entity === "level") {
+    if (LEGACY_SEEDED_LEVELS.has(legacyStructureKey(item))) return false;
+  } else if (item.entity === "labor") {
+    if (LEGACY_SEEDED_LABORS.has(legacyStructureKey(item))) return false;
   }
-  if (item.entity === "level") return !LEGACY_SEEDED_LEVELS.has(legacyStructureKey(item));
-  if (item.entity === "labor") return !LEGACY_SEEDED_LABORS.has(legacyStructureKey(item));
+  if (category && (item.entity === "area" || item.entity === "level" || item.entity === "labor")) {
+    return item.category === category;
+  }
   return true;
 }
 
@@ -878,10 +883,10 @@ function ExploracionesRegisterPage({ sampleCategory }: { sampleCategory: SampleC
   const lastSilentSyncAtRef = useRef(0);
 
   const remoteElements = useSharedElementsQuery();
-  const remoteInteriorAreas = useInteriorAreasQuery();
-  const remoteInteriorHierarchy = useInteriorHierarchyQuery();
-  const remoteInteriorLevels = useInteriorLevelsQuery(sampleForm.interiorAreaId);
-  const remoteInteriorLabors = useInteriorLaborsQuery(sampleForm.interiorLevelId);
+  const remoteInteriorAreas = useInteriorAreasQuery(sampleCategory);
+  const remoteInteriorHierarchy = useInteriorHierarchyQuery(sampleCategory);
+  const remoteInteriorLevels = useInteriorLevelsQuery(sampleForm.interiorAreaId, sampleCategory);
+  const remoteInteriorLabors = useInteriorLaborsQuery(sampleForm.interiorLevelId, sampleCategory);
   const remoteInteriorObjectives = useInteriorObjectivesQuery();
   const remoteInteriorLaboratories = useInteriorLaboratoriesQuery();
   const remoteInteriorSamples = useInteriorSamplesQuery({
@@ -897,10 +902,10 @@ function ExploracionesRegisterPage({ sampleCategory }: { sampleCategory: SampleC
     category: sampleCategory,
     status: "REGISTERED"
   });
-  const remoteSurfaceAreas = useSurfaceAreasQuery();
-  const remoteSurfaceHierarchy = useSurfaceHierarchyQuery();
-  const remoteSurfaceLevels = useSurfaceLevelsQuery(sampleForm.surfaceAreaId);
-  const remoteSurfaceLabors = useSurfaceLaborsQuery(sampleForm.surfaceLevelId);
+  const remoteSurfaceAreas = useSurfaceAreasQuery(sampleCategory);
+  const remoteSurfaceHierarchy = useSurfaceHierarchyQuery(sampleCategory);
+  const remoteSurfaceLevels = useSurfaceLevelsQuery(sampleForm.surfaceAreaId, sampleCategory);
+  const remoteSurfaceLabors = useSurfaceLaborsQuery(sampleForm.surfaceLevelId, sampleCategory);
   const remoteSurfaceObjectives = useSurfaceObjectivesQuery();
   const remoteSurfaceLaboratories = useSurfaceLaboratoriesQuery();
   const remoteSurfaceSamples = useSurfaceSamplesQuery({
@@ -1071,7 +1076,7 @@ function ExploracionesRegisterPage({ sampleCategory }: { sampleCategory: SampleC
   const selectedInteriorArea = [
     ...(remoteInteriorAreas.data ?? []),
     ...hierarchyInteriorAreas,
-    ...localCatalogs.filter(isVisibleStructureCatalog).filter((item) => item.module === "interior" && item.entity === "area").map(localCatalogToItem)
+    ...localCatalogs.filter((item) => isVisibleStructureCatalog(item, sampleCategory)).filter((item) => item.module === "interior" && item.entity === "area").map(localCatalogToItem)
   ].find((item) => item.id === sampleForm.interiorAreaId);
 
   const selectedInteriorAreaIds = new Set<string>(sampleForm.interiorAreaId ? [sampleForm.interiorAreaId] : []);
@@ -1079,7 +1084,7 @@ function ExploracionesRegisterPage({ sampleCategory }: { sampleCategory: SampleC
     const selectedName = normalizeCatalogText(selectedInteriorArea.name);
     const selectedAbbreviation = normalizeCatalogText(selectedInteriorArea.abbreviation);
     localCatalogs
-      .filter(isVisibleStructureCatalog)
+      .filter((item) => isVisibleStructureCatalog(item, sampleCategory))
       .filter((item) => item.module === "interior" && item.entity === "area")
       .filter(
         (item) =>
@@ -1098,14 +1103,14 @@ function ExploracionesRegisterPage({ sampleCategory }: { sampleCategory: SampleC
   );
   const interiorAreas = mergeById(
     mergeById(remoteInteriorAreas.data ?? [], hierarchyInteriorAreas),
-    localCatalogs.filter(isVisibleStructureCatalog).filter((item) => item.module === "interior" && item.entity === "area").map(localCatalogToItem)
+    localCatalogs.filter((item) => isVisibleStructureCatalog(item, sampleCategory)).filter((item) => item.module === "interior" && item.entity === "area").map(localCatalogToItem)
   );
   const interiorLevels = mergeById(
     mergeById(remoteInteriorLevels.data ?? [], hierarchyInteriorLevels).filter(
       (item) => !sampleForm.interiorAreaId || selectedInteriorAreaIds.has(item.interiorAreaId ?? "")
     ),
     localCatalogs
-      .filter(isVisibleStructureCatalog)
+      .filter((item) => isVisibleStructureCatalog(item, sampleCategory))
       .filter((item) => item.module === "interior" && item.entity === "level")
       .filter(
         (item) =>
@@ -1124,7 +1129,7 @@ function ExploracionesRegisterPage({ sampleCategory }: { sampleCategory: SampleC
     ...(remoteInteriorLevels.data ?? []),
     ...hierarchyInteriorLevels,
     ...localCatalogs
-      .filter(isVisibleStructureCatalog)
+      .filter((item) => isVisibleStructureCatalog(item, sampleCategory))
       .filter((item) => item.module === "interior" && item.entity === "level")
       .map((item) => ({
         ...localCatalogToItem(item),
@@ -1138,7 +1143,7 @@ function ExploracionesRegisterPage({ sampleCategory }: { sampleCategory: SampleC
     const selectedName = normalizeCatalogText(selectedInteriorLevel.name);
     const selectedAbbreviation = normalizeCatalogText(selectedInteriorLevel.abbreviation);
     localCatalogs
-      .filter(isVisibleStructureCatalog)
+      .filter((item) => isVisibleStructureCatalog(item, sampleCategory))
       .filter((item) => item.module === "interior" && item.entity === "level")
       .filter(
         (item) =>
@@ -1156,7 +1161,7 @@ function ExploracionesRegisterPage({ sampleCategory }: { sampleCategory: SampleC
       (item) => !sampleForm.interiorLevelId || selectedInteriorLevelIds.has(item.interiorLevelId ?? "")
     ),
     localCatalogs
-      .filter(isVisibleStructureCatalog)
+      .filter((item) => isVisibleStructureCatalog(item, sampleCategory))
       .filter((item) => item.module === "interior" && item.entity === "labor")
       .filter(
         (item) =>
@@ -1181,7 +1186,7 @@ function ExploracionesRegisterPage({ sampleCategory }: { sampleCategory: SampleC
   );
   const surfaceAreas = mergeById(
     mergeById(remoteSurfaceAreas.data ?? [], hierarchySurfaceAreas),
-    localCatalogs.filter(isVisibleStructureCatalog).filter((item) => item.module === "surface" && item.entity === "area").map(localCatalogToItem)
+    localCatalogs.filter((item) => isVisibleStructureCatalog(item, sampleCategory)).filter((item) => item.module === "surface" && item.entity === "area").map(localCatalogToItem)
   );
 
   const selectedSurfaceArea = surfaceAreas.find((item) => item.id === sampleForm.surfaceAreaId);
@@ -1190,7 +1195,7 @@ function ExploracionesRegisterPage({ sampleCategory }: { sampleCategory: SampleC
     const selectedName = normalizeCatalogText(selectedSurfaceArea.name);
     const selectedAbbreviation = normalizeCatalogText(selectedSurfaceArea.abbreviation);
     localCatalogs
-      .filter(isVisibleStructureCatalog)
+      .filter((item) => isVisibleStructureCatalog(item, sampleCategory))
       .filter((item) => item.module === "surface" && item.entity === "area")
       .filter(
         (item) =>
@@ -1208,7 +1213,7 @@ function ExploracionesRegisterPage({ sampleCategory }: { sampleCategory: SampleC
       (item) => !sampleForm.surfaceAreaId || selectedSurfaceAreaIds.has(item.surfaceAreaId ?? "")
     ),
     localCatalogs
-      .filter(isVisibleStructureCatalog)
+      .filter((item) => isVisibleStructureCatalog(item, sampleCategory))
       .filter((item) => item.module === "surface" && item.entity === "level")
       .filter(
         (item) =>
@@ -1227,7 +1232,7 @@ function ExploracionesRegisterPage({ sampleCategory }: { sampleCategory: SampleC
     ...(remoteSurfaceLevels.data ?? []),
     ...hierarchySurfaceLevels,
     ...localCatalogs
-      .filter(isVisibleStructureCatalog)
+      .filter((item) => isVisibleStructureCatalog(item, sampleCategory))
       .filter((item) => item.module === "surface" && item.entity === "level")
       .map((item) => ({
         ...localCatalogToItem(item),
@@ -1241,7 +1246,7 @@ function ExploracionesRegisterPage({ sampleCategory }: { sampleCategory: SampleC
     const selectedName = normalizeCatalogText(selectedSurfaceLevel.name);
     const selectedAbbreviation = normalizeCatalogText(selectedSurfaceLevel.abbreviation);
     localCatalogs
-      .filter(isVisibleStructureCatalog)
+      .filter((item) => isVisibleStructureCatalog(item, sampleCategory))
       .filter((item) => item.module === "surface" && item.entity === "level")
       .filter(
         (item) =>
@@ -1259,7 +1264,7 @@ function ExploracionesRegisterPage({ sampleCategory }: { sampleCategory: SampleC
       (item) => !sampleForm.surfaceLevelId || selectedSurfaceLevelIds.has(item.surfaceLevelId ?? "")
     ),
     localCatalogs
-      .filter(isVisibleStructureCatalog)
+      .filter((item) => isVisibleStructureCatalog(item, sampleCategory))
       .filter((item) => item.module === "surface" && item.entity === "labor")
       .filter(
         (item) =>
@@ -1448,6 +1453,7 @@ function ExploracionesRegisterPage({ sampleCategory }: { sampleCategory: SampleC
         entity: "area" as const,
         name: item.name,
         abbreviation: item.abbreviation ?? undefined,
+        category: item.category ?? sampleCategory,
         description: item.description ?? undefined
       })),
       ...hierarchyInteriorAreas.map((item) => ({
@@ -1457,6 +1463,7 @@ function ExploracionesRegisterPage({ sampleCategory }: { sampleCategory: SampleC
         entity: "area" as const,
         name: item.name,
         abbreviation: item.abbreviation ?? undefined,
+        category: sampleCategory,
         description: item.description ?? undefined
       })),
       ...(remoteInteriorLevels.data ?? []).map((item) => ({
@@ -1468,7 +1475,8 @@ function ExploracionesRegisterPage({ sampleCategory }: { sampleCategory: SampleC
         abbreviation: item.abbreviation ?? undefined,
         description: item.description ?? undefined,
         parentRemoteId: item.interiorAreaId,
-        elevation: item.elevation ?? undefined
+        elevation: item.elevation ?? undefined,
+        category: sampleCategory
       })),
       ...hierarchyInteriorLevels.map((item) => ({
         localId: `cache-interior-level-${item.id}`,
@@ -1479,7 +1487,8 @@ function ExploracionesRegisterPage({ sampleCategory }: { sampleCategory: SampleC
         abbreviation: item.abbreviation ?? undefined,
         description: item.description ?? undefined,
         parentRemoteId: item.interiorAreaId,
-        elevation: item.elevation ?? undefined
+        elevation: item.elevation ?? undefined,
+        category: sampleCategory
       })),
       ...(remoteInteriorLabors.data ?? []).map((item) => ({
         localId: `cache-interior-labor-${item.id}`,
@@ -1489,7 +1498,8 @@ function ExploracionesRegisterPage({ sampleCategory }: { sampleCategory: SampleC
         name: item.name,
         abbreviation: item.abbreviation ?? undefined,
         description: item.description ?? undefined,
-        parentRemoteId: item.interiorLevelId
+        parentRemoteId: item.interiorLevelId,
+        category: sampleCategory
       })),
       ...hierarchyInteriorLabors.map((item) => ({
         localId: `cache-interior-labor-${item.id}`,
@@ -1499,7 +1509,8 @@ function ExploracionesRegisterPage({ sampleCategory }: { sampleCategory: SampleC
         name: item.name,
         abbreviation: item.abbreviation ?? undefined,
         description: item.description ?? undefined,
-        parentRemoteId: item.interiorLevelId
+        parentRemoteId: item.interiorLevelId,
+        category: sampleCategory
       })),
       ...(remoteInteriorObjectives.data ?? []).map((item) => ({
         localId: `cache-interior-objective-${item.id}`,
@@ -1526,6 +1537,7 @@ function ExploracionesRegisterPage({ sampleCategory }: { sampleCategory: SampleC
         entity: "area" as const,
         name: item.name,
         abbreviation: item.abbreviation ?? undefined,
+        category: item.category ?? sampleCategory,
         description: item.description ?? undefined
       })),
       ...hierarchySurfaceAreas.map((item) => ({
@@ -1535,6 +1547,7 @@ function ExploracionesRegisterPage({ sampleCategory }: { sampleCategory: SampleC
         entity: "area" as const,
         name: item.name,
         abbreviation: item.abbreviation ?? undefined,
+        category: sampleCategory,
         description: item.description ?? undefined
       })),
       ...(remoteSurfaceLevels.data ?? []).map((item) => ({
@@ -1546,7 +1559,8 @@ function ExploracionesRegisterPage({ sampleCategory }: { sampleCategory: SampleC
         abbreviation: item.abbreviation ?? undefined,
         description: item.description ?? undefined,
         parentRemoteId: item.surfaceAreaId,
-        elevation: item.elevation ?? undefined
+        elevation: item.elevation ?? undefined,
+        category: sampleCategory
       })),
       ...(remoteSurfaceLabors.data ?? []).map((item) => ({
         localId: `cache-surface-labor-${item.id}`,
@@ -1556,7 +1570,8 @@ function ExploracionesRegisterPage({ sampleCategory }: { sampleCategory: SampleC
         name: item.name,
         abbreviation: item.abbreviation ?? undefined,
         description: item.description ?? undefined,
-        parentRemoteId: item.surfaceLevelId
+        parentRemoteId: item.surfaceLevelId,
+        category: sampleCategory
       })),
       ...hierarchySurfaceLevels.map((item) => ({
         localId: `cache-surface-level-${item.id}`,
@@ -1567,7 +1582,8 @@ function ExploracionesRegisterPage({ sampleCategory }: { sampleCategory: SampleC
         abbreviation: item.abbreviation ?? undefined,
         description: item.description ?? undefined,
         parentRemoteId: item.surfaceAreaId,
-        elevation: item.elevation ?? undefined
+        elevation: item.elevation ?? undefined,
+        category: sampleCategory
       })),
       ...hierarchySurfaceLabors.map((item) => ({
         localId: `cache-surface-labor-${item.id}`,
@@ -1577,7 +1593,8 @@ function ExploracionesRegisterPage({ sampleCategory }: { sampleCategory: SampleC
         name: item.name,
         abbreviation: item.abbreviation ?? undefined,
         description: item.description ?? undefined,
-        parentRemoteId: item.surfaceLevelId
+        parentRemoteId: item.surfaceLevelId,
+        category: sampleCategory
       })),
       ...(remoteSurfaceObjectives.data ?? []).map((item) => ({
         localId: `cache-surface-objective-${item.id}`,
@@ -1607,8 +1624,8 @@ function ExploracionesRegisterPage({ sampleCategory }: { sampleCategory: SampleC
       const laborIds = hierarchy.flatMap((area) =>
         (area.levels ?? []).flatMap((level) => (level.labors ?? []).map((labor) => labor.id))
       );
-      void pruneMissingProposalCatalogs("interior", "level", levelIds);
-      void pruneMissingProposalCatalogs("interior", "labor", laborIds);
+      void pruneMissingProposalCatalogs("interior", "level", levelIds, sampleCategory);
+      void pruneMissingProposalCatalogs("interior", "labor", laborIds, sampleCategory);
     }
     if (remoteInteriorHierarchy.isSuccess && remoteInteriorAreas.isSuccess) {
       const areaIds = Array.from(
@@ -1617,7 +1634,7 @@ function ExploracionesRegisterPage({ sampleCategory }: { sampleCategory: SampleC
           ...(remoteInteriorAreas.data ?? []).map((area) => area.id)
         ])
       );
-      void pruneMissingProposalCatalogs("interior", "area", areaIds);
+      void pruneMissingProposalCatalogs("interior", "area", areaIds, sampleCategory);
     }
     if (remoteSurfaceHierarchy.isSuccess) {
       const hierarchy = remoteSurfaceHierarchy.data ?? [];
@@ -1625,8 +1642,8 @@ function ExploracionesRegisterPage({ sampleCategory }: { sampleCategory: SampleC
       const laborIds = hierarchy.flatMap((area) =>
         (area.levels ?? []).flatMap((level) => (level.labors ?? []).map((labor) => labor.id))
       );
-      void pruneMissingProposalCatalogs("surface", "level", levelIds);
-      void pruneMissingProposalCatalogs("surface", "labor", laborIds);
+      void pruneMissingProposalCatalogs("surface", "level", levelIds, sampleCategory);
+      void pruneMissingProposalCatalogs("surface", "labor", laborIds, sampleCategory);
     }
     if (remoteSurfaceHierarchy.isSuccess && remoteSurfaceAreas.isSuccess) {
       const areaIds = Array.from(
@@ -1635,7 +1652,7 @@ function ExploracionesRegisterPage({ sampleCategory }: { sampleCategory: SampleC
           ...(remoteSurfaceAreas.data ?? []).map((area) => area.id)
         ])
       );
-      void pruneMissingProposalCatalogs("surface", "area", areaIds);
+      void pruneMissingProposalCatalogs("surface", "area", areaIds, sampleCategory);
     }
   }, [
     remoteElements.data,
@@ -1660,7 +1677,8 @@ function ExploracionesRegisterPage({ sampleCategory }: { sampleCategory: SampleC
     hierarchySurfaceLabors,
     hierarchySurfaceLevels,
     remoteSurfaceLaboratories.data,
-    remoteSurfaceObjectives.data
+    remoteSurfaceObjectives.data,
+    sampleCategory
   ]);
 
   function setSampleField(field: keyof SampleForm, value: string) {
@@ -2512,8 +2530,8 @@ function ExploracionesRegisterPage({ sampleCategory }: { sampleCategory: SampleC
         await queueCatalog.mutateAsync({
           module,
           entity: "area",
-          payload: { name, abbreviation, description },
-          catalog: { localId, module, entity: "area", name, abbreviation, description }
+          payload: { name, abbreviation, category: sampleCategory, description },
+          catalog: { localId, module, entity: "area", name, abbreviation, category: sampleCategory, description }
         });
       }
 
@@ -2536,6 +2554,7 @@ function ExploracionesRegisterPage({ sampleCategory }: { sampleCategory: SampleC
             abbreviation,
             description,
             elevation,
+            category: sampleCategory,
             parentLocalId: catalogForm.parentId,
             parentRemoteId: catalogForm.parentId
           }
@@ -2559,6 +2578,7 @@ function ExploracionesRegisterPage({ sampleCategory }: { sampleCategory: SampleC
             name,
             abbreviation,
             description,
+            category: sampleCategory,
             parentLocalId: catalogForm.parentId,
             parentRemoteId: catalogForm.parentId
           }
@@ -2584,6 +2604,7 @@ function ExploracionesRegisterPage({ sampleCategory }: { sampleCategory: SampleC
             abbreviation,
             description,
             elevation,
+            category: sampleCategory,
             parentLocalId: catalogForm.parentId,
             parentRemoteId: catalogForm.parentId
           }
@@ -2607,6 +2628,7 @@ function ExploracionesRegisterPage({ sampleCategory }: { sampleCategory: SampleC
             name,
             abbreviation,
             description,
+            category: sampleCategory,
             parentLocalId: catalogForm.parentId,
             parentRemoteId: catalogForm.parentId
           }

@@ -36,6 +36,7 @@ export const catalogItemSchema = z
   .passthrough();
 
 export const interiorAreaSchema = catalogItemSchema.extend({
+  category: sampleCategorySchema.optional(),
   levels: z.array(z.unknown()).optional()
 });
 
@@ -121,6 +122,7 @@ export const interiorSampleSchema = z
   .passthrough();
 
 export const surfaceAreaSchema = catalogItemSchema.extend({
+  category: sampleCategorySchema.optional(),
   _count: z.unknown().optional(),
   levels: z.array(z.unknown()).optional()
 });
@@ -241,6 +243,7 @@ export const interiorHierarchyAreaSchema = z
     id: z.string(),
     name: z.string(),
     abbreviation: optionalText,
+    category: sampleCategorySchema.optional(),
     description: optionalText,
     samples: hierarchySampleCountsSchema.optional().default(emptyHierarchySampleCounts),
     levels: z.array(interiorHierarchyLevelSchema).optional().default([])
@@ -252,6 +255,7 @@ export const surfaceHierarchyAreaSchema = z
     id: z.string(),
     name: z.string(),
     abbreviation: optionalText,
+    category: sampleCategorySchema.optional(),
     description: optionalText,
     samples: hierarchySampleCountsSchema.optional().default(emptyHierarchySampleCounts),
     levels: z.array(interiorHierarchyLevelSchema).optional().default([])

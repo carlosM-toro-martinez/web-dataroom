@@ -1,6 +1,6 @@
 import { FormEvent, type ReactNode, useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
-import { Layers3, MapPinned, Pencil, RefreshCw, Search, Trash2, X } from "lucide-react";
+import { Landmark, Layers3, MapPinned, Pencil, RefreshCw, Search, Target, Trash2, X } from "lucide-react";
 import {
   useCreateInteriorAreaMutation,
   useCreateInteriorLaborMutation,
@@ -28,6 +28,7 @@ import {
 } from "@/features/exploraciones/hooks/useProposalSamples";
 import type {
   InteriorHierarchyArea,
+  SampleCategory,
   SurfaceHierarchyArea
 } from "@/features/exploraciones/model/proposalSamples.schema";
 import type { OfflineProposalCatalog } from "@/features/exploraciones/db/exploracionesDb";
@@ -83,11 +84,12 @@ const emptyStructureForm: StructureForm = {
 export function ExploracionesHierarchyPage() {
   const { showError, showSuccess } = useToast();
   const [viewMode, setViewMode] = useState<ViewMode>("interior");
+  const [category, setCategory] = useState<SampleCategory>("EXPLORATION");
   const [search, setSearch] = useState("");
   const [form, setForm] = useState<StructureForm>(emptyStructureForm);
   const [editTarget, setEditTarget] = useState<EditTarget>(null);
-  const interior = useInteriorHierarchyQuery();
-  const surface = useSurfaceHierarchyQuery();
+  const interior = useInteriorHierarchyQuery(category);
+  const surface = useSurfaceHierarchyQuery(category);
   const createInteriorArea = useCreateInteriorAreaMutation();
   const createInteriorLevel = useCreateInteriorLevelMutation();
   const createInteriorLabor = useCreateInteriorLaborMutation();
@@ -106,15 +108,15 @@ export function ExploracionesHierarchyPage() {
   const deleteSurfaceArea = useDeleteSurfaceAreaMutation();
   const deleteSurfaceLevel = useDeleteSurfaceLevelMutation();
   const deleteSurfaceLabor = useDeleteSurfaceLaborMutation();
-  const interiorAreas = useInteriorAreasQuery();
-  const surfaceAreas = useSurfaceAreasQuery();
+  const interiorAreas = useInteriorAreasQuery(category);
+  const surfaceAreas = useSurfaceAreasQuery(category);
   const offlineCatalogs = useOfflineProposalCatalogsQuery();
   const activeQuery = viewMode === "interior" ? interior : surface;
   const activeAreasQuery = viewMode === "interior" ? interiorAreas : surfaceAreas;
   const hasRemoteStructure = Boolean(activeQuery.data || activeAreasQuery.data);
   const localHierarchy = useMemo(
-    () => buildLocalHierarchy(viewMode, offlineCatalogs.data ?? []),
-    [offlineCatalogs.data, viewMode]
+    () => buildLocalHierarchy(viewMode, category, offlineCatalogs.data ?? []),
+    [offlineCatalogs.data, viewMode, category]
   );
   const rawData = useMemo(
     () =>
@@ -159,7 +161,7 @@ export function ExploracionesHierarchyPage() {
   useEffect(() => {
     const sourceData = activeQuery.data ?? [];
     const areaData = activeAreasQuery.data ?? [];
-    const items = buildHierarchyCacheItems(viewMode, sourceData, areaData);
+    const items = buildHierarchyCacheItems(viewMode, category, sourceData, areaData);
     if (items.length > 0) void cacheProposalCatalogs(items);
 
     if (activeQuery.isSuccess) {
@@ -167,16 +169,16 @@ export function ExploracionesHierarchyPage() {
       const laborIds = sourceData.flatMap((area) =>
         (area.levels ?? []).flatMap((level) => (level.labors ?? []).map((labor) => labor.id))
       );
-      void pruneMissingProposalCatalogs(viewMode, "level", levelIds);
-      void pruneMissingProposalCatalogs(viewMode, "labor", laborIds);
+      void pruneMissingProposalCatalogs(viewMode, "level", levelIds, category);
+      void pruneMissingProposalCatalogs(viewMode, "labor", laborIds, category);
     }
     if (activeQuery.isSuccess && activeAreasQuery.isSuccess) {
       const areaIds = Array.from(
         new Set([...sourceData.map((area) => area.id), ...areaData.map((area) => area.id)])
       );
-      void pruneMissingProposalCatalogs(viewMode, "area", areaIds);
+      void pruneMissingProposalCatalogs(viewMode, "area", areaIds, category);
     }
-  }, [activeAreasQuery.data, activeAreasQuery.isSuccess, activeQuery.data, activeQuery.isSuccess, viewMode]);
+  }, [activeAreasQuery.data, activeAreasQuery.isSuccess, activeQuery.data, activeQuery.isSuccess, viewMode, category]);
 
   const setField = (field: keyof StructureForm, value: string) => {
     setForm((current) => ({ ...current, [field]: value }));
@@ -199,6 +201,7 @@ export function ExploracionesHierarchyPage() {
       const payload = {
         name,
         abbreviation,
+        category,
         description: form.areaDescription.trim() || undefined
       };
       if (viewMode === "interior") {
@@ -387,6 +390,14 @@ export function ExploracionesHierarchyPage() {
             </ModeButton>
             <ModeButton active={viewMode === "surface"} onClick={() => setViewMode("surface")} icon={MapPinned}>
               Superficie
+            </ModeButton>
+          </div>
+          <div className="flex flex-col gap-2 sm:flex-row">
+            <ModeButton active={category === "EXPLORATION"} onClick={() => setCategory("EXPLORATION")} icon={Target}>
+              Exploración
+            </ModeButton>
+            <ModeButton active={category === "PRODUCTION"} onClick={() => setCategory("PRODUCTION")} icon={Landmark}>
+              Explotación
             </ModeButton>
           </div>
           <div className="flex flex-col gap-2 sm:flex-row">
@@ -831,9 +842,9 @@ function catalogId(item: OfflineProposalCatalog) {
   return item.remoteId ?? item.localId;
 }
 
-function buildLocalHierarchy(mode: ViewMode, catalogs: OfflineProposalCatalog[]) {
+function buildLocalHierarchy(mode: ViewMode, category: SampleCategory, catalogs: OfflineProposalCatalog[]) {
   const usable = catalogs.filter((item) => item.module === mode && !item.localId.startsWith("seed-"));
-  const areas = usable.filter((item) => item.entity === "area");
+  const areas = usable.filter((item) => item.entity === "area" && item.category === category);
   const levels = usable.filter((item) => item.entity === "level");
   const labors = usable.filter((item) => item.entity === "labor");
 
@@ -924,6 +935,7 @@ function mergeHierarchyWithAreas<T extends InteriorHierarchyArea | SurfaceHierar
 
 function buildHierarchyCacheItems(
   mode: ViewMode,
+  category: SampleCategory,
   hierarchy: Array<InteriorHierarchyArea | SurfaceHierarchyArea>,
   areas: Array<{ id: string; name: string; abbreviation?: string | null; description?: string | null }>
 ) {
@@ -940,6 +952,7 @@ function buildHierarchyCacheItems(
       entity: "area",
       name: area.name,
       abbreviation: area.abbreviation ?? undefined,
+      category,
       description: area.description ?? undefined
     });
   });
@@ -955,7 +968,8 @@ function buildHierarchyCacheItems(
         abbreviation: level.abbreviation ?? undefined,
         description: level.description ?? undefined,
         parentRemoteId: area.id,
-        elevation: level.elevation ?? undefined
+        elevation: level.elevation ?? undefined,
+        category
       });
 
       (level.labors ?? []).forEach((labor) => {
@@ -967,7 +981,8 @@ function buildHierarchyCacheItems(
           name: labor.name,
           abbreviation: labor.abbreviation ?? undefined,
           description: labor.description ?? undefined,
-          parentRemoteId: level.id
+          parentRemoteId: level.id,
+          category
         });
       });
     });

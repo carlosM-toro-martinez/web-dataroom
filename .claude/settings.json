@@ -20,7 +20,16 @@
       "Bash(curl -s -m 5 -X DELETE http://localhost:3000/api/surface-sample/labors/e5c1b646-f697-48c4-9924-37606912af73 -H 'Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6MSwicm9sZSI6IkFETUlOIiwiaWF0IjoxNzg0NTc4NDg5LCJleHAiOjE3ODQ2MDcyODl9.Ak69plZhGXZc55Xz6X7jh5tZv2NIR05vY7t_tkue5Ig')",
       "Bash(curl -s -m 5 -X DELETE http://localhost:3000/api/surface-sample/levels/0731b6af-9e58-488e-9459-dabc9eb44480 -H 'Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6MSwicm9sZSI6IkFETUlOIiwiaWF0IjoxNzg0NTc4NDg5LCJleHAiOjE3ODQ2MDcyODl9.Ak69plZhGXZc55Xz6X7jh5tZv2NIR05vY7t_tkue5Ig')",
       "Bash(curl -s -m 5 -X DELETE http://localhost:3000/api/surface-sample/areas/6f36c7d7-d288-4d67-9caa-e8ad0e323ae2 -H 'Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6MSwicm9sZSI6IkFETUlOIiwiaWF0IjoxNzg0NTc4NDg5LCJleHAiOjE3ODQ2MDcyODl9.Ak69plZhGXZc55Xz6X7jh5tZv2NIR05vY7t_tkue5Ig')",
-      "Bash(tail -20 /tmp/api_dev.log)"
+      "Bash(tail -20 /tmp/api_dev.log)",
+      "Bash(npx prisma *)",
+      "Read(//tmp/prisma_diff/**)",
+      "Bash(cd \"c:/Users/HP/Desktop/projects/Minera_Marte/code/api-exploracion\" && diff /tmp/prisma_diff/old_schema.prisma prisma/schema.prisma | head -80; echo \"---linecounts---\"; wc -l /tmp/prisma_diff/old_schema.prisma prisma/schema.prisma)",
+      "Bash(cd \"c:/Users/HP/Desktop/projects/Minera_Marte/code/api-exploracion\" && git show 2a27cca^:prisma/schema.prisma > /tmp/prisma_diff/old_schema.prisma && diff /tmp/prisma_diff/old_schema.prisma prisma/schema.prisma | head -5; wc -l /tmp/prisma_diff/old_schema.prisma prisma/schema.prisma)",
+      "Bash(curl -s -m 5 -X POST http://localhost:3000/api/interior/areas -H 'Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6MSwicm9sZSI6IkFETUlOIiwiaWF0IjoxNzg0NTc4NDg5LCJleHAiOjE3ODQ2MDcyODl9.Ak69plZhGXZc55Xz6X7jh5tZv2NIR05vY7t_tkue5Ig' -H 'Content-Type: application/json' -d '{\"name\":\"X\",\"abbreviation\":\"X1\"}')",
+      "Bash(curl -s -m 5 http://localhost:3000/api/interior/hierarchy?category=PRODUCTION -H 'Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6MSwicm9sZSI6IkFETUlOIiwiaWF0IjoxNzg0NTc4NDg5LCJleHAiOjE3ODQ2MDcyODl9.Ak69plZhGXZc55Xz6X7jh5tZv2NIR05vY7t_tkue5Ig')",
+      "Bash(curl -s -m 5 http://localhost:3000/api/interior/hierarchy?category=EXPLORATION -H 'Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6MSwicm9sZSI6IkFETUlOIiwiaWF0IjoxNzg0NTc4NDg5LCJleHAiOjE3ODQ2MDcyODl9.Ak69plZhGXZc55Xz6X7jh5tZv2NIR05vY7t_tkue5Ig')",
+      "Bash(curl -s -m 5 -X DELETE http://localhost:3000/api/interior/areas/34b81417-9cac-4d56-886e-0937178d09c3 -H 'Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6MSwicm9sZSI6IkFETUlOIiwiaWF0IjoxNzg0NTc4NDg5LCJleHAiOjE3ODQ2MDcyODl9.Ak69plZhGXZc55Xz6X7jh5tZv2NIR05vY7t_tkue5Ig')",
+      "Bash(curl -s -m 5 -X DELETE http://localhost:3000/api/interior/areas/0e73cb77-9dcc-4379-b7ef-1c7d2b1c0d89 -H 'Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6MSwicm9sZSI6IkFETUlOIiwiaWF0IjoxNzg0NTc4NDg5LCJleHAiOjE3ODQ2MDcyODl9.Ak69plZhGXZc55Xz6X7jh5tZv2NIR05vY7t_tkue5Ig')"
     ]
   }
 }

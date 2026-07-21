@@ -381,6 +381,10 @@ function findExistingCatalog(
       return !parentId || catalog.parentRemoteId === parentId || catalog.parentLocalId === parentId;
     }
 
+    if (action.entity === "area" && source.category) {
+      return catalog.category === source.category;
+    }
+
     return true;
   });
 }
@@ -402,7 +406,8 @@ function findExistingCatalogForLocalCatalog(
         interiorAreaId: localCatalog.parentLocalId ?? localCatalog.parentRemoteId,
         interiorLevelId: localCatalog.parentLocalId ?? localCatalog.parentRemoteId,
         surfaceAreaId: localCatalog.parentLocalId ?? localCatalog.parentRemoteId,
-        surfaceLevelId: localCatalog.parentLocalId ?? localCatalog.parentRemoteId
+        surfaceLevelId: localCatalog.parentLocalId ?? localCatalog.parentRemoteId,
+        category: localCatalog.category
       },
       synced: false,
       createdAt: localCatalog.createdAt,
@@ -415,7 +420,8 @@ function findExistingCatalogForLocalCatalog(
       interiorAreaId: localCatalog.parentLocalId ?? localCatalog.parentRemoteId,
       interiorLevelId: localCatalog.parentLocalId ?? localCatalog.parentRemoteId,
       surfaceAreaId: localCatalog.parentLocalId ?? localCatalog.parentRemoteId,
-      surfaceLevelId: localCatalog.parentLocalId ?? localCatalog.parentRemoteId
+      surfaceLevelId: localCatalog.parentLocalId ?? localCatalog.parentRemoteId,
+      category: localCatalog.category
     },
     catalogs,
     idMap
@@ -444,7 +450,9 @@ async function runCreate(action: OfflineProposalAction, payload: ProposalPayload
 
   if (action.module === "interior") {
     if (action.entity === "area") {
-      return createInteriorArea(payload as { name: string; abbreviation: string; description?: string });
+      return createInteriorArea(
+        payload as { name: string; abbreviation: string; category: SampleCategory; description?: string }
+      );
     }
     if (action.entity === "level") {
       return createInteriorLevel(
@@ -478,7 +486,9 @@ async function runCreate(action: OfflineProposalAction, payload: ProposalPayload
 
   if (action.module === "surface") {
     if (action.entity === "area") {
-      return createSurfaceArea(payload as { name: string; abbreviation: string; description?: string });
+      return createSurfaceArea(
+        payload as { name: string; abbreviation: string; category: SampleCategory; description?: string }
+      );
     }
     if (action.entity === "level") {
       return createSurfaceLevel(

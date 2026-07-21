@@ -3,6 +3,7 @@ import type { ExploracionMuestraPayload } from "@/features/exploraciones/model/m
 import type { ExploracionElementoPayload } from "@/features/exploraciones/model/muestra.schema";
 import type {
   InteriorSampleWithResultsPayload,
+  SampleCategory,
   SurfaceSampleWithResultsPayload
 } from "@/features/exploraciones/model/proposalSamples.schema";
 
@@ -73,6 +74,7 @@ export interface OfflineProposalCatalog {
   parentLocalId?: string;
   parentRemoteId?: string;
   elevation?: number;
+  category?: SampleCategory;
   synced: boolean;
   createdAt: string;
   updatedAt: string;
@@ -332,7 +334,8 @@ export async function cacheProposalCatalogs(items: Array<Omit<OfflineProposalCat
 export async function pruneMissingProposalCatalogs(
   module: ProposalModule,
   entity: Exclude<ProposalEntity, "sample">,
-  validRemoteIds: string[]
+  validRemoteIds: string[],
+  category?: SampleCategory
 ) {
   const validSet = new Set(validRemoteIds);
   const stale = await exploracionesDb.proposalCatalogs
@@ -341,7 +344,8 @@ export async function pruneMissingProposalCatalogs(
         item.module === module &&
         item.entity === entity &&
         Boolean(item.remoteId) &&
-        !validSet.has(item.remoteId as string)
+        !validSet.has(item.remoteId as string) &&
+        (category === undefined || item.category === category)
     )
     .toArray();
   if (stale.length === 0) return;

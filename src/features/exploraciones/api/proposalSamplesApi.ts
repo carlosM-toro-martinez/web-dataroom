@@ -74,7 +74,12 @@ export async function createSharedElement(payload: {
   return parseOne(response.data, (item) => elementSchema.parse(item));
 }
 
-export async function getInteriorAreas(params?: { search?: string; page?: number; limit?: number }) {
+export async function getInteriorAreas(params?: {
+  category?: SampleCategory;
+  search?: string;
+  page?: number;
+  limit?: number;
+}) {
   const response = await httpClient.get(apiEndpoints.exploraciones.interiorAreas, {
     params: buildParams(params)
   });
@@ -84,6 +89,7 @@ export async function getInteriorAreas(params?: { search?: string; page?: number
 export async function createInteriorArea(payload: {
   name: string;
   abbreviation: string;
+  category: SampleCategory;
   description?: string;
 }) {
   const response = await httpClient.post(apiEndpoints.exploraciones.interiorAreas, payload);
@@ -92,7 +98,7 @@ export async function createInteriorArea(payload: {
 
 export async function updateInteriorArea(
   id: string,
-  payload: Partial<{ name: string; abbreviation: string; description?: string }>
+  payload: Partial<{ name: string; abbreviation: string; category: SampleCategory; description?: string }>
 ) {
   const response = await httpClient.patch(apiEndpoints.exploraciones.interiorAreaById(id), payload);
   return parseOne(response.data, (item) => interiorAreaSchema.parse(item));
@@ -104,6 +110,7 @@ export async function deleteInteriorArea(id: string) {
 
 export async function getInteriorLevels(params?: {
   interiorAreaId?: string;
+  category?: SampleCategory;
   search?: string;
   page?: number;
   limit?: number;
@@ -145,6 +152,7 @@ export async function deleteInteriorLevel(id: string) {
 
 export async function getInteriorLabors(params?: {
   interiorLevelId?: string;
+  category?: SampleCategory;
   search?: string;
   page?: number;
   limit?: number;
@@ -205,8 +213,10 @@ export async function createInteriorLaboratory(payload: {
   return parseOne(response.data, (item) => catalogItemSchema.parse(item));
 }
 
-export async function getInteriorHierarchy() {
-  const response = await httpClient.get(apiEndpoints.exploraciones.interiorHierarchy);
+export async function getInteriorHierarchy(params?: { category?: SampleCategory }) {
+  const response = await httpClient.get(apiEndpoints.exploraciones.interiorHierarchy, {
+    params: buildParams(params)
+  });
   return parseList(response.data, (item) => interiorHierarchyAreaSchema.parse(item));
 }
 
@@ -296,7 +306,12 @@ export async function deleteInteriorDispatch(id: string) {
   await httpClient.delete(apiEndpoints.exploraciones.interiorDispatchById(id));
 }
 
-export async function getSurfaceAreas(params?: { search?: string; page?: number; limit?: number }) {
+export async function getSurfaceAreas(params?: {
+  category?: SampleCategory;
+  search?: string;
+  page?: number;
+  limit?: number;
+}) {
   const response = await httpClient.get(apiEndpoints.exploraciones.surfaceSampleAreas, {
     params: buildParams(params)
   });
@@ -306,6 +321,7 @@ export async function getSurfaceAreas(params?: { search?: string; page?: number;
 export async function createSurfaceArea(payload: {
   name: string;
   abbreviation: string;
+  category: SampleCategory;
   description?: string;
 }) {
   const response = await httpClient.post(apiEndpoints.exploraciones.surfaceSampleAreas, payload);
@@ -314,7 +330,7 @@ export async function createSurfaceArea(payload: {
 
 export async function updateSurfaceArea(
   id: string,
-  payload: Partial<{ name: string; abbreviation: string; description?: string }>
+  payload: Partial<{ name: string; abbreviation: string; category: SampleCategory; description?: string }>
 ) {
   const response = await httpClient.patch(apiEndpoints.exploraciones.surfaceSampleAreaById(id), payload);
   return parseOne(response.data, (item) => surfaceAreaSchema.parse(item));
@@ -326,6 +342,7 @@ export async function deleteSurfaceArea(id: string) {
 
 export async function getSurfaceLevels(params?: {
   surfaceAreaId?: string;
+  category?: SampleCategory;
   search?: string;
   page?: number;
   limit?: number;
@@ -367,6 +384,7 @@ export async function deleteSurfaceLevel(id: string) {
 
 export async function getSurfaceLabors(params?: {
   surfaceLevelId?: string;
+  category?: SampleCategory;
   search?: string;
   page?: number;
   limit?: number;
@@ -427,8 +445,10 @@ export async function createSurfaceLaboratory(payload: {
   return parseOne(response.data, (item) => catalogItemSchema.parse(item));
 }
 
-export async function getSurfaceHierarchy() {
-  const response = await httpClient.get(apiEndpoints.exploraciones.surfaceSampleHierarchy);
+export async function getSurfaceHierarchy(params?: { category?: SampleCategory }) {
+  const response = await httpClient.get(apiEndpoints.exploraciones.surfaceSampleHierarchy, {
+    params: buildParams(params)
+  });
   return parseList(response.data, (item) => surfaceHierarchyAreaSchema.parse(item));
 }
 

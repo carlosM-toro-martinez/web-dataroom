@@ -222,35 +222,35 @@ export function useSharedElementsQuery() {
   });
 }
 
-export function useInteriorAreasQuery() {
+export function useInteriorAreasQuery(category?: SampleCategory) {
   return useQuery({
-    queryKey: [...base, "interior", "areas"],
-    queryFn: () => getInteriorAreas({ page: 1, limit: 300 }),
+    queryKey: [...base, "interior", "areas", category],
+    queryFn: () => getInteriorAreas({ category, page: 1, limit: 300 }),
     ...catalogQueryOptions
   });
 }
 
-export function useInteriorHierarchyQuery() {
+export function useInteriorHierarchyQuery(category?: SampleCategory) {
   return useQuery({
-    queryKey: [...base, "interior", "hierarchy"],
-    queryFn: getInteriorHierarchy,
+    queryKey: [...base, "interior", "hierarchy", category],
+    queryFn: () => getInteriorHierarchy({ category }),
     ...catalogQueryOptions
   });
 }
 
-export function useInteriorLevelsQuery(interiorAreaId?: string) {
+export function useInteriorLevelsQuery(interiorAreaId?: string, category?: SampleCategory) {
   return useQuery({
-    queryKey: [...base, "interior", "levels", interiorAreaId],
-    queryFn: () => getInteriorLevels({ interiorAreaId, page: 1, limit: 300 }),
+    queryKey: [...base, "interior", "levels", interiorAreaId, category],
+    queryFn: () => getInteriorLevels({ interiorAreaId, category, page: 1, limit: 300 }),
     enabled: Boolean(interiorAreaId),
     ...catalogQueryOptions
   });
 }
 
-export function useInteriorLaborsQuery(interiorLevelId?: string) {
+export function useInteriorLaborsQuery(interiorLevelId?: string, category?: SampleCategory) {
   return useQuery({
-    queryKey: [...base, "interior", "labors", interiorLevelId],
-    queryFn: () => getInteriorLabors({ interiorLevelId, page: 1, limit: 300 }),
+    queryKey: [...base, "interior", "labors", interiorLevelId, category],
+    queryFn: () => getInteriorLabors({ interiorLevelId, category, page: 1, limit: 300 }),
     enabled: Boolean(interiorLevelId),
     ...catalogQueryOptions
   });
@@ -286,18 +286,18 @@ export function useInteriorSamplesQuery(params: {
   });
 }
 
-export function useSurfaceAreasQuery() {
+export function useSurfaceAreasQuery(category?: SampleCategory) {
   return useQuery({
-    queryKey: [...base, "surface", "areas"],
-    queryFn: () => getSurfaceAreas({ page: 1, limit: 300 }),
+    queryKey: [...base, "surface", "areas", category],
+    queryFn: () => getSurfaceAreas({ category, page: 1, limit: 300 }),
     ...catalogQueryOptions
   });
 }
 
-export function useSurfaceHierarchyQuery() {
+export function useSurfaceHierarchyQuery(category?: SampleCategory) {
   return useQuery({
-    queryKey: [...base, "surface", "hierarchy"],
-    queryFn: getSurfaceHierarchy,
+    queryKey: [...base, "surface", "hierarchy", category],
+    queryFn: () => getSurfaceHierarchy({ category }),
     ...catalogQueryOptions
   });
 }
@@ -310,19 +310,19 @@ export function useSurfaceObjectivesQuery() {
   });
 }
 
-export function useSurfaceLevelsQuery(surfaceAreaId?: string) {
+export function useSurfaceLevelsQuery(surfaceAreaId?: string, category?: SampleCategory) {
   return useQuery({
-    queryKey: [...base, "surface", "levels", surfaceAreaId],
-    queryFn: () => getSurfaceLevels({ surfaceAreaId, page: 1, limit: 300 }),
+    queryKey: [...base, "surface", "levels", surfaceAreaId, category],
+    queryFn: () => getSurfaceLevels({ surfaceAreaId, category, page: 1, limit: 300 }),
     enabled: Boolean(surfaceAreaId),
     ...catalogQueryOptions
   });
 }
 
-export function useSurfaceLaborsQuery(surfaceLevelId?: string) {
+export function useSurfaceLaborsQuery(surfaceLevelId?: string, category?: SampleCategory) {
   return useQuery({
-    queryKey: [...base, "surface", "labors", surfaceLevelId],
-    queryFn: () => getSurfaceLabors({ surfaceLevelId, page: 1, limit: 300 }),
+    queryKey: [...base, "surface", "labors", surfaceLevelId, category],
+    queryFn: () => getSurfaceLabors({ surfaceLevelId, category, page: 1, limit: 300 }),
     enabled: Boolean(surfaceLevelId),
     ...catalogQueryOptions
   });
@@ -383,8 +383,13 @@ export function useCreateInteriorAreaMutation() {
 export function useUpdateInteriorAreaMutation() {
   const invalidate = useInvalidateProposalSamples();
   return useMutation({
-    mutationFn: ({ id, payload }: { id: string; payload: Partial<{ name: string; abbreviation: string; description?: string }> }) =>
-      updateInteriorArea(id, payload),
+    mutationFn: ({
+      id,
+      payload
+    }: {
+      id: string;
+      payload: Partial<{ name: string; abbreviation: string; category: SampleCategory; description?: string }>;
+    }) => updateInteriorArea(id, payload),
     onSuccess: invalidate
   });
 }
@@ -465,8 +470,13 @@ export function useCreateSurfaceAreaMutation() {
 export function useUpdateSurfaceAreaMutation() {
   const invalidate = useInvalidateProposalSamples();
   return useMutation({
-    mutationFn: ({ id, payload }: { id: string; payload: Partial<{ name: string; abbreviation: string; description?: string }> }) =>
-      updateSurfaceArea(id, payload),
+    mutationFn: ({
+      id,
+      payload
+    }: {
+      id: string;
+      payload: Partial<{ name: string; abbreviation: string; category: SampleCategory; description?: string }>;
+    }) => updateSurfaceArea(id, payload),
     onSuccess: invalidate
   });
 }
