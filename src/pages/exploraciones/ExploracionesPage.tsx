@@ -1097,10 +1097,7 @@ function ExploracionesRegisterPage({ sampleCategory }: { sampleCategory: SampleC
       });
   }
 
-  const elements = mergeById(
-    remoteElements.data ?? [],
-    localCatalogs.filter(isUsableCatalog).filter((item) => item.entity === "element").map(localElementToItem)
-  );
+  const elements = remoteElements.data ?? [];
   const interiorAreas = mergeById(
     mergeById(remoteInteriorAreas.data ?? [], hierarchyInteriorAreas),
     localCatalogs.filter((item) => isVisibleStructureCatalog(item, sampleCategory)).filter((item) => item.module === "interior" && item.entity === "area").map(localCatalogToItem)
@@ -1180,10 +1177,7 @@ function ExploracionesRegisterPage({ sampleCategory }: { sampleCategory: SampleC
   );
   const selectedInteriorLevelOption = interiorLevels.find((item) => item.id === sampleForm.interiorLevelId);
   const selectedInteriorLaborOption = interiorLabors.find((item) => item.id === sampleForm.interiorLaborId);
-  const interiorLaboratories = mergeById(
-    remoteInteriorLaboratories.data ?? [],
-    localCatalogs.filter(isUsableCatalog).filter((item) => item.module === "interior" && item.entity === "laboratory").map(localCatalogToItem)
-  );
+  const interiorLaboratories = remoteInteriorLaboratories.data ?? [];
   const surfaceAreas = mergeById(
     mergeById(remoteSurfaceAreas.data ?? [], hierarchySurfaceAreas),
     localCatalogs.filter((item) => isVisibleStructureCatalog(item, sampleCategory)).filter((item) => item.module === "surface" && item.entity === "area").map(localCatalogToItem)
@@ -1283,10 +1277,7 @@ function ExploracionesRegisterPage({ sampleCategory }: { sampleCategory: SampleC
   );
   const selectedSurfaceLevelOption = surfaceLevels.find((item) => item.id === sampleForm.surfaceLevelId);
   const selectedSurfaceLaborOption = surfaceLabors.find((item) => item.id === sampleForm.surfaceLaborId);
-  const surfaceLaboratories = mergeById(
-    remoteSurfaceLaboratories.data ?? [],
-    localCatalogs.filter(isUsableCatalog).filter((item) => item.module === "surface" && item.entity === "laboratory").map(localCatalogToItem)
-  );
+  const surfaceLaboratories = remoteSurfaceLaboratories.data ?? [];
   const selectedSurfaceAreaOption = surfaceAreas.find((item) => item.id === sampleForm.surfaceAreaId);
 
   const activeLaboratories = registerType === "interior" ? interiorLaboratories : surfaceLaboratories;
