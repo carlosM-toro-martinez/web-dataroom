@@ -3561,9 +3561,9 @@ function writeVoucherPrintDocument(printWindow: Window, row: SampleTableRow) {
   const payload = row.source === "local" ? raw.payload ?? {} : raw;
   const voucher = formatVoucherLabel(row).replace(/^N°\s*/, "");
   const sampleId = row.code || row.name || "";
-  const east = compactValue(payload.east, 12);
-  const north = compactValue(payload.north, 12);
-  const elevation = compactValue(payload.elevation, 10);
+  const east = compactValue(payload.east, 18);
+  const north = compactValue(payload.north, 18);
+  const elevation = compactValue(payload.elevation, 16);
   const html = `<!doctype html>
 <html>
 <head>
@@ -3575,8 +3575,8 @@ function writeVoucherPrintDocument(printWindow: Window, row: SampleTableRow) {
     body { margin: 0; background: #fff; color: #171717; font-family: "Courier New", monospace; }
     .voucher-sheet { width: 1188px; height: 302px; padding: 18px 14px 0; }
     .voucher { display: grid; grid-template-columns: 810px 376px; width: 1188px; height: 302px; border: 3px solid #27384a; overflow: hidden; }
-    .main { border: 4px solid #27384a; border-right: 0; padding: 17px 16px 8px 14px; position: relative; overflow: hidden; }
-    .header { display: grid; grid-template-columns: 142px 1fr 157px; align-items: center; height: 53px; margin-bottom: 4px; }
+    .main { border: 4px solid #27384a; border-right: 0; padding: 14px 16px 6px 14px; position: relative; overflow: hidden; }
+    .header { display: grid; grid-template-columns: 142px 1fr 157px; align-items: center; height: 53px; margin-bottom: 2px; }
     .logo { width: 142px; height: 53px; border: 2px solid #8e9ba2; font-family: Arial, sans-serif; line-height: 1; position: relative; overflow: hidden; }
     .logo .small { position: absolute; left: 3px; top: 3px; font-size: 16px; font-weight: 700; color: #374151; }
     .logo .big { position: absolute; left: 3px; bottom: 4px; font-size: 18px; font-weight: 900; color: #111827; letter-spacing: 0; }
@@ -3587,24 +3587,25 @@ function writeVoucherPrintDocument(printWindow: Window, row: SampleTableRow) {
     .number { justify-self: end; width: 150px; height: 38px; background: #d43a2f; color: #fff; border-radius: 4px; display: flex; align-items: center; justify-content: center; gap: 12px; font-family: Arial, sans-serif; font-weight: 900; font-size: 24px; }
     .number span:first-child { font-size: 20px; }
     .form { width: 100%; overflow: hidden; }
-    .form-row { display: grid; gap: 10px; height: 27px; align-items: end; font-size: 18px; line-height: 1; white-space: nowrap; }
+    .form-row { display: grid; gap: 10px; height: 23px; align-items: end; font-size: 17px; line-height: 1; white-space: nowrap; }
     .cols-project { grid-template-columns: 1fr 220px; }
     .cols-sampler { grid-template-columns: 1fr 300px; }
-    .cols-place { grid-template-columns: 315px 1fr; }
+    .cols-location { grid-template-columns: 1fr; }
+    .cols-coords { grid-template-columns: 1fr; }
     .field { display: flex; min-width: 0; align-items: end; gap: 4px; }
     .label { flex: 0 0 auto; }
     .fill { flex: 1 1 auto; min-width: 0; height: 18px; border-bottom: 1.7px solid #171717; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding: 0 4px 1px; }
-    .coords { display: grid; grid-template-columns: 1fr 1fr .8fr; gap: 5px; min-width: 0; }
+    .coords { display: grid; grid-template-columns: 1fr 1fr .85fr; gap: 12px; min-width: 0; }
     .coord { display: flex; min-width: 0; align-items: end; }
     .coord-label { flex: 0 0 auto; }
     .coord-value { flex: 1 1 auto; min-width: 0; height: 18px; border-bottom: 1.7px solid #171717; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding: 0 3px 1px; }
-    .line { font-size: 18px; line-height: 1.5; white-space: nowrap; overflow: hidden; }
-    .obs { letter-spacing: 1px; font-size: 18px; line-height: 1.45; }
+    .line { font-size: 17px; line-height: 1.32; white-space: nowrap; overflow: hidden; }
+    .obs { letter-spacing: 1px; font-size: 17px; line-height: 1.32; }
     .stubs { border-left: 3px dashed #7d8a8e; padding: 8px 10px 8px 18px; display: grid; grid-template-rows: 1fr 1fr 1fr; gap: 8px; }
     .stub { border-top: 3px dashed #7d8a8e; padding-top: 8px; }
     .stub:first-child { border-top: 0; padding-top: 0; }
     .stub-title { height: 32px; border: 2px solid #9fc4d6; border-radius: 3px; display: flex; align-items: center; justify-content: center; color: #788487; font-family: Arial, sans-serif; font-weight: 800; font-size: 12px; }
-    .stub-box { height: 45px; margin-top: 4px; border-radius: 3px; background: #e7f1f7; }
+    .stub-box { height: 45px; margin-top: 4px; border-radius: 3px; background: #e7f1f7; display: flex; align-items: center; justify-content: center; color: #d43a2f; font-family: Arial, sans-serif; font-weight: 900; font-size: 22px; }
     @media print {
       body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
       .voucher-sheet { padding-top: 0; }
@@ -3629,8 +3630,10 @@ function writeVoucherPrintDocument(printWindow: Window, row: SampleTableRow) {
             <div class="field"><span class="label">MUESTREADOR:</span><span class="fill">${compactValue(row.createdByName, 34)}</span></div>
             <div class="field"><span class="label">ID DE MUESTRA:</span><span class="fill">${compactValue(sampleId, 24)}</span></div>
           </div>
-          <div class="form-row cols-place">
+          <div class="form-row cols-location">
             <div class="field"><span class="label">LUGAR:</span><span class="fill">${compactValue(row.location, 24)}</span></div>
+          </div>
+          <div class="form-row cols-coords">
             <div class="field">
               <span class="label">COORDENADAS UTM:</span>
               <span class="coords">
@@ -3648,9 +3651,9 @@ function writeVoucherPrintDocument(printWindow: Window, row: SampleTableRow) {
         </div>
       </section>
       <aside class="stubs">
-        <div class="stub"><div class="stub-title">EMPRESA MINERA MARTE S.R.L.</div><div class="stub-box"></div></div>
-        <div class="stub"><div class="stub-title">EMPRESA MINERA MARTE S.R.L.</div><div class="stub-box"></div></div>
-        <div class="stub"><div class="stub-title">EMPRESA MINERA MARTE S.R.L.</div><div class="stub-box"></div></div>
+        <div class="stub"><div class="stub-title">EMPRESA MINERA MARTE S.R.L.</div><div class="stub-box">${escapeHtml(voucher)}</div></div>
+        <div class="stub"><div class="stub-title">EMPRESA MINERA MARTE S.R.L.</div><div class="stub-box">${escapeHtml(voucher)}</div></div>
+        <div class="stub"><div class="stub-title">EMPRESA MINERA MARTE S.R.L.</div><div class="stub-box">${escapeHtml(voucher)}</div></div>
       </aside>
     </div>
   </div>
