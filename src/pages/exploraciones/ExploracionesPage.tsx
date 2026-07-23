@@ -2483,6 +2483,17 @@ function ExploracionesRegisterPage({ sampleCategory }: { sampleCategory: SampleC
     writeDispatchRemissionDocument(printWindow, dispatch);
   }
 
+  function printDispatchVouchers(dispatch: SampleDispatch) {
+    const printWindow = window.open("", "_blank", "width=1280,height=900");
+    if (!printWindow) {
+      showError("El navegador bloqueó la ventana de impresión.");
+      return;
+    }
+    printWindow.document.write("<p style=\"font-family:Arial,sans-serif;padding:24px\">Preparando talones del lote...</p>");
+    printWindow.document.close();
+    writeDispatchVouchersDocument(printWindow, dispatch, registerType, sampleRows);
+  }
+
   async function onSubmitCatalog(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!modalKind) return;
@@ -3083,6 +3094,7 @@ function ExploracionesRegisterPage({ sampleCategory }: { sampleCategory: SampleC
           onDeleteDispatch={deleteDispatch}
           onRegisterResults={(dispatch, item) => setDispatchResultTarget({ dispatch, item })}
           onPrintDispatch={printDispatchRemission}
+          onPrintVouchers={printDispatchVouchers}
         />
       ) : null}
 
@@ -3556,7 +3568,70 @@ function compactValue(value: unknown, maxLength = 26) {
   return `${escapeHtml(text.slice(0, Math.max(0, maxLength - 1)))}…`;
 }
 
-function writeVoucherPrintDocument(printWindow: Window, row: SampleTableRow) {
+function elementSymbol(value: unknown) {
+  return String(value ?? "").trim();
+}
+
+function requestedElementSymbols(item?: NonNullable<SampleDispatch["items"]>[number]) {
+  return (item?.requestedElements ?? [])
+    .map((requested) => elementSymbol(requested.element?.symbol ?? requested.element?.name ?? requested.elementId))
+    .filter(Boolean);
+}
+
+function voucherElementsLine(symbols: string[] = []) {
+  const normalized = new Set(symbols.map((symbol) => symbol.toLowerCase()));
+  const hasCu = normalized.has("cu") || normalized.has("cobre");
+  const hasAu = normalized.has("au") || normalized.has("oro");
+  const hasAg = normalized.has("ag") || normalized.has("plata");
+  const known = new Set(["cu", "cobre", "au", "oro", "ag", "plata"]);
+  const otherSymbols = symbols.filter((symbol) => !known.has(symbol.toLowerCase()));
+  const hasIcp = otherSymbols.some((symbol) => /icp|multi/i.test(symbol)) || otherSymbols.length > 1;
+  const others = otherSymbols.filter((symbol) => !/icp|multi/i.test(symbol)).join(", ");
+
+  return `ELEMENTOS A ANALIZAR: [${hasCu ? "X" : " "}]Cu&nbsp; [${hasAu ? "X" : " "}]Au&nbsp; [${hasAg ? "X" : " "}]Ag&nbsp; [${hasIcp ? "X" : " "}]ICP Multi&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; OTROS:${others ? ` ${escapeHtml(others)}` : "________"}`;
+}
+
+function sampleIdFromDispatchItem(item: NonNullable<SampleDispatch["items"]>[number], registerType: RegisterType) {
+  return registerType === "interior"
+    ? item.interiorSampleId ?? item.sample?.id
+    : item.surfaceSampleId ?? item.sample?.id;
+}
+
+function dispatchItemToSampleRow(
+  item: NonNullable<SampleDispatch["items"]>[number],
+  registerType: RegisterType,
+  rows: SampleTableRow[]
+) {
+  const sampleId = sampleIdFromDispatchItem(item, registerType);
+  const sampleCode = item.sample?.code;
+  const row =
+    (sampleId ? rows.find((candidate) => candidate.id === sampleId) : undefined) ??
+    (sampleCode ? rows.find((candidate) => candidate.code.replace(" (offline)", "") === sampleCode) : undefined);
+
+  if (row) return row;
+
+  const sample = (item.sample ?? {}) as any;
+  return {
+    id: sampleId ?? item.id,
+    code: sample.code ?? sampleId ?? item.id,
+    name: sample.name ?? null,
+    voucherNumber: sample.voucherNumber ?? null,
+    voucherCode: sample.voucherCode ?? null,
+    category: (sample.category ?? "EXPLORATION") as SampleCategory,
+    status: (sample.status ?? "DISPATCHED") as SampleStatus,
+    priority: (sample.priority ?? "NORMAL") as SamplePriority,
+    sampledAt: sample.sampledAt,
+    objectiveName: sample.objective?.name ?? "-",
+    location: getLaborPath(sample.labor) || sample.location || "-",
+    createdByName: sample.createdBy?.nombre ?? "-",
+    results: sample.results ?? [],
+    labAssignments: sample.labAssignments ?? [],
+    raw: sample,
+    source: "remote" as const
+  };
+}
+
+function renderVoucherMarkup(row: SampleTableRow, symbols: string[] = []) {
   const raw = row.raw as any;
   const payload = row.source === "local" ? raw.payload ?? {} : raw;
   const voucher = formatVoucherLabel(row).replace(/^N°\s*/, "");
@@ -3564,16 +3639,59 @@ function writeVoucherPrintDocument(printWindow: Window, row: SampleTableRow) {
   const east = compactValue(payload.east, 18);
   const north = compactValue(payload.north, 18);
   const elevation = compactValue(payload.elevation, 16);
-  const html = `<!doctype html>
-<html>
-<head>
-  <meta charset="utf-8" />
-  <title>Talón ${escapeHtml(voucher)}</title>
-  <style>
+  return `
+  <div class="voucher-sheet">
+    <div class="voucher">
+      <section class="main">
+        <div class="header">
+          <div class="logo"><div class="small">Empresa Minera</div><div class="big">Marte S.R.L.</div></div>
+          <div class="brand"><div class="brand-title">EMPRESA MINERA MARTE S.R.L.</div><div class="brand-sub">REGISTRO DE MUESTREO</div></div>
+          <div class="number"><span>N°</span><span>${escapeHtml(voucher)}</span></div>
+        </div>
+        <div class="form">
+          <div class="form-row cols-project">
+            <div class="field"><span class="label">PROYECTO:</span><span class="fill">LIPEÑA</span></div>
+            <div class="field"><span class="label">FECHA:</span><span class="fill">${escapeHtml(formatVoucherDate(row.sampledAt))}</span></div>
+          </div>
+          <div class="form-row cols-sampler">
+            <div class="field"><span class="label">MUESTREADOR:</span><span class="fill">${compactValue(row.createdByName, 34)}</span></div>
+            <div class="field"><span class="label">ID DE MUESTRA:</span><span class="fill">${compactValue(sampleId, 24)}</span></div>
+          </div>
+          <div class="form-row cols-location">
+            <div class="field"><span class="label">LUGAR:</span><span class="fill">${compactValue(row.location, 24)}</span></div>
+          </div>
+          <div class="form-row cols-coords">
+            <div class="field">
+              <span class="label">COORDENADAS UTM:</span>
+              <span class="coords">
+                <span class="coord"><span class="coord-label">X:</span><span class="coord-value">${east}</span></span>
+                <span class="coord"><span class="coord-label">Y:</span><span class="coord-value">${north}</span></span>
+                <span class="coord"><span class="coord-label">Z:</span><span class="coord-value">${elevation}</span></span>
+              </span>
+            </div>
+          </div>
+          <div class="line">TIPO DE MUESTRA: [ ] Testigo&nbsp; [ ] Canal&nbsp; [ ] Chips/Detrito&nbsp; [ ] Grab</div>
+          <div class="line">${voucherElementsLine(symbols)}</div>
+          <div class="line obs">OBSERVACIONES:_____________________________________________________</div>
+          <div class="line obs">___________________________________________________________________</div>
+          <div class="line obs">___________________________________________________________________</div>
+        </div>
+      </section>
+      <aside class="stubs">
+        <div class="stub"><div class="stub-title">EMPRESA MINERA MARTE S.R.L.</div><div class="stub-box">${escapeHtml(voucher)}</div></div>
+        <div class="stub"><div class="stub-title">EMPRESA MINERA MARTE S.R.L.</div><div class="stub-box">${escapeHtml(voucher)}</div></div>
+        <div class="stub"><div class="stub-title">EMPRESA MINERA MARTE S.R.L.</div><div class="stub-box">${escapeHtml(voucher)}</div></div>
+      </aside>
+    </div>
+  </div>`;
+}
+
+function voucherPrintStyles() {
+  return `
     @page { size: landscape; margin: 8mm; }
     * { box-sizing: border-box; }
     body { margin: 0; background: #fff; color: #171717; font-family: "Courier New", monospace; }
-    .voucher-sheet { width: 1188px; height: 302px; padding: 18px 14px 0; }
+    .voucher-sheet { width: 1188px; height: 302px; padding: 18px 14px 0; page-break-inside: avoid; break-inside: avoid; }
     .voucher { display: grid; grid-template-columns: 810px 376px; width: 1188px; height: 302px; border: 3px solid #27384a; overflow: hidden; }
     .main { border: 4px solid #27384a; border-right: 0; padding: 14px 16px 6px 14px; position: relative; overflow: hidden; }
     .header { display: grid; grid-template-columns: 142px 1fr 157px; align-items: center; height: 53px; margin-bottom: 2px; }
@@ -3609,54 +3727,61 @@ function writeVoucherPrintDocument(printWindow: Window, row: SampleTableRow) {
     @media print {
       body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
       .voucher-sheet { padding-top: 0; }
-    }
+    }`;
+}
+
+function writeVoucherPrintDocument(printWindow: Window, row: SampleTableRow) {
+  const voucher = formatVoucherLabel(row).replace(/^N°\s*/, "");
+  const html = `<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>Talón ${escapeHtml(voucher)}</title>
+  <style>
+    ${voucherPrintStyles()}
   </style>
 </head>
 <body>
-  <div class="voucher-sheet">
-    <div class="voucher">
-      <section class="main">
-        <div class="header">
-          <div class="logo"><div class="small">Empresa Minera</div><div class="big">Marte S.R.L.</div></div>
-          <div class="brand"><div class="brand-title">EMPRESA MINERA MARTE S.R.L.</div><div class="brand-sub">REGISTRO DE MUESTREO</div></div>
-          <div class="number"><span>N°</span><span>${escapeHtml(voucher)}</span></div>
-        </div>
-        <div class="form">
-          <div class="form-row cols-project">
-            <div class="field"><span class="label">PROYECTO:</span><span class="fill">LIPEÑA</span></div>
-            <div class="field"><span class="label">FECHA:</span><span class="fill">${escapeHtml(formatVoucherDate(row.sampledAt))}</span></div>
-          </div>
-          <div class="form-row cols-sampler">
-            <div class="field"><span class="label">MUESTREADOR:</span><span class="fill">${compactValue(row.createdByName, 34)}</span></div>
-            <div class="field"><span class="label">ID DE MUESTRA:</span><span class="fill">${compactValue(sampleId, 24)}</span></div>
-          </div>
-          <div class="form-row cols-location">
-            <div class="field"><span class="label">LUGAR:</span><span class="fill">${compactValue(row.location, 24)}</span></div>
-          </div>
-          <div class="form-row cols-coords">
-            <div class="field">
-              <span class="label">COORDENADAS UTM:</span>
-              <span class="coords">
-                <span class="coord"><span class="coord-label">X:</span><span class="coord-value">${east}</span></span>
-                <span class="coord"><span class="coord-label">Y:</span><span class="coord-value">${north}</span></span>
-                <span class="coord"><span class="coord-label">Z:</span><span class="coord-value">${elevation}</span></span>
-              </span>
-            </div>
-          </div>
-          <div class="line">TIPO DE MUESTRA: [ ] Testigo&nbsp; [ ] Canal&nbsp; [ ] Chips/Detrito&nbsp; [ ] Grab</div>
-          <div class="line">ELEMENTOS A ANALIZAR: [ ]Cu&nbsp; [ ]Au&nbsp; [ ]Ag&nbsp; [ ]ICP Multi&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; OTROS:________</div>
-          <div class="line obs">OBSERVACIONES:_____________________________________________________</div>
-          <div class="line obs">___________________________________________________________________</div>
-          <div class="line obs">___________________________________________________________________</div>
-        </div>
-      </section>
-      <aside class="stubs">
-        <div class="stub"><div class="stub-title">EMPRESA MINERA MARTE S.R.L.</div><div class="stub-box">${escapeHtml(voucher)}</div></div>
-        <div class="stub"><div class="stub-title">EMPRESA MINERA MARTE S.R.L.</div><div class="stub-box">${escapeHtml(voucher)}</div></div>
-        <div class="stub"><div class="stub-title">EMPRESA MINERA MARTE S.R.L.</div><div class="stub-box">${escapeHtml(voucher)}</div></div>
-      </aside>
-    </div>
-  </div>
+  ${renderVoucherMarkup(row)}
+  <script>
+    window.addEventListener("load", () => {
+      setTimeout(() => {
+        window.focus();
+        window.print();
+      }, 120);
+    });
+  </script>
+</body>
+</html>`;
+
+  printWindow.document.open();
+  printWindow.document.write(html);
+  printWindow.document.close();
+}
+
+function writeDispatchVouchersDocument(
+  printWindow: Window,
+  dispatch: SampleDispatch,
+  registerType: RegisterType,
+  rows: SampleTableRow[]
+) {
+  const title = dispatch.projectName || dispatch.laboratory?.name || dispatch.id;
+  const vouchers = dispatch.items
+    .map((item) => renderVoucherMarkup(dispatchItemToSampleRow(item, registerType, rows), requestedElementSymbols(item)))
+    .join("");
+
+  const html = `<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>Talones lote ${escapeHtml(title)}</title>
+  <style>
+    ${voucherPrintStyles()}
+    .voucher-sheet:nth-of-type(n + 2) { margin-top: 8px; }
+  </style>
+</head>
+<body>
+  ${vouchers || "<p>No hay muestras en este lote.</p>"}
   <script>
     window.addEventListener("load", () => {
       setTimeout(() => {
@@ -4438,7 +4563,8 @@ function DispatchPanel({
   onClose,
   onDeleteDispatch,
   onRegisterResults,
-  onPrintDispatch
+  onPrintDispatch,
+  onPrintVouchers
 }: {
   registerType: RegisterType;
   form: DispatchForm;
@@ -4459,6 +4585,7 @@ function DispatchPanel({
   onDeleteDispatch: (dispatch: SampleDispatch) => void;
   onRegisterResults: (dispatch: SampleDispatch, item: NonNullable<SampleDispatch["items"]>[number]) => void;
   onPrintDispatch: (dispatch: SampleDispatch) => void;
+  onPrintVouchers: (dispatch: SampleDispatch) => void;
 }) {
   const selectedBySample = new Map(items.map((item) => [item.sampleId, item]));
   const labOptions = labelOptions(laboratories);
@@ -4637,6 +4764,14 @@ function DispatchPanel({
                       >
                         <Printer size={14} />
                         Imprimir nota
+                      </button>
+                      <button
+                        type="button"
+                        className={secondaryButton}
+                        onClick={() => onPrintVouchers(dispatch)}
+                      >
+                        <Printer size={14} />
+                        Imprimir talones
                       </button>
                       <button
                         type="button"
