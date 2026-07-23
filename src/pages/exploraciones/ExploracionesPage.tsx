@@ -3838,6 +3838,11 @@ function dispatchItemName(item: NonNullable<SampleDispatch["items"]>[number]) {
   return item.sample?.name ?? dispatchItemSampleCode(item);
 }
 
+function dispatchItemPriority(item: NonNullable<SampleDispatch["items"]>[number]) {
+  const priority = (item.sample as any)?.priority as SamplePriority | undefined;
+  return priority && PRIORITY_LABELS[priority] ? PRIORITY_LABELS[priority] : (priority ?? "-");
+}
+
 function dispatchItemAssays(item: NonNullable<SampleDispatch["items"]>[number]) {
   return (item.requestedElements ?? [])
     .map((requested) => requested.element?.symbol ?? requested.element?.name ?? requested.elementId)
@@ -3858,6 +3863,7 @@ function writeDispatchRemissionDocument(printWindow: Window, dispatch: SampleDis
           <td><mark>${escapeHtml(dispatchItemSampleCode(item))}</mark></td>
           <td><mark>${escapeHtml(dispatchItemSector(item))}</mark></td>
           <td><mark>${escapeHtml(dispatchItemName(item))}</mark></td>
+          <td class="priority"><mark>${escapeHtml(dispatchItemPriority(item))}</mark></td>
           <td class="assays"><mark>${escapeHtml(assays)}</mark></td>
         </tr>`;
     })
@@ -3868,6 +3874,7 @@ function writeDispatchRemissionDocument(printWindow: Window, dispatch: SampleDis
       (_, index) => `
         <tr>
           <td class="number-cell">${rows.length + index + 1}</td>
+          <td></td>
           <td></td>
           <td></td>
           <td></td>
@@ -3911,9 +3918,11 @@ function writeDispatchRemissionDocument(printWindow: Window, dispatch: SampleDis
     th:nth-child(2), td:nth-child(2) { width: 138px; }
     th:nth-child(3), td:nth-child(3) { width: 88px; }
     th:nth-child(4), td:nth-child(4) { width: auto; }
-    th:nth-child(5), td:nth-child(5) { width: 136px; }
+    th:nth-child(5), td:nth-child(5) { width: 86px; }
+    th:nth-child(6), td:nth-child(6) { width: 124px; }
     .number-cell { font-weight: 800; }
     mark { background: #d6dd00; color: #000; padding: 0 1px; }
+    .priority { text-align: center; font-weight: 800; }
     .assays { text-align: center; font-weight: 800; }
     .signatures { display: grid; grid-template-columns: 1fr 1fr; gap: 72px; margin: 46px 68px 0; text-align: center; color: #111; }
     .signature-line { border-top: 1px solid #333; padding-top: 6px; font-size: 11px; }
@@ -3956,6 +3965,7 @@ function writeDispatchRemissionDocument(printWindow: Window, dispatch: SampleDis
           <th>Código de muestra</th>
           <th>Sector</th>
           <th>Nombre</th>
+          <th>Prioridad</th>
           <th>Ensayos solicitados</th>
         </tr>
       </thead>
