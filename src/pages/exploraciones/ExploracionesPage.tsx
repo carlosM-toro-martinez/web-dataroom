@@ -3813,18 +3813,24 @@ function dispatchItemSampleCode(item: NonNullable<SampleDispatch["items"]>[numbe
 function dispatchItemSector(item: NonNullable<SampleDispatch["items"]>[number]) {
   const sample = item.sample as any;
   const candidates = [
-    sample?.sector,
-    sample?.labor?.level?.name,
-    sample?.labor?.level?.abbreviation,
+    sample?.labor?.level?.area?.name,
     sample?.area?.name,
-    sample?.area?.abbreviation
+    sample?.labor?.level?.area?.abbreviation,
+    sample?.area?.abbreviation,
+    sample?.sector
   ];
   const explicit = candidates.find((value) => typeof value === "string" && value.trim());
   if (explicit) return String(explicit).trim().toUpperCase();
 
+  const nameParts = String(sample?.name ?? "")
+    .split(/[\/-]/)
+    .map((part) => part.trim())
+    .filter(Boolean);
+  if (nameParts.length >= 1) return nameParts[0].toUpperCase();
+
   const code = dispatchItemSampleCode(item);
   const parts = code.split(/[\/-]/).map((part) => part.trim()).filter(Boolean);
-  if (parts.length >= 2) return parts[parts.length - 2].toUpperCase();
+  if (parts.length >= 1) return parts[0].toUpperCase();
   return "";
 }
 
