@@ -176,7 +176,7 @@ export const dataRoomAccessRequestSchema = z.object({
   phone: z.string(),
   company: z.string().nullable().optional(),
   reason: z.string(),
-  status: z.enum(["PENDING", "APPROVED", "REJECTED"]),
+  status: z.enum(["PENDING", "APPROVED", "REJECTED", "CANCELLED"]),
   requestedAt: z.string(),
   reviewedAt: z.string().nullable().optional(),
   reviewedById: z.number().nullable().optional(),
@@ -222,6 +222,10 @@ export const rejectDataRoomAccessPayloadSchema = z.object({
   rejectionReason: z.string().min(3)
 });
 
+export const cancelDataRoomAccessPayloadSchema = z.object({
+  cancellationReason: z.string().min(3)
+});
+
 export type AuthRole = z.infer<typeof roleSchema>;
 export type AuthUser = z.infer<typeof authUserSchema>;
 export type LoginPayload = z.infer<typeof loginPayloadSchema>;
@@ -236,3 +240,4 @@ export type DataRoomAccessRequestPayload = z.infer<typeof dataRoomAccessRequestP
 export type DataRoomAccessRequest = z.infer<typeof dataRoomAccessRequestSchema>;
 export type ApproveDataRoomAccessPayload = z.infer<typeof approveDataRoomAccessPayloadSchema>;
 export type RejectDataRoomAccessPayload = z.infer<typeof rejectDataRoomAccessPayloadSchema>;
+export type CancelDataRoomAccessPayload = z.infer<typeof cancelDataRoomAccessPayloadSchema>;

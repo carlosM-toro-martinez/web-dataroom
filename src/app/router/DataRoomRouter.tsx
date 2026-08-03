@@ -8,6 +8,7 @@ import { LoginPage } from "@/pages/auth/LoginPage";
 import { ForgotPasswordPage } from "@/pages/auth/ForgotPasswordPage";
 import { ResetPasswordPage } from "@/pages/auth/ResetPasswordPage";
 import { RegisterUserPage } from "@/pages/auth/RegisterUserPage";
+import { DataRoomAccessRequestsPage } from "@/pages/auth/DataRoomAccessRequestsPage";
 import { DashboardPage } from "@/pages/dashboard/DashboardPage";
 import { NotFoundPage } from "@/pages/not-found/NotFoundPage";
 import { ExploracionesPage } from "@/pages/exploraciones/ExploracionesPage";
@@ -64,6 +65,7 @@ export function DataRoomRouter() {
 
           <Route element={<AdminRoute />}>
             <Route path="/exploraciones-data-room/forms" element={<ExploracionesFormsPage />} />
+            <Route path="/solicitudes-data-room" element={<DataRoomAccessRequestsPage />} />
             <Route path="/trabajadores" element={<RegisterUserPage />} />
             <Route path="/usuarios/nuevo" element={<Navigate to="/trabajadores" replace />} />
           </Route>

@@ -1,5 +1,5 @@
 import { Link, useLocation, useNavigate } from "react-router-dom";
-import { ArrowLeft, Database, LayoutDashboard, MapPinned, MoonStar, Sun, Users } from "lucide-react";
+import { ArrowLeft, ClipboardList, Database, LayoutDashboard, MapPinned, MoonStar, Sun, Users } from "lucide-react";
 import { useAuth } from "@/features/auth/context/AuthContext";
 import { useTheme } from "@/shared/theme/ThemeProvider";
 import { UserRouteMenu } from "@/shared/ui/UserRouteMenu";
@@ -25,7 +25,13 @@ const MAIN_ROUTES: MainRoute[] = [
     label: "Trabajadores",
     to: "/trabajadores",
     icon: Users,
-    roles: ["ADMIN", "SUPERINTENDENTE"]
+    roles: ["ADMIN"]
+  },
+  {
+    label: "Solicitudes",
+    to: "/solicitudes-data-room",
+    icon: ClipboardList,
+    roles: ["ADMIN"]
   }
 ];
 

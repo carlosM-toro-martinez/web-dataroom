@@ -1,5 +1,5 @@
 import { Link, Navigate } from "react-router-dom";
-import { Database, FileSpreadsheet, MapPinned, Users } from "lucide-react";
+import { ClipboardList, Database, FileSpreadsheet, MapPinned, Users } from "lucide-react";
 import { useAuth } from "@/features/auth/context/AuthContext";
 import { InternalHeader } from "@/shared/ui/InternalHeader";
 
@@ -39,6 +39,16 @@ export function DashboardPage() {
             <h2 className="text-lg font-bold">Exploraciones</h2>
             <p className="mt-2 text-sm text-[var(--color-on-surface-variant)]">
               Registra muestras, sincroniza datos y revisa resultados.
+            </p>
+          </Link>
+        ) : null}
+
+        {canManageSystem ? (
+          <Link to="/solicitudes-data-room" className={cardClassName}>
+            <ClipboardList size={22} className="mb-4 text-[var(--color-primary)]" />
+            <h2 className="text-lg font-bold">Solicitudes Data Room</h2>
+            <p className="mt-2 text-sm text-[var(--color-on-surface-variant)]">
+              Aprueba visitantes, define vencimientos y controla accesos externos.
             </p>
           </Link>
         ) : null}

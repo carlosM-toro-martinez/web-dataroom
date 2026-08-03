@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   approveDataRoomAccessRequest,
+  cancelDataRoomAccessRequest,
   getDataRoomAccessRequests,
   getUsersList,
   rejectDataRoomAccessRequest,
@@ -9,9 +10,11 @@ import {
 import { queryKeys } from "@/shared/lib/queryKeys";
 import {
   approveDataRoomAccessPayloadSchema,
+  cancelDataRoomAccessPayloadSchema,
   rejectDataRoomAccessPayloadSchema,
   updateUserPayloadSchema,
   type ApproveDataRoomAccessPayload,
+  type CancelDataRoomAccessPayload,
   type RejectDataRoomAccessPayload,
   type UpdateUserPayload
 } from "@/features/auth/model/auth.schema";
@@ -67,6 +70,19 @@ export function useRejectDataRoomAccessRequestMutation() {
       rejectDataRoomAccessRequest(id, rejectDataRoomAccessPayloadSchema.parse(payload)),
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: queryKeys.auth.dataRoomAccessRequests() });
+    }
+  });
+}
+
+export function useCancelDataRoomAccessRequestMutation() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({ id, payload }: { id: string; payload: CancelDataRoomAccessPayload }) =>
+      cancelDataRoomAccessRequest(id, cancelDataRoomAccessPayloadSchema.parse(payload)),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: queryKeys.auth.dataRoomAccessRequests() });
+      await queryClient.invalidateQueries({ queryKey: queryKeys.auth.users() });
     }
   });
 }

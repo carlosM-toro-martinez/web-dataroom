@@ -5,6 +5,7 @@ import {
   forgotPasswordResponseSchema,
   approveDataRoomAccessPayloadSchema,
   approveDataRoomAccessResponseSchema,
+  cancelDataRoomAccessPayloadSchema,
   dataRoomAccessRequestPayloadSchema,
   dataRoomAccessRequestResponseSchema,
   dataRoomAccessRequestsResponseSchema,
@@ -20,6 +21,7 @@ import {
   usersListResponseSchema,
   type ForgotPasswordPayload,
   type ApproveDataRoomAccessPayload,
+  type CancelDataRoomAccessPayload,
   type DataRoomAccessRequestPayload,
   type LoginPayload,
   type RefreshPayload,
@@ -97,6 +99,15 @@ export async function rejectDataRoomAccessRequest(id: string, payload: RejectDat
   const body = rejectDataRoomAccessPayloadSchema.parse(payload);
   return postRequest({
     url: apiEndpoints.auth.dataRoomAccessRequestReject(id),
+    body,
+    schema: dataRoomAccessRequestResponseSchema
+  });
+}
+
+export async function cancelDataRoomAccessRequest(id: string, payload: CancelDataRoomAccessPayload) {
+  const body = cancelDataRoomAccessPayloadSchema.parse(payload);
+  return postRequest({
+    url: apiEndpoints.auth.dataRoomAccessRequestCancel(id),
     body,
     schema: dataRoomAccessRequestResponseSchema
   });

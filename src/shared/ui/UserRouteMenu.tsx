@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import {
   ChevronDown,
+  ClipboardList,
   FolderKanban,
   LayoutDashboard,
   LogOut,
@@ -33,7 +34,13 @@ const SYSTEM_ROUTES: RouteItem[] = [
     label: "Trabajadores",
     to: "/trabajadores",
     icon: Users,
-    roles: ["ADMIN", "SUPERINTENDENTE"]
+    roles: ["ADMIN"]
+  },
+  {
+    label: "Solicitudes Data Room",
+    to: "/solicitudes-data-room",
+    icon: ClipboardList,
+    roles: ["ADMIN"]
   }
 ];
 
