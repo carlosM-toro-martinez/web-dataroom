@@ -182,6 +182,7 @@ export const dataRoomAccessRequestSchema = z.object({
   reviewedById: z.number().nullable().optional(),
   expiresAt: z.string().nullable().optional(),
   visitorUserId: z.number().nullable().optional(),
+  visitorTemporaryPassword: z.string().nullable().optional(),
   adminNotes: z.string().nullable().optional(),
   rejectionReason: z.string().nullable().optional()
 });

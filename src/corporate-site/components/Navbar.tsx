@@ -113,12 +113,20 @@ export default function Navbar() {
                 logoutClassName="flex w-full items-center gap-2 border-t border-[#e2e8f0] px-4 py-3 text-left text-sm font-bold text-[#b91c1c] transition hover:bg-[#f8fafc]"
               />
             ) : (
-              <Link
-                to="/login"
-                className="px-6 py-2.5 bg-[#f0b35f] hover:bg-[#ffd08a] text-[#10252d] transition-all duration-300 font-bold shadow-lg"
-              >
-                Log In
-              </Link>
+              <div className="flex items-center gap-2">
+                <Link
+                  to="/solicitar-acceso-data-room"
+                  className="border border-[#f0b35f]/70 px-4 py-2.5 font-bold text-[#f2c879] transition-all duration-300 hover:bg-[#f0b35f]/10"
+                >
+                  Data Room Access
+                </Link>
+                <Link
+                  to="/login"
+                  className="px-6 py-2.5 bg-[#f0b35f] hover:bg-[#ffd08a] text-[#10252d] transition-all duration-300 font-bold shadow-lg"
+                >
+                  Log In
+                </Link>
+              </div>
             )}
           </div>
 
@@ -168,12 +176,22 @@ export default function Navbar() {
                 logoutClassName="flex w-full items-center justify-center gap-2 border-t border-[#e2e8f0] px-4 py-3 text-sm font-bold text-[#b91c1c] transition hover:bg-[#f8fafc]"
               />
             ) : (
-              <Link
-                to="/login"
-                className="block w-full px-6 py-2.5 bg-[#f0b35f] hover:bg-[#ffd08a] text-[#10252d] transition-all duration-300 font-bold text-center"
-              >
-                Log In
-              </Link>
+              <div className="space-y-2">
+                <Link
+                  to="/solicitar-acceso-data-room"
+                  className="block w-full border border-[#f0b35f]/70 px-6 py-2.5 text-center font-bold text-[#f2c879] transition-all duration-300 hover:bg-[#f0b35f]/10"
+                  onClick={() => setIsOpen(false)}
+                >
+                  Data Room Access
+                </Link>
+                <Link
+                  to="/login"
+                  className="block w-full px-6 py-2.5 bg-[#f0b35f] hover:bg-[#ffd08a] text-[#10252d] transition-all duration-300 font-bold text-center"
+                  onClick={() => setIsOpen(false)}
+                >
+                  Log In
+                </Link>
+              </div>
             )}
           </div>
         </div>

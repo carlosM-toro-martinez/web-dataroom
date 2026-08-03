@@ -5,7 +5,6 @@ import { useLoginMutation } from "@/features/auth/hooks/useLoginMutation";
 import { ApiError } from "@/shared/api/core/apiError";
 import { PasswordInput } from "@/shared/ui/PasswordInput";
 import { useToast } from "@/shared/ui/toast/ToastProvider";
-import { requestDataRoomAccess } from "@/features/auth/api/authApi";
 import { getVisitorDeviceId } from "@/features/auth/lib/visitorDevice";
 import {
   AuthMiningBackdrop,
@@ -28,15 +27,6 @@ export function LoginPage() {
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [showAccessRequest, setShowAccessRequest] = useState(false);
-  const [requestForm, setRequestForm] = useState({
-    fullName: "",
-    email: "",
-    phone: "",
-    company: "",
-    reason: ""
-  });
-  const [isRequestingAccess, setIsRequestingAccess] = useState(false);
   const forgotPasswordPath = email.trim()
     ? `/forgot-password?email=${encodeURIComponent(email.trim())}`
     : "/forgot-password";
@@ -57,22 +47,6 @@ export function LoginPage() {
         }
       }
     );
-  }
-
-  async function onSubmitAccessRequest(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    setIsRequestingAccess(true);
-    try {
-      await requestDataRoomAccess(requestForm);
-      showSuccess("Solicitud enviada. Minera Marte evaluará el acceso al Data Room.");
-      setRequestForm({ fullName: "", email: "", phone: "", company: "", reason: "" });
-      setShowAccessRequest(false);
-    } catch (error) {
-      const message = error instanceof ApiError ? error.message : "No se pudo enviar la solicitud.";
-      showError(message);
-    } finally {
-      setIsRequestingAccess(false);
-    }
   }
 
   return (
@@ -160,74 +134,6 @@ export function LoginPage() {
               </button>
             </form>
 
-            <div className="mt-5 border-t border-[var(--color-border-soft)] pt-5">
-              <button
-                type="button"
-                onClick={() => setShowAccessRequest((current) => !current)}
-                className="w-full rounded-lg border border-[var(--color-outline-variant)] px-4 py-2.5 text-sm font-semibold text-[var(--color-on-surface-variant)] transition hover:border-[var(--color-primary)] hover:text-[var(--color-on-surface)]"
-              >
-                Solicitar acceso al Data Room
-              </button>
-
-              {showAccessRequest ? (
-                <form className="mt-4 space-y-3" onSubmit={onSubmitAccessRequest}>
-                  <div>
-                    <label className={authLabelClassName}>Nombre completo</label>
-                    <input
-                      required
-                      value={requestForm.fullName}
-                      onChange={(event) => setRequestForm((current) => ({ ...current, fullName: event.target.value }))}
-                      className={authInputClassName}
-                    />
-                  </div>
-                  <div className="grid gap-3 sm:grid-cols-2">
-                    <div>
-                      <label className={authLabelClassName}>Correo</label>
-                      <input
-                        required
-                        type="email"
-                        value={requestForm.email}
-                        onChange={(event) => setRequestForm((current) => ({ ...current, email: event.target.value }))}
-                        className={authInputClassName}
-                      />
-                    </div>
-                    <div>
-                      <label className={authLabelClassName}>Contacto</label>
-                      <input
-                        required
-                        value={requestForm.phone}
-                        onChange={(event) => setRequestForm((current) => ({ ...current, phone: event.target.value }))}
-                        className={authInputClassName}
-                      />
-                    </div>
-                  </div>
-                  <div>
-                    <label className={authLabelClassName}>Empresa</label>
-                    <input
-                      value={requestForm.company}
-                      onChange={(event) => setRequestForm((current) => ({ ...current, company: event.target.value }))}
-                      className={authInputClassName}
-                    />
-                  </div>
-                  <div>
-                    <label className={authLabelClassName}>Motivo</label>
-                    <textarea
-                      required
-                      value={requestForm.reason}
-                      onChange={(event) => setRequestForm((current) => ({ ...current, reason: event.target.value }))}
-                      className={`${authInputClassName} min-h-24 resize-y`}
-                    />
-                  </div>
-                  <button
-                    type="submit"
-                    disabled={isRequestingAccess}
-                    className={authPrimaryButtonClassName}
-                  >
-                    {isRequestingAccess ? "Enviando..." : "Enviar solicitud"}
-                  </button>
-                </form>
-              ) : null}
-            </div>
           </div>
         </div>
       </section>

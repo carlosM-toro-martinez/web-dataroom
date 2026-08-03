@@ -5,10 +5,12 @@ import { ResponsibleMiningPage } from "@/pages/corporate/ResponsibleMiningPage";
 import { EnvironmentPage } from "@/pages/corporate/EnvironmentPage";
 import { IndustrialSafetyPage } from "@/pages/corporate/IndustrialSafetyPage";
 import { LoginPage } from "@/pages/auth/LoginPage";
+import { DataRoomAccessRequestPublicPage } from "@/pages/auth/DataRoomAccessRequestPublicPage";
 import { ForgotPasswordPage } from "@/pages/auth/ForgotPasswordPage";
 import { ResetPasswordPage } from "@/pages/auth/ResetPasswordPage";
 import { RegisterUserPage } from "@/pages/auth/RegisterUserPage";
 import { DataRoomAccessRequestsPage } from "@/pages/auth/DataRoomAccessRequestsPage";
+import { DataRoomAccessRequestPage } from "@/pages/auth/DataRoomAccessRequestPage";
 import { DashboardPage } from "@/pages/dashboard/DashboardPage";
 import { NotFoundPage } from "@/pages/not-found/NotFoundPage";
 import { ExploracionesPage } from "@/pages/exploraciones/ExploracionesPage";
@@ -35,9 +37,11 @@ export function DataRoomRouter() {
         </Route>
 
         <Route path="/" element={<CorporateLandingPage />} />
+        <Route path="/solicitar-acceso-data-room" element={<DataRoomAccessRequestPublicPage />} />
         <Route path="/mineria-responsable" element={<ResponsibleMiningPage />} />
         <Route path="/medio-ambiente" element={<EnvironmentPage />} />
         <Route path="/seguridad-industrial" element={<IndustrialSafetyPage />} />
+        <Route path="/solicitar-acceso-data-room" element={<DataRoomAccessRequestPage />} />
 
         <Route element={<ProtectedRoute />}>
           <Route path="/dashboard" element={<DashboardPage />} />

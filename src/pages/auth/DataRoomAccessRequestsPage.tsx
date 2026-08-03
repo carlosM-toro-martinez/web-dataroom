@@ -1,4 +1,4 @@
-import { Check, Clock3, X } from "lucide-react";
+import { Check, Clipboard, Clock3, MessageCircle, X } from "lucide-react";
 import { useState } from "react";
 import { ApiError } from "@/shared/api/core/apiError";
 import type { DataRoomAccessRequest } from "@/features/auth/model/auth.schema";
@@ -42,6 +42,35 @@ function defaultVisitorExpiry() {
 
 function toIsoFromLocalDatetime(value: string) {
   return new Date(value).toISOString();
+}
+
+function onlyDigits(value: string) {
+  return value.replace(/\D/g, "");
+}
+
+function buildAccessMessage(request: DataRoomAccessRequest) {
+  const loginUrl =
+    typeof window !== "undefined"
+      ? `${window.location.origin}/login`
+      : "/login";
+
+  return [
+    `Estimado/a ${request.fullName},`,
+    "",
+    "Empresa Minera Marte S.R.L. le informa que su solicitud de acceso visitante al Data Room fue aprobada.",
+    "",
+    "Sus credenciales de ingreso son:",
+    `Usuario / correo: ${request.email}`,
+    `Contraseña temporal: ${request.visitorTemporaryPassword ?? ""}`,
+    `Vigencia del acceso: ${formatDate(request.expiresAt)}`,
+    "",
+    `Ingrese desde el siguiente enlace: ${loginUrl}`,
+    "",
+    "Este acceso es de solo lectura y quedará vinculado al primer dispositivo donde inicie sesión.",
+    "",
+    "Atentamente,",
+    "Empresa Minera Marte S.R.L."
+  ].join("\n");
 }
 
 export function DataRoomAccessRequestsPage() {
@@ -100,9 +129,9 @@ export function DataRoomAccessRequestsPage() {
           onSuccess: (response) => {
             const temporaryPassword = response.data.temporaryPassword;
             showSuccess(
-              temporaryPassword
-                ? `Acceso aprobado. Contraseña temporal: ${temporaryPassword}`
-                : "Acceso aprobado y correo enviado al solicitante."
+              response.data.emailSent
+                ? "Acceso aprobado, correo enviado y mensaje disponible para copiar."
+                : `Acceso aprobado. Contraseña temporal: ${temporaryPassword}`
             );
             setReviewRequest(null);
           },
@@ -153,6 +182,15 @@ export function DataRoomAccessRequestsPage() {
     );
   }
 
+  async function copyAccessMessage(request: DataRoomAccessRequest) {
+    try {
+      await navigator.clipboard.writeText(buildAccessMessage(request));
+      showSuccess("Mensaje de acceso copiado.");
+    } catch {
+      showError("No se pudo copiar el mensaje.");
+    }
+  }
+
   return (
     <section className="space-y-6 text-[var(--color-on-surface)]">
       <InternalHeader
@@ -201,6 +239,41 @@ export function DataRoomAccessRequestsPage() {
                     {request.reason}
                     {request.expiresAt ? (
                       <p className="mt-2 font-semibold text-[var(--color-on-surface)]">Vence: {formatDate(request.expiresAt)}</p>
+                    ) : null}
+                    {request.status === "APPROVED" && request.visitorTemporaryPassword ? (
+                      <div className="mt-3 border border-[var(--color-border-soft)] bg-[var(--color-surface-container-high)] p-3 text-[var(--color-on-surface)]">
+                        <p className="text-[10px] font-bold uppercase tracking-wider text-[var(--color-on-surface-variant)]">
+                          Mensaje listo para enviar
+                        </p>
+                        <p className="mt-2 break-all text-xs">Correo: {request.email}</p>
+                        <p className="mt-1 break-all text-xs">Contraseña: {request.visitorTemporaryPassword}</p>
+                        <textarea
+                          readOnly
+                          value={buildAccessMessage(request)}
+                          className="mt-3 h-28 w-full resize-none border border-[var(--color-border-soft)] bg-[var(--color-surface-container-low)] p-2 text-xs text-[var(--color-on-surface)] outline-none"
+                        />
+                        <div className="mt-2 flex flex-wrap gap-2">
+                          <button
+                            type="button"
+                            onClick={() => copyAccessMessage(request)}
+                            className="inline-flex items-center gap-1 rounded-md border border-[var(--color-outline-variant)] px-3 py-1.5 text-xs font-semibold text-[var(--color-on-surface-variant)] transition hover:border-[var(--color-primary)] hover:text-[var(--color-on-surface)]"
+                          >
+                            <Clipboard size={12} />
+                            Copiar mensaje
+                          </button>
+                          {onlyDigits(request.phone) ? (
+                            <a
+                              href={`https://wa.me/${onlyDigits(request.phone)}?text=${encodeURIComponent(buildAccessMessage(request))}`}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="inline-flex items-center gap-1 rounded-md border border-[var(--color-success)]/45 px-3 py-1.5 text-xs font-semibold text-[var(--color-success)] transition hover:bg-[var(--color-success)]/10"
+                            >
+                              <MessageCircle size={12} />
+                              WhatsApp
+                            </a>
+                          ) : null}
+                        </div>
+                      </div>
                     ) : null}
                     {request.rejectionReason ? (
                       <p className="mt-2 font-semibold text-[var(--color-error)]">{request.rejectionReason}</p>
