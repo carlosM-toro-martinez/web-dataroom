@@ -141,7 +141,7 @@ export function ExploracionesDataRoomPage() {
   const { showError, showSuccess } = useToast();
   const navigate = useNavigate();
   const location = useLocation();
-  const canManage = user?.role === "ADMIN" || user?.role === "SUPERINTENDENTE";
+  const canManage = user?.role === "ADMIN" || user?.role === "GEOLOGOADMIN" || user?.role === "SUPERINTENDENTE";
   const canView = canManage || user?.role === "VISITANTE" || user?.role === "GEOLOGO";
   const isVisitante = user?.role === "VISITANTE";
   const isAdmin = user?.role === "ADMIN";

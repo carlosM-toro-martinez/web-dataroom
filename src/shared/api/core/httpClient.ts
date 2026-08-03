@@ -3,6 +3,7 @@ import { env } from "@/shared/config/env";
 import { normalizeApiError } from "@/shared/api/core/apiError";
 import { getStoredAuthSession, setStoredAuthSession } from "@/features/auth/lib/authSessionStorage";
 import { getAuthToken, setAuthToken } from "@/shared/lib/authToken";
+import { getVisitorDeviceId } from "@/features/auth/lib/visitorDevice";
 
 function normalizeBaseUrl(raw: string) {
   const trimmed = raw.trim().replace(/\/+$/, "");
@@ -63,11 +64,12 @@ async function refreshAccessTokenIfPossible(): Promise<string | null> {
     try {
       const response = await axios.post(
         `${resolvedBaseUrl}/api/auth/refresh`,
-        { refreshToken: stored.refreshToken },
+        { refreshToken: stored.refreshToken, deviceId: getVisitorDeviceId() },
         {
           headers: {
             "Content-Type": "application/json",
-            Accept: "application/json"
+            Accept: "application/json",
+            "X-Device-Id": getVisitorDeviceId()
           },
           timeout: 12_000
         }
@@ -100,6 +102,7 @@ async function refreshAccessTokenIfPossible(): Promise<string | null> {
 httpClient.interceptors.request.use((config) => {
   const nextConfig = config;
   nextConfig.headers["X-Requested-With"] = "XMLHttpRequest";
+  nextConfig.headers["X-Device-Id"] = getVisitorDeviceId();
   const token = getAuthToken();
   if (token) {
     nextConfig.headers.Authorization = `Bearer ${token}`;

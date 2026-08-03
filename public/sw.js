@@ -8,6 +8,26 @@ self.addEventListener("message", (event) => {
   if (event.data?.type === "SKIP_WAITING") {
     self.skipWaiting();
   }
+
+  if (event.data?.type === "CACHE_MAP_TILES" && Array.isArray(event.data.urls)) {
+    event.waitUntil(
+      caches.open(TILE_CACHE_NAME).then((cache) =>
+        Promise.all(
+          event.data.urls.map((tileUrl) =>
+            cache.match(tileUrl).then((cached) => {
+              if (cached) return cached;
+              return fetch(tileUrl, { mode: "no-cors", cache: "force-cache" }).then((response) => {
+                if (response.ok || response.type === "opaque") {
+                  cache.put(tileUrl, response.clone());
+                }
+                return response;
+              });
+            })
+          )
+        )
+      )
+    );
+  }
 });
 
 self.addEventListener("install", (event) => {
@@ -39,11 +59,13 @@ self.addEventListener("fetch", (event) => {
   if (TILE_HOSTS.has(url.hostname)) {
     event.respondWith(
       caches.open(TILE_CACHE_NAME).then((cache) =>
-        cache.match(request).then((cached) => {
+        cache.match(request).then((cached) => cached || cache.match(url.href)).then((cached) => {
           if (cached) return cached;
           return fetch(request)
             .then((response) => {
-              cache.put(request, response.clone());
+              if (response.ok || response.type === "opaque") {
+                cache.put(url.href, response.clone());
+              }
               return response;
             })
             .catch(() => Response.error());

@@ -77,6 +77,19 @@ import type {
   SurfaceLabor,
   SurfaceSample
 } from "@/features/exploraciones/model/proposalSamples.schema";
+import {
+  getInteriorAreas,
+  getInteriorLabors,
+  getInteriorLaboratories,
+  getInteriorLevels,
+  getInteriorObjectives,
+  getSharedElements,
+  getSurfaceAreas,
+  getSurfaceLabors,
+  getSurfaceLaboratories,
+  getSurfaceLevels,
+  getSurfaceObjectives
+} from "@/features/exploraciones/api/proposalSamplesApi";
 import type { OfflineProposalCatalog, OfflineProposalSample } from "@/features/exploraciones/db/exploracionesDb";
 import { cacheProposalCatalogs, pruneMissingProposalCatalogs } from "@/features/exploraciones/db/exploracionesDb";
 
@@ -99,12 +112,36 @@ const geoMarkerIcon = L.divIcon({
 });
 
 const MAP_TILE_CACHE_NAME = "minera-marte-map-tiles-v1";
-const MAP_TILE_ZOOMS = [14, 15, 16, 17] as const;
+const MAP_TILE_SERVERS = ["a", "b", "c"] as const;
+const MAP_TILE_ZOOMS = [13, 14, 15, 16, 17] as const;
 const MAP_TILE_RADIUS_BY_ZOOM: Record<(typeof MAP_TILE_ZOOMS)[number], number> = {
+  13: 1,
   14: 1,
   15: 1,
-  16: 2,
-  17: 2
+  16: 3,
+  17: 3
+};
+const MAP_READY_ZOOM = 16;
+const REGIONAL_MAP_CACHE_VERSION = "sud-lipez-v1";
+const REGIONAL_MAP_CACHE_KEY = `marte-regional-map-${REGIONAL_MAP_CACHE_VERSION}`;
+const CERRO_LIPENA_CENTER = { latitude: -21.735132963511546, longitude: -66.45902922579812 };
+const POTOSI_OVERVIEW_BOUNDS = {
+  south: -23.2,
+  west: -68.2,
+  north: -18.8,
+  east: -64.4
+};
+const SUD_LIPEZ_BOUNDS = {
+  south: -22.9,
+  west: -67.9,
+  north: -20.8,
+  east: -65.2
+};
+const CERRO_LIPENA_DETAIL_BOUNDS = {
+  south: -21.95,
+  west: -66.75,
+  north: -21.52,
+  east: -66.18
 };
 
 type RegisterType = "interior" | "surface";
@@ -364,7 +401,7 @@ function initialSampleForm(): SampleForm {
     surfaceLevelId: "",
     surfaceLaborId: "",
     surfaceObjectiveId: "",
-    priority: "",
+    priority: "NORMAL",
     sampleNameSuffix: "",
     sampledAt: toLocalDatetimeInput(),
     east: "",
@@ -750,6 +787,188 @@ function isConnectivityIssue(error: unknown) {
   return false;
 }
 
+let exploracionesOfflineCatalogPreloadStarted = false;
+
+async function preloadExploracionesOfflineCatalogs(disposed: () => boolean) {
+  if (exploracionesOfflineCatalogPreloadStarted) return;
+  if (!navigator.onLine) return;
+  exploracionesOfflineCatalogPreloadStarted = true;
+
+  try {
+    const categories: SampleCategory[] = ["EXPLORATION", "PRODUCTION"];
+    const [remoteElementItems, interiorObjectiveItems, interiorLaboratoryItems, surfaceObjectiveItems, surfaceLaboratoryItems] =
+      await Promise.all([
+        getSharedElements({ page: 1, limit: 5000 }),
+        getInteriorObjectives({ page: 1, limit: 5000 }),
+        getInteriorLaboratories({ page: 1, limit: 5000 }),
+        getSurfaceObjectives({ page: 1, limit: 5000 }),
+        getSurfaceLaboratories({ page: 1, limit: 5000 })
+      ]);
+
+    const items: Array<Omit<OfflineProposalCatalog, "id" | "createdAt" | "updatedAt" | "synced">> = [
+      ...remoteElementItems.map((item) => ({
+        localId: `cache-element-${item.id}`,
+        remoteId: item.id,
+        module: "shared" as const,
+        entity: "element" as const,
+        name: item.name,
+        symbol: item.symbol,
+        defaultUnit: item.defaultUnit ?? undefined,
+        description: item.description ?? undefined
+      })),
+      ...interiorObjectiveItems.map((item) => ({
+        localId: `cache-interior-objective-${item.id}`,
+        remoteId: item.id,
+        module: "interior" as const,
+        entity: "objective" as const,
+        name: item.name,
+        abbreviation: item.abbreviation ?? undefined,
+        description: item.description ?? undefined
+      })),
+      ...interiorLaboratoryItems.map((item) => ({
+        localId: `cache-interior-laboratory-${item.id}`,
+        remoteId: item.id,
+        module: "interior" as const,
+        entity: "laboratory" as const,
+        name: item.name,
+        abbreviation: item.abbreviation ?? undefined,
+        description: item.description ?? undefined
+      })),
+      ...surfaceObjectiveItems.map((item) => ({
+        localId: `cache-surface-objective-${item.id}`,
+        remoteId: item.id,
+        module: "surface" as const,
+        entity: "objective" as const,
+        name: item.name,
+        abbreviation: item.abbreviation ?? undefined,
+        description: item.description ?? undefined
+      })),
+      ...surfaceLaboratoryItems.map((item) => ({
+        localId: `cache-surface-laboratory-${item.id}`,
+        remoteId: item.id,
+        module: "surface" as const,
+        entity: "laboratory" as const,
+        name: item.name,
+        abbreviation: item.abbreviation ?? undefined,
+        description: item.description ?? undefined
+      }))
+    ];
+
+    const categoryCatalogs = await Promise.all(
+      categories.map(async (category) => {
+        const [
+          interiorAreaItems,
+          interiorLevelItems,
+          interiorLaborItems,
+          surfaceAreaItems,
+          surfaceLevelItems,
+          surfaceLaborItems
+        ] = await Promise.all([
+          getInteriorAreas({ category, page: 1, limit: 5000 }),
+          getInteriorLevels({ category, page: 1, limit: 5000 }),
+          getInteriorLabors({ category, page: 1, limit: 5000 }),
+          getSurfaceAreas({ category, page: 1, limit: 5000 }),
+          getSurfaceLevels({ category, page: 1, limit: 5000 }),
+          getSurfaceLabors({ category, page: 1, limit: 5000 })
+        ]);
+
+        return [
+          ...interiorAreaItems.map((item) => ({
+            localId: `cache-interior-area-${category}-${item.id}`,
+            remoteId: item.id,
+            module: "interior" as const,
+            entity: "area" as const,
+            name: item.name,
+            abbreviation: item.abbreviation ?? undefined,
+            category,
+            description: item.description ?? undefined
+          })),
+          ...interiorLevelItems.map((item) => ({
+            localId: `cache-interior-level-${category}-${item.id}`,
+            remoteId: item.id,
+            module: "interior" as const,
+            entity: "level" as const,
+            name: item.name,
+            abbreviation: item.abbreviation ?? undefined,
+            category,
+            description: item.description ?? undefined,
+            parentRemoteId: item.interiorAreaId ?? (item as any).area?.id,
+            elevation: item.elevation ?? undefined
+          })),
+          ...interiorLaborItems.map((item) => ({
+            localId: `cache-interior-labor-${category}-${item.id}`,
+            remoteId: item.id,
+            module: "interior" as const,
+            entity: "labor" as const,
+            name: item.name,
+            abbreviation: item.abbreviation ?? undefined,
+            category,
+            description: item.description ?? undefined,
+            parentRemoteId: item.interiorLevelId ?? (item as any).level?.id
+          })),
+          ...surfaceAreaItems.map((item) => ({
+            localId: `cache-surface-area-${category}-${item.id}`,
+            remoteId: item.id,
+            module: "surface" as const,
+            entity: "area" as const,
+            name: item.name,
+            abbreviation: item.abbreviation ?? undefined,
+            category,
+            description: item.description ?? undefined
+          })),
+          ...surfaceLevelItems.map((item) => ({
+            localId: `cache-surface-level-${category}-${item.id}`,
+            remoteId: item.id,
+            module: "surface" as const,
+            entity: "level" as const,
+            name: item.name,
+            abbreviation: item.abbreviation ?? undefined,
+            category,
+            description: item.description ?? undefined,
+            parentRemoteId: item.surfaceAreaId ?? (item as any).area?.id,
+            elevation: item.elevation ?? undefined
+          })),
+          ...surfaceLaborItems.map((item) => ({
+            localId: `cache-surface-labor-${category}-${item.id}`,
+            remoteId: item.id,
+            module: "surface" as const,
+            entity: "labor" as const,
+            name: item.name,
+            abbreviation: item.abbreviation ?? undefined,
+            category,
+            description: item.description ?? undefined,
+            parentRemoteId: item.surfaceLevelId ?? (item as any).level?.id
+          }))
+        ];
+      })
+    );
+
+    if (disposed()) return;
+    const allItems = [...items, ...categoryCatalogs.flat()];
+    if (allItems.length > 0) await cacheProposalCatalogs(allItems);
+  } catch (error) {
+    exploracionesOfflineCatalogPreloadStarted = false;
+    if (!isConnectivityIssue(error)) {
+      console.warn("No se pudo precargar catálogos offline de exploraciones.", error);
+    }
+  }
+}
+
+function useExploracionesCatalogPreload() {
+  useEffect(() => {
+    let disposed = false;
+    const run = () => void preloadExploracionesOfflineCatalogs(() => disposed);
+
+    run();
+    window.addEventListener("online", run);
+
+    return () => {
+      disposed = true;
+      window.removeEventListener("online", run);
+    };
+  }, []);
+}
+
 function modalTitle(kind: ModalKind) {
   const titles: Record<ModalKind, string> = {
     element: "Crear elemento",
@@ -776,6 +995,7 @@ function FieldLabel({ children }: { children: React.ReactNode }) {
 }
 
 export function ExploracionesPage({ category }: { category?: SampleCategory }) {
+  useExploracionesCatalogPreload();
   if (!category) return <ExploracionesCategoryLanding />;
   return <ExploracionesRegisterPage sampleCategory={category} />;
 }
@@ -873,8 +1093,10 @@ function ExploracionesRegisterPage({ sampleCategory }: { sampleCategory: SampleC
   const [geoStatus, setGeoStatus] = useState<string>("");
   const [isLocating, setIsLocating] = useState(false);
   const [showGeoMap, setShowGeoMap] = useState(false);
-  const [, setIsCachingMap] = useState(false);
+  const [isCachingMap, setIsCachingMap] = useState(false);
+  const [isCachingRegionalMap, setIsCachingRegionalMap] = useState(false);
   const [mapCacheStatus, setMapCacheStatus] = useState("");
+  const [mapTilesReady, setMapTilesReady] = useState(false);
   const [showLabResults, setShowLabResults] = useState(false);
   const autoLocationRequestedRef = useRef(false);
   const autoMapCacheKeyRef = useRef<string | null>(null);
@@ -1097,7 +1319,13 @@ function ExploracionesRegisterPage({ sampleCategory }: { sampleCategory: SampleC
       });
   }
 
-  const elements = remoteElements.data ?? [];
+  const elements = mergeById(
+    remoteElements.data ?? [],
+    localCatalogs
+      .filter(isUsableCatalog)
+      .filter((item) => item.module === "shared" && item.entity === "element")
+      .map(localElementToItem)
+  );
   const interiorAreas = mergeById(
     mergeById(remoteInteriorAreas.data ?? [], hierarchyInteriorAreas),
     localCatalogs.filter((item) => isVisibleStructureCatalog(item, sampleCategory)).filter((item) => item.module === "interior" && item.entity === "area").map(localCatalogToItem)
@@ -1177,7 +1405,13 @@ function ExploracionesRegisterPage({ sampleCategory }: { sampleCategory: SampleC
   );
   const selectedInteriorLevelOption = interiorLevels.find((item) => item.id === sampleForm.interiorLevelId);
   const selectedInteriorLaborOption = interiorLabors.find((item) => item.id === sampleForm.interiorLaborId);
-  const interiorLaboratories = remoteInteriorLaboratories.data ?? [];
+  const interiorLaboratories = mergeById(
+    remoteInteriorLaboratories.data ?? [],
+    localCatalogs
+      .filter(isUsableCatalog)
+      .filter((item) => item.module === "interior" && item.entity === "laboratory")
+      .map(localCatalogToItem)
+  );
   const surfaceAreas = mergeById(
     mergeById(remoteSurfaceAreas.data ?? [], hierarchySurfaceAreas),
     localCatalogs.filter((item) => isVisibleStructureCatalog(item, sampleCategory)).filter((item) => item.module === "surface" && item.entity === "area").map(localCatalogToItem)
@@ -1277,7 +1511,13 @@ function ExploracionesRegisterPage({ sampleCategory }: { sampleCategory: SampleC
   );
   const selectedSurfaceLevelOption = surfaceLevels.find((item) => item.id === sampleForm.surfaceLevelId);
   const selectedSurfaceLaborOption = surfaceLabors.find((item) => item.id === sampleForm.surfaceLaborId);
-  const surfaceLaboratories = remoteSurfaceLaboratories.data ?? [];
+  const surfaceLaboratories = mergeById(
+    remoteSurfaceLaboratories.data ?? [],
+    localCatalogs
+      .filter(isUsableCatalog)
+      .filter((item) => item.module === "surface" && item.entity === "laboratory")
+      .map(localCatalogToItem)
+  );
   const selectedSurfaceAreaOption = surfaceAreas.find((item) => item.id === sampleForm.surfaceAreaId);
 
   const activeLaboratories = registerType === "interior" ? interiorLaboratories : surfaceLaboratories;
@@ -1918,11 +2158,13 @@ function ExploracionesRegisterPage({ sampleCategory }: { sampleCategory: SampleC
       let saved = 0;
 
       for (const tile of tiles) {
-        const request = new Request(tile.url, { mode: "no-cors" });
-        const cached = await cache.match(request);
+        const cached = await cache.match(tile.url);
         if (!cached) {
-          const response = await fetch(request);
-          await cache.put(request, response);
+          const response = await fetch(tile.url, { mode: "no-cors", cache: "force-cache" });
+          if (!response.ok && response.type !== "opaque") {
+            throw new Error("Una tesela del mapa no se pudo descargar.");
+          }
+          await cache.put(tile.url, response.clone());
         }
         saved += 1;
         if (saved % 12 === 0 || saved === tiles.length) {
@@ -1931,14 +2173,63 @@ function ExploracionesRegisterPage({ sampleCategory }: { sampleCategory: SampleC
       }
 
       setMapCacheStatus(`Mapa offline listo para esta zona (${tiles.length} mosaicos).`);
+      setMapTilesReady(true);
       if (!options.silent) showSuccess("Mapa offline guardado para esta zona.");
     } catch (error) {
       setMapCacheStatus("No se pudo descargar el mapa offline.");
+      const cacheStatus = await getOfflineMapCacheStatus(geoPoint.latitude, geoPoint.longitude).catch(() => null);
+      setMapTilesReady(Boolean(cacheStatus?.ready));
       if (!options.silent) {
         showError(error instanceof Error ? error.message : "No se pudo descargar el mapa offline.");
       }
     } finally {
       setIsCachingMap(false);
+    }
+  }
+
+  async function cacheRegionalExplorationMap(options: { silent?: boolean } = {}) {
+    if (!("caches" in window)) {
+      if (!options.silent) showError("Este navegador no permite guardar mapas offline.");
+      return;
+    }
+    if (!navigator.onLine) {
+      if (!options.silent) showError("Necesitas internet para descargar el mapa regional.");
+      return;
+    }
+
+    setIsCachingRegionalMap(true);
+    setMapCacheStatus("Descargando mapa regional de Potosí / Sud Lípez...");
+
+    try {
+      const cache = await caches.open(MAP_TILE_CACHE_NAME);
+      const tiles = buildRegionalOfflineMapTiles();
+      let saved = 0;
+
+      for (const tile of tiles) {
+        const cached = await cache.match(tile.url);
+        if (!cached) {
+          const response = await fetch(tile.url, { mode: "no-cors", cache: "force-cache" });
+          if (!response.ok && response.type !== "opaque") {
+            throw new Error("Una tesela regional no se pudo descargar.");
+          }
+          await cache.put(tile.url, response.clone());
+        }
+        saved += 1;
+        if (saved % 50 === 0 || saved === tiles.length) {
+          setMapCacheStatus(`Guardando mapa regional ${saved}/${tiles.length}...`);
+        }
+      }
+
+      window.localStorage.setItem(REGIONAL_MAP_CACHE_KEY, new Date().toISOString());
+      setMapCacheStatus(`Mapa regional offline listo (${tiles.length} mosaicos).`);
+      if (!options.silent) showSuccess("Mapa regional de Sud Lípez guardado.");
+    } catch (error) {
+      setMapCacheStatus("No se pudo descargar el mapa regional offline.");
+      if (!options.silent) {
+        showError(error instanceof Error ? error.message : "No se pudo descargar el mapa regional.");
+      }
+    } finally {
+      setIsCachingRegionalMap(false);
     }
   }
 
@@ -2010,33 +2301,39 @@ function ExploracionesRegisterPage({ sampleCategory }: { sampleCategory: SampleC
   }, []);
 
   useEffect(() => {
+    if (!("caches" in window) || !navigator.onLine) return;
+    if (window.localStorage.getItem(REGIONAL_MAP_CACHE_KEY)) return;
+    void cacheRegionalExplorationMap({ silent: true });
+  }, []);
+
+  useEffect(() => {
     if (!geoPoint || !("caches" in window)) {
       setMapCacheStatus("");
+      setMapTilesReady(false);
       return;
     }
 
     let cancelled = false;
-    const centerTile = buildOfflineMapTiles(geoPoint.latitude, geoPoint.longitude).find((tile) => tile.zoom === 16);
-    if (!centerTile) return;
-    const cacheKey = `${centerTile.zoom}/${centerTile.x}/${centerTile.y}`;
+    const centerTile = latLonToTile(geoPoint.latitude, geoPoint.longitude, MAP_READY_ZOOM);
+    const cacheKey = `${MAP_READY_ZOOM}/${centerTile.x}/${centerTile.y}`;
 
-    caches
-      .open(MAP_TILE_CACHE_NAME)
-      .then((cache) => cache.match(new Request(centerTile.url, { mode: "no-cors" })))
-      .then((cached) => {
+    getOfflineMapCacheStatus(geoPoint.latitude, geoPoint.longitude)
+      .then((status) => {
         if (cancelled) return;
-        if (cached) {
-          setMapCacheStatus(cached ? "Mapa offline disponible para esta zona." : "");
+        setMapTilesReady(status.ready);
+        if (status.ready) {
+          setMapCacheStatus("Mapa offline disponible para esta zona.");
           autoMapCacheKeyRef.current = cacheKey;
           return;
         }
-        setMapCacheStatus("");
+        setMapCacheStatus(status.cached > 0 ? `Mapa offline parcial (${status.cached}/${status.required} mosaicos).` : "");
         if (navigator.onLine && autoMapCacheKeyRef.current !== cacheKey) {
           autoMapCacheKeyRef.current = cacheKey;
           void cacheMapForCurrentPoint({ silent: true });
         }
       })
       .catch(() => {
+        setMapTilesReady(false);
         if (!cancelled) setMapCacheStatus("");
       });
 
@@ -2882,8 +3179,8 @@ function ExploracionesRegisterPage({ sampleCategory }: { sampleCategory: SampleC
             <FormSelect
               label="Prioridad"
               value={sampleForm.priority}
-              options={[{ id: "", label: "Sin prioridad" }, ...PRIORITY_OPTIONS]}
-              onChange={(value) => setSampleField("priority", value as SamplePriority | "")}
+              options={PRIORITY_OPTIONS}
+              onChange={(value) => setSampleField("priority", value as SamplePriority)}
             />
           </div>
           <p className="text-xs text-[var(--color-on-surface-variant)]">
@@ -2927,16 +3224,36 @@ function ExploracionesRegisterPage({ sampleCategory }: { sampleCategory: SampleC
                       <p className="md:col-span-2">{mapCacheStatus}</p>
                     ) : null}
                   </div>
-                  <button
-                    type="button"
-                    className={`${secondaryButton} w-full sm:w-auto`}
-                    onClick={() => setShowGeoMap((current) => !current)}
-                  >
-                    <MapPinned size={14} />
-                    {showGeoMap ? "Ocultar mapa" : "Ver mapa"}
-                  </button>
+                  <div className="flex w-full flex-wrap gap-2 sm:w-auto">
+                    <button
+                      type="button"
+                      className={`${secondaryButton} flex-1 sm:flex-none`}
+                      onClick={() => cacheMapForCurrentPoint()}
+                      disabled={isCachingMap || isCachingRegionalMap || !navigator.onLine}
+                    >
+                      <Layers3 size={14} />
+                      {isCachingMap ? "Guardando..." : "Guardar mapa"}
+                    </button>
+                    <button
+                      type="button"
+                      className={`${secondaryButton} flex-1 sm:flex-none`}
+                      onClick={() => cacheRegionalExplorationMap()}
+                      disabled={isCachingMap || isCachingRegionalMap || !navigator.onLine}
+                    >
+                      <Layers3 size={14} />
+                      {isCachingRegionalMap ? "Regional..." : "Sud Lípez"}
+                    </button>
+                    <button
+                      type="button"
+                      className={`${secondaryButton} flex-1 sm:flex-none`}
+                      onClick={() => setShowGeoMap((current) => !current)}
+                    >
+                      <MapPinned size={14} />
+                      {showGeoMap ? "Ocultar mapa" : "Ver mapa"}
+                    </button>
+                  </div>
                 </div>
-                {showGeoMap && (navigator.onLine || mapCacheStatus.includes("offline")) ? (
+                {showGeoMap && (navigator.onLine || mapTilesReady) ? (
                   <div className="h-56 w-full">
                     <MapContainer
                       center={[geoPoint.latitude, geoPoint.longitude]}
@@ -2947,6 +3264,11 @@ function ExploracionesRegisterPage({ sampleCategory }: { sampleCategory: SampleC
                       <TileLayer
                         attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
                         url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+                        eventHandlers={{
+                          tileerror: () => {
+                            if (!navigator.onLine) setMapTilesReady(false);
+                          }
+                        }}
                       />
                       <Marker
                         position={[geoPoint.latitude, geoPoint.longitude]}
@@ -2963,7 +3285,7 @@ function ExploracionesRegisterPage({ sampleCategory }: { sampleCategory: SampleC
                     </MapContainer>
                   </div>
                 ) : null}
-                {showGeoMap && !navigator.onLine && !mapCacheStatus.includes("offline") ? (
+                {showGeoMap && !navigator.onLine && !mapTilesReady ? (
                   <OfflineGeoMap geoPoint={geoPoint} />
                 ) : null}
               </div>
@@ -4009,7 +4331,7 @@ function buildOfflineMapTiles(latitude: number, longitude: number) {
       for (let y = center.y - radius; y <= center.y + radius; y += 1) {
         if (y < 0 || y >= maxTile) continue;
         const wrappedX = ((x % maxTile) + maxTile) % maxTile;
-        const server = ["a", "b", "c"][Math.abs(wrappedX + y + zoom) % 3];
+        const server = MAP_TILE_SERVERS[Math.abs(wrappedX + y + zoom) % MAP_TILE_SERVERS.length];
         const key = `${zoom}/${wrappedX}/${y}`;
         if (seen.has(key)) continue;
         seen.add(key);
@@ -4024,6 +4346,75 @@ function buildOfflineMapTiles(latitude: number, longitude: number) {
   });
 
   return tiles;
+}
+
+function buildRegionalOfflineMapTiles() {
+  return uniqueTiles([
+    ...buildTilesForBounds(POTOSI_OVERVIEW_BOUNDS, [8, 9, 10]),
+    ...buildTilesForBounds(SUD_LIPEZ_BOUNDS, [11, 12, 13]),
+    ...buildTilesForBounds(CERRO_LIPENA_DETAIL_BOUNDS, [14, 15, 16]),
+    ...buildOfflineMapTiles(CERRO_LIPENA_CENTER.latitude, CERRO_LIPENA_CENTER.longitude)
+  ]);
+}
+
+function buildTilesForBounds(
+  bounds: { south: number; west: number; north: number; east: number },
+  zooms: number[]
+) {
+  const tiles: Array<{ url: string; zoom: number; x: number; y: number }> = [];
+
+  zooms.forEach((zoom) => {
+    const northWest = latLonToTile(bounds.north, bounds.west, zoom);
+    const southEast = latLonToTile(bounds.south, bounds.east, zoom);
+    const maxTile = 2 ** zoom;
+
+    for (let x = northWest.x; x <= southEast.x; x += 1) {
+      for (let y = northWest.y; y <= southEast.y; y += 1) {
+        if (y < 0 || y >= maxTile) continue;
+        const wrappedX = ((x % maxTile) + maxTile) % maxTile;
+        const server = MAP_TILE_SERVERS[Math.abs(wrappedX + y + zoom) % MAP_TILE_SERVERS.length];
+        tiles.push({
+          url: `https://${server}.tile.openstreetmap.org/${zoom}/${wrappedX}/${y}.png`,
+          zoom,
+          x: wrappedX,
+          y
+        });
+      }
+    }
+  });
+
+  return uniqueTiles(tiles);
+}
+
+function uniqueTiles(tiles: Array<{ url: string; zoom: number; x: number; y: number }>) {
+  const seen = new Set<string>();
+  return tiles.filter((tile) => {
+    const key = `${tile.zoom}/${tile.x}/${tile.y}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
+async function getOfflineMapCacheStatus(latitude: number, longitude: number) {
+  if (!("caches" in window)) {
+    return { ready: false, cached: 0, required: 0 };
+  }
+
+  const cache = await caches.open(MAP_TILE_CACHE_NAME);
+  const requiredTiles = buildOfflineMapTiles(latitude, longitude).filter((tile) => tile.zoom === MAP_READY_ZOOM);
+  let cached = 0;
+
+  for (const tile of requiredTiles) {
+    const match = await cache.match(tile.url);
+    if (match) cached += 1;
+  }
+
+  return {
+    ready: requiredTiles.length > 0 && cached === requiredTiles.length,
+    cached,
+    required: requiredTiles.length
+  };
 }
 
 function latLonToTile(latitude: number, longitude: number, zoom: number) {

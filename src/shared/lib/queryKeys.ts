@@ -35,7 +35,8 @@ export const queryKeys = {
   },
   auth: {
     all: ["auth"] as const,
-    users: () => [...queryKeys.auth.all, "users"] as const
+    users: () => [...queryKeys.auth.all, "users"] as const,
+    dataRoomAccessRequests: () => [...queryKeys.auth.all, "data-room-access-requests"] as const
   },
   contabilidad: {
     all: ["contabilidad"] as const,

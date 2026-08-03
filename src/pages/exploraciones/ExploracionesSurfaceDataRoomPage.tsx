@@ -153,7 +153,7 @@ function getSampleTopNumericValue(sample: any): number {
 
 export function ExploracionesSurfaceDataRoomPage() {
   const { user } = useAuth();
-  const canManage = user?.role === "ADMIN" || user?.role === "SUPERINTENDENTE";
+  const canManage = user?.role === "ADMIN" || user?.role === "GEOLOGOADMIN" || user?.role === "SUPERINTENDENTE";
   const canView = canManage || user?.role === "VISITANTE" || user?.role === "GEOLOGO";
   const { areaId, levelId, laborId, sampleId } = useParams();
   const [modal, setModal] = useState<ModalType | null>(null);

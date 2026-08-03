@@ -21,6 +21,7 @@ import {
   isAuthTokenExpiringSoon,
   setAuthToken
 } from "@/shared/lib/authToken";
+import { getVisitorDeviceId } from "@/features/auth/lib/visitorDevice";
 
 interface AuthContextValue {
   session: AuthSession | null;
@@ -73,7 +74,10 @@ export function AuthProvider({ children }: PropsWithChildren) {
 
     refreshPromiseRef.current = (async () => {
       try {
-        const response = await refreshSession({ refreshToken: currentRefreshToken });
+        const response = await refreshSession({
+          refreshToken: currentRefreshToken,
+          deviceId: getVisitorDeviceId()
+        });
         applySession({
           accessToken: response.data.accessToken,
           refreshToken: response.data.refreshToken ?? currentRefreshToken,
@@ -114,9 +118,8 @@ export function AuthProvider({ children }: PropsWithChildren) {
       token: session?.accessToken ?? null,
       isAuthenticated: Boolean(session?.accessToken),
       isAdmin: session?.user.role === "ADMIN",
-      isSuperintendente: session?.user.role === "SUPERINTENDENTE",
-      canManageUsers:
-        session?.user.role === "ADMIN" || session?.user.role === "SUPERINTENDENTE",
+      isSuperintendente: session?.user.role === "GEOLOGOADMIN" || session?.user.role === "SUPERINTENDENTE",
+      canManageUsers: session?.user.role === "ADMIN",
       login,
       logout
     };

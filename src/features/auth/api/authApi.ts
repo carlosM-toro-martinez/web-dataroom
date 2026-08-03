@@ -3,9 +3,15 @@ import { apiEndpoints } from "@/shared/api/endpoints";
 import { httpClient } from "@/shared/api/core/httpClient";
 import {
   forgotPasswordResponseSchema,
+  approveDataRoomAccessPayloadSchema,
+  approveDataRoomAccessResponseSchema,
+  dataRoomAccessRequestPayloadSchema,
+  dataRoomAccessRequestResponseSchema,
+  dataRoomAccessRequestsResponseSchema,
   loginResponseSchema,
   refreshPayloadSchema,
   refreshResponseSchema,
+  rejectDataRoomAccessPayloadSchema,
   resetPasswordRequestSchema,
   resetPasswordResponseSchema,
   registerResponseSchema,
@@ -13,8 +19,11 @@ import {
   updateUserResponseSchema,
   usersListResponseSchema,
   type ForgotPasswordPayload,
+  type ApproveDataRoomAccessPayload,
+  type DataRoomAccessRequestPayload,
   type LoginPayload,
   type RefreshPayload,
+  type RejectDataRoomAccessPayload,
   type ResetPasswordPayload,
   type RegisterPayload,
   type UpdateUserPayload
@@ -58,6 +67,38 @@ export async function updateUserById(id: number, payload: UpdateUserPayload) {
     url: apiEndpoints.auth.userById(id),
     body,
     schema: updateUserResponseSchema
+  });
+}
+
+export async function requestDataRoomAccess(payload: DataRoomAccessRequestPayload) {
+  const body = dataRoomAccessRequestPayloadSchema.parse(payload);
+  return postRequest({
+    url: apiEndpoints.auth.dataRoomAccessRequests,
+    body,
+    schema: dataRoomAccessRequestResponseSchema
+  });
+}
+
+export async function getDataRoomAccessRequests() {
+  const response = await httpClient.get(apiEndpoints.auth.dataRoomAccessRequests);
+  return dataRoomAccessRequestsResponseSchema.parse(response.data);
+}
+
+export async function approveDataRoomAccessRequest(id: string, payload: ApproveDataRoomAccessPayload) {
+  const body = approveDataRoomAccessPayloadSchema.parse(payload);
+  return postRequest({
+    url: apiEndpoints.auth.dataRoomAccessRequestApprove(id),
+    body,
+    schema: approveDataRoomAccessResponseSchema
+  });
+}
+
+export async function rejectDataRoomAccessRequest(id: string, payload: RejectDataRoomAccessPayload) {
+  const body = rejectDataRoomAccessPayloadSchema.parse(payload);
+  return postRequest({
+    url: apiEndpoints.auth.dataRoomAccessRequestReject(id),
+    body,
+    schema: dataRoomAccessRequestResponseSchema
   });
 }
 

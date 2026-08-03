@@ -12,7 +12,9 @@ export function DashboardPage() {
     return <Navigate to="/exploraciones-data-room" replace />;
   }
 
-  const canAdmin = user?.role === "ADMIN" || user?.role === "SUPERINTENDENTE";
+  const canManageExploraciones =
+    user?.role === "ADMIN" || user?.role === "GEOLOGOADMIN" || user?.role === "SUPERINTENDENTE";
+  const canManageSystem = user?.role === "ADMIN";
 
   return (
     <section className="space-y-6 text-[var(--color-on-surface)]">
@@ -31,7 +33,7 @@ export function DashboardPage() {
           </p>
         </Link>
 
-        {canAdmin ? (
+        {canManageExploraciones ? (
           <Link to="/exploraciones" className={cardClassName}>
             <MapPinned size={22} className="mb-4 text-[var(--color-primary)]" />
             <h2 className="text-lg font-bold">Exploraciones</h2>
@@ -41,7 +43,7 @@ export function DashboardPage() {
           </Link>
         ) : null}
 
-        {canAdmin ? (
+        {canManageSystem ? (
           <Link to="/trabajadores" className={cardClassName}>
             <Users size={22} className="mb-4 text-[var(--color-primary)]" />
             <h2 className="text-lg font-bold">Trabajadores</h2>

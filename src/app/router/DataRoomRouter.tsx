@@ -57,10 +57,10 @@ export function DataRoomRouter() {
             <Route path="/exploraciones" element={<ExploracionesPage />} />
             <Route path="/exploraciones/exploracion" element={<ExploracionesPage category="EXPLORATION" />} />
             <Route path="/exploraciones/produccion" element={<ExploracionesPage category="PRODUCTION" />} />
+            <Route path="/exploraciones/elementos" element={<ExploracionesElementosPage />} />
+            <Route path="/exploraciones/jerarquia" element={<ExploracionesHierarchyPage />} />
+            <Route path="/exploraciones/reportes" element={<ExploracionesReportesPage />} />
           </Route>
-          <Route path="/exploraciones/elementos" element={<ExploracionesElementosPage />} />
-          <Route path="/exploraciones/jerarquia" element={<ExploracionesHierarchyPage />} />
-          <Route path="/exploraciones/reportes" element={<ExploracionesReportesPage />} />
 
           <Route element={<AdminRoute />}>
             <Route path="/exploraciones-data-room/forms" element={<ExploracionesFormsPage />} />
