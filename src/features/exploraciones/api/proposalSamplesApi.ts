@@ -257,6 +257,10 @@ export async function updateInteriorSampleWithResults(
   return parseOne(response.data, (item) => interiorSampleSchema.parse(item));
 }
 
+export async function deleteInteriorSample(id: string) {
+  await httpClient.delete(apiEndpoints.exploraciones.interiorSampleById(id));
+}
+
 export async function createInteriorSampleResult(payload: CreateSampleResultPayload) {
   const { sampleId, laboratoryId: interiorLaboratoryId, ...rest } = payload;
   const response = await httpClient.post(apiEndpoints.exploraciones.interiorResults, {
@@ -493,6 +497,10 @@ export async function updateSurfaceSampleWithResults(
     payload
   );
   return parseOne(response.data, (item) => surfaceSampleSchema.parse(item));
+}
+
+export async function deleteSurfaceSample(id: string) {
+  await httpClient.delete(apiEndpoints.exploraciones.surfaceProposalSampleById(id));
 }
 
 export async function createSurfaceSampleResult(payload: CreateSampleResultPayload) {

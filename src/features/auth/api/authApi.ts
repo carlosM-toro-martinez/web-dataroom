@@ -31,18 +31,27 @@ import {
   type UpdateUserPayload
 } from "@/features/auth/model/auth.schema";
 
+function normalizeEmail(email: string) {
+  return email.trim().toLowerCase();
+}
+
 export async function login(payload: LoginPayload) {
+  const body = loginResponseSafePayload(payload);
   return postRequest({
     url: apiEndpoints.auth.login,
-    body: payload,
+    body,
     schema: loginResponseSchema
   });
+}
+
+function loginResponseSafePayload(payload: LoginPayload): LoginPayload {
+  return { ...payload, email: normalizeEmail(payload.email) };
 }
 
 export async function registerUser(payload: RegisterPayload) {
   return postRequest({
     url: apiEndpoints.auth.register,
-    body: payload,
+    body: { ...payload, email: normalizeEmail(payload.email) },
     schema: registerResponseSchema
   });
 }
@@ -67,7 +76,7 @@ export async function updateUserById(id: number, payload: UpdateUserPayload) {
   const body = updateUserPayloadSchema.parse(payload);
   return putRequest({
     url: apiEndpoints.auth.userById(id),
-    body,
+    body: body.email ? { ...body, email: normalizeEmail(body.email) } : body,
     schema: updateUserResponseSchema
   });
 }
@@ -76,7 +85,7 @@ export async function requestDataRoomAccess(payload: DataRoomAccessRequestPayloa
   const body = dataRoomAccessRequestPayloadSchema.parse(payload);
   return postRequest({
     url: apiEndpoints.auth.dataRoomAccessRequests,
-    body,
+    body: { ...body, email: normalizeEmail(body.email) },
     schema: dataRoomAccessRequestResponseSchema
   });
 }
@@ -134,7 +143,7 @@ export async function logoutSession(payload: RefreshPayload) {
 export async function forgotPassword(payload: ForgotPasswordPayload) {
   return postRequest({
     url: apiEndpoints.auth.forgotPassword,
-    body: payload,
+    body: { ...payload, email: normalizeEmail(payload.email) },
     schema: forgotPasswordResponseSchema
   });
 }

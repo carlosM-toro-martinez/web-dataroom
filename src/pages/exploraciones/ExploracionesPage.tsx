@@ -1,4 +1,5 @@
 import { FormEvent, useEffect, useMemo, useRef, useState, type InputHTMLAttributes } from "react";
+import { createPortal } from "react-dom";
 import { Link } from "react-router-dom";
 import L from "leaflet";
 import {
@@ -34,7 +35,9 @@ import {
   useCreateSurfaceDispatchMutation,
   useCreateSurfaceSampleResultMutation,
   useDeleteInteriorDispatchMutation,
+  useDeleteInteriorSampleMutation,
   useDeleteSurfaceDispatchMutation,
+  useDeleteSurfaceSampleMutation,
   useInteriorDispatchesQuery,
   useInteriorAreasQuery,
   useInteriorHierarchyQuery,
@@ -778,6 +781,21 @@ function getRowSyncError(row: SampleTableRow) {
   return (row.raw as OfflineProposalSample).syncError;
 }
 
+function getRowCreatedById(row: SampleTableRow) {
+  if (row.source !== "remote") return undefined;
+  const raw = row.raw as any;
+  return raw.createdById ?? raw.createdBy?.id;
+}
+
+function isRowOwnedByUser(row: SampleTableRow, userId?: number | string) {
+  const createdById = getRowCreatedById(row);
+  return userId !== undefined && createdById !== undefined && String(createdById) === String(userId);
+}
+
+function canDeleteRow(row: SampleTableRow, user?: { id: number | string; role?: string }) {
+  return user?.role === "ADMIN" || isRowOwnedByUser(row, user?.id);
+}
+
 function isConnectivityIssue(error: unknown) {
   if (!navigator.onLine) return true;
   if (error instanceof ApiError) return !error.statusCode;
@@ -1161,6 +1179,8 @@ function ExploracionesRegisterPage({ sampleCategory }: { sampleCategory: SampleC
   const createSurfaceDispatch = useCreateSurfaceDispatchMutation();
   const deleteInteriorDispatch = useDeleteInteriorDispatchMutation();
   const deleteSurfaceDispatch = useDeleteSurfaceDispatchMutation();
+  const deleteInteriorSample = useDeleteInteriorSampleMutation();
+  const deleteSurfaceSample = useDeleteSurfaceSampleMutation();
   const createInteriorResult = useCreateInteriorSampleResultMutation();
   const createSurfaceResult = useCreateSurfaceSampleResultMutation();
   const syncMutation = useSyncProposalSamplesMutation();
@@ -2646,6 +2666,32 @@ function ExploracionesRegisterPage({ sampleCategory }: { sampleCategory: SampleC
     writeVoucherPrintDocument(printWindow, row);
   }
 
+  async function deleteSample(row: SampleTableRow) {
+    if (row.source !== "remote") {
+      showError("Sincroniza la muestra antes de eliminarla.");
+      return;
+    }
+    if (!canDeleteRow(row, user ?? undefined)) {
+      showError("Solo ADMIN o la persona que registró la muestra puede eliminarla.");
+      return;
+    }
+    const confirmed = window.confirm(
+      `¿Eliminar la muestra ${formatVoucherLabel(row)}? Los códigos posteriores se ajustarán.`
+    );
+    if (!confirmed) return;
+
+    try {
+      if (registerType === "interior") {
+        await deleteInteriorSample.mutateAsync(row.id);
+      } else {
+        await deleteSurfaceSample.mutateAsync(row.id);
+      }
+      showSuccess("Muestra eliminada. La secuencia de códigos fue actualizada.");
+    } catch (error) {
+      showError(error instanceof Error ? error.message : "No se pudo eliminar la muestra.");
+    }
+  }
+
   function setDispatchField(field: keyof DispatchForm, value: string) {
     setDispatchForm((current) => ({ ...current, [field]: value }));
   }
@@ -3438,6 +3484,8 @@ function ExploracionesRegisterPage({ sampleCategory }: { sampleCategory: SampleC
         onOnlyMineChange={setOnlyMine}
         onEdit={startEdit}
         onPrintVoucher={handlePrintVoucher}
+        onDelete={deleteSample}
+        currentUser={user ?? undefined}
       />
 
       {modalKind ? (
@@ -3981,6 +4029,7 @@ function renderVoucherMarkup(row: SampleTableRow, symbols: string[] = []) {
           </div>
           <div class="form-row cols-location">
             <div class="field"><span class="label">LUGAR:</span><span class="fill">${compactValue(row.location, 24)}</span></div>
+            <div class="field"><span class="label">MUESTRA:</span><span class="fill">${compactValue(row.name, 26)}</span></div>
           </div>
           <div class="form-row cols-coords">
             <div class="field">
@@ -4030,7 +4079,7 @@ function voucherPrintStyles() {
     .form-row { display: grid; gap: 10px; height: 23px; align-items: end; font-size: 17px; line-height: 1; white-space: nowrap; }
     .cols-project { grid-template-columns: 1fr 220px; }
     .cols-sampler { grid-template-columns: 1fr 300px; }
-    .cols-location { grid-template-columns: 1fr; }
+    .cols-location { grid-template-columns: 1fr 1fr; }
     .cols-coords { grid-template-columns: 1fr; }
     .field { display: flex; min-width: 0; align-items: end; gap: 4px; }
     .label { flex: 0 0 auto; }
@@ -4466,6 +4515,7 @@ function SamplesTable({
   sampleStatusFilter,
   syncStatusFilter,
   onlyMine,
+  currentUser,
   onSearch,
   onPriorityFilterChange,
   onResultStatusFilterChange,
@@ -4473,7 +4523,8 @@ function SamplesTable({
   onSyncStatusFilterChange,
   onOnlyMineChange,
   onEdit,
-  onPrintVoucher
+  onPrintVoucher,
+  onDelete
 }: {
   rows: SampleTableRow[];
   dispatches: SampleDispatch[];
@@ -4484,6 +4535,7 @@ function SamplesTable({
   sampleStatusFilter: SampleLifecycleFilter;
   syncStatusFilter: SyncStatusFilter;
   onlyMine: boolean;
+  currentUser?: { id: number | string; role?: string };
   onSearch: (value: string) => void;
   onPriorityFilterChange: (value: SamplePriority | "") => void;
   onResultStatusFilterChange: (value: ResultStatusFilter) => void;
@@ -4492,6 +4544,7 @@ function SamplesTable({
   onOnlyMineChange: (value: boolean) => void;
   onEdit: (row: SampleTableRow) => void;
   onPrintVoucher: (row: SampleTableRow) => void;
+  onDelete: (row: SampleTableRow) => void;
 }) {
   const [detailRow, setDetailRow] = useState<SampleTableRow | null>(null);
   const [voucherConfirmRow, setVoucherConfirmRow] = useState<SampleTableRow | null>(null);
@@ -4523,11 +4576,14 @@ function SamplesTable({
     setVoucherConfirmRow(null);
     onPrintVoucher(row);
   };
-  const showRowActions = (row: SampleTableRow) => (
+  const showRowActions = (row: SampleTableRow, scope: string) => {
+    const actionId = `${scope}:${row.id}`;
+    return (
     <RowActionsMenu
       row={row}
-      isOpen={openActionsId === row.id}
-      onToggle={() => setOpenActionsId((current) => (current === row.id ? null : row.id))}
+      isOpen={openActionsId === actionId}
+      onToggle={() => setOpenActionsId((current) => (current === actionId ? null : actionId))}
+      onClose={() => setOpenActionsId(null)}
       onView={() => {
         setOpenActionsId(null);
         setDetailRow(row);
@@ -4540,8 +4596,14 @@ function SamplesTable({
         setOpenActionsId(null);
         setVoucherConfirmRow(row);
       }}
+      onDelete={() => {
+        setOpenActionsId(null);
+        onDelete(row);
+      }}
+      canDelete={canDeleteRow(row, currentUser)}
     />
-  );
+    );
+  };
 
   return (
     <>
@@ -4671,7 +4733,7 @@ function SamplesTable({
                     ) : null}
                   </td>
                   <td className="px-4 py-3 text-xs">
-                    {showRowActions(row)}
+                    {showRowActions(row, "records-desktop")}
                   </td>
                 </tr>
               ))}
@@ -4697,7 +4759,7 @@ function SamplesTable({
                     {row.name ?? row.location}
                   </p>
                 </div>
-                {showRowActions(row)}
+                {showRowActions(row, "records-mobile")}
               </div>
               <div className="mt-2 flex flex-wrap items-center gap-2">
                 <span className={sampleStatusBadgeClass(row.status)}>{SAMPLE_STATUS_LABELS[row.status]}</span>
@@ -4769,7 +4831,7 @@ function SamplesTable({
                           </td>
                           <td className="px-3 py-2 text-xs">{row.location}</td>
                           <td className="px-3 py-2 text-xs"><ResultStatus results={row.results} /></td>
-                          <td className="px-3 py-2 text-xs">{showRowActions(row)}</td>
+                          <td className="px-3 py-2 text-xs">{showRowActions(row, `batch-${group.id}`)}</td>
                         </tr>
                       ))}
                     </tbody>
@@ -4826,30 +4888,71 @@ function SamplesTable({
 function RowActionsMenu({
   row,
   isOpen,
+  canDelete,
   onToggle,
+  onClose,
   onView,
   onEdit,
-  onPrintVoucher
+  onPrintVoucher,
+  onDelete
 }: {
   row: SampleTableRow;
   isOpen: boolean;
+  canDelete: boolean;
   onToggle: () => void;
+  onClose: () => void;
   onView: () => void;
   onEdit: () => void;
   onPrintVoucher: () => void;
+  onDelete: () => void;
 }) {
-  return (
-    <div className="relative inline-flex shrink-0">
-      <button
-        type="button"
-        className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-[var(--color-outline-variant)] text-[var(--color-on-surface-variant)] transition hover:border-[var(--color-primary)] hover:text-[var(--color-on-surface)]"
-        onClick={onToggle}
-        aria-label="Abrir acciones"
-      >
-        <MoreVertical size={17} />
-      </button>
-      {isOpen ? (
-        <div className="absolute right-0 top-10 z-30 min-w-44 overflow-hidden rounded-lg border border-[var(--color-border-soft)] bg-[var(--color-surface-container-highest)] shadow-xl">
+  const buttonRef = useRef<HTMLButtonElement | null>(null);
+  const menuRef = useRef<HTMLDivElement | null>(null);
+  const [menuPosition, setMenuPosition] = useState<{ top: number; left: number } | null>(null);
+
+  useEffect(() => {
+    if (!isOpen) return;
+
+    const updatePosition = () => {
+      const button = buttonRef.current;
+      if (!button) return;
+      const rect = button.getBoundingClientRect();
+      const menuWidth = 176;
+      const menuTop = Math.min(rect.bottom + 6, window.innerHeight - 168);
+      const menuLeft = Math.min(Math.max(8, rect.right - menuWidth), window.innerWidth - menuWidth - 8);
+      setMenuPosition({ top: Math.max(8, menuTop), left: menuLeft });
+    };
+
+    updatePosition();
+    window.addEventListener("resize", updatePosition);
+    window.addEventListener("scroll", updatePosition, true);
+    return () => {
+      window.removeEventListener("resize", updatePosition);
+      window.removeEventListener("scroll", updatePosition, true);
+    };
+  }, [isOpen]);
+
+  useEffect(() => {
+    if (!isOpen) return;
+
+    const handlePointerDown = (event: PointerEvent) => {
+      const target = event.target as Node | null;
+      if (!target) return;
+      if (buttonRef.current?.contains(target) || menuRef.current?.contains(target)) return;
+      onClose();
+    };
+
+    document.addEventListener("pointerdown", handlePointerDown);
+    return () => document.removeEventListener("pointerdown", handlePointerDown);
+  }, [isOpen, onClose]);
+
+  const menu = isOpen && menuPosition && typeof document !== "undefined"
+    ? createPortal(
+        <div
+          ref={menuRef}
+          className="fixed z-[1000] min-w-44 overflow-hidden rounded-lg border border-[var(--color-border-soft)] bg-[var(--color-surface-container-highest)] shadow-xl"
+          style={{ top: menuPosition.top, left: menuPosition.left }}
+        >
           <button
             type="button"
             className="flex w-full items-center gap-2 px-3 py-2 text-left text-xs font-semibold hover:bg-[var(--color-surface-bright)]"
@@ -4875,8 +4978,33 @@ function RowActionsMenu({
             <Printer size={14} />
             Imprimir talón
           </button>
-        </div>
-      ) : null}
+          <button
+            type="button"
+            className="flex w-full items-center gap-2 px-3 py-2 text-left text-xs font-semibold text-[var(--color-error)] hover:bg-[var(--color-error)]/10 disabled:cursor-not-allowed disabled:opacity-50"
+            onClick={onDelete}
+            disabled={!canDelete}
+            title={canDelete ? "Eliminar muestra" : "Solo ADMIN o quien la registró puede eliminarla"}
+          >
+            <Trash2 size={14} />
+            Eliminar muestra
+          </button>
+        </div>,
+        document.body
+      )
+    : null;
+
+  return (
+    <div className="relative inline-flex shrink-0">
+      <button
+        ref={buttonRef}
+        type="button"
+        className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-[var(--color-outline-variant)] text-[var(--color-on-surface-variant)] transition hover:border-[var(--color-primary)] hover:text-[var(--color-on-surface)]"
+        onClick={onToggle}
+        aria-label="Abrir acciones"
+      >
+        <MoreVertical size={17} />
+      </button>
+      {menu}
     </div>
   );
 }

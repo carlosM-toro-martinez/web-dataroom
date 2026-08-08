@@ -21,10 +21,12 @@ import {
   deleteInteriorDispatch,
   deleteInteriorLabor,
   deleteInteriorLevel,
+  deleteInteriorSample,
   deleteSurfaceArea,
   deleteSurfaceDispatch,
   deleteSurfaceLabor,
   deleteSurfaceLevel,
+  deleteSurfaceSample,
   getInteriorDispatches,
   getInteriorAreas,
   getInteriorHierarchy,
@@ -575,6 +577,16 @@ export function useUpdateSurfaceSampleWithResultsMutation() {
     }) => updateSurfaceSampleWithResults(id, payload),
     onSuccess: invalidate
   });
+}
+
+export function useDeleteInteriorSampleMutation() {
+  const invalidate = useInvalidateProposalSamples();
+  return useMutation({ mutationFn: deleteInteriorSample, onSuccess: invalidate });
+}
+
+export function useDeleteSurfaceSampleMutation() {
+  const invalidate = useInvalidateProposalSamples();
+  return useMutation({ mutationFn: deleteSurfaceSample, onSuccess: invalidate });
 }
 
 export function useCreateInteriorDispatchMutation() {
