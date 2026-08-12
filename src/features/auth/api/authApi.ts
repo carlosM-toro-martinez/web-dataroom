@@ -1,6 +1,7 @@
 import { postRequest, putRequest } from "@/shared/api/core/request";
 import { apiEndpoints } from "@/shared/api/endpoints";
 import { httpClient } from "@/shared/api/core/httpClient";
+import { ApiError } from "@/shared/api/core/apiError";
 import {
   forgotPasswordResponseSchema,
   approveDataRoomAccessPayloadSchema,
@@ -33,6 +34,17 @@ import {
 
 function normalizeEmail(email: string) {
   return email.trim().toLowerCase();
+}
+
+function normalizeDataRoomAccessPayload(payload: DataRoomAccessRequestPayload) {
+  const company = payload.company?.trim();
+  return {
+    fullName: payload.fullName.trim(),
+    email: normalizeEmail(payload.email),
+    phone: payload.phone.trim(),
+    company: company || undefined,
+    reason: payload.reason.trim()
+  };
 }
 
 export async function login(payload: LoginPayload) {
@@ -82,10 +94,14 @@ export async function updateUserById(id: number, payload: UpdateUserPayload) {
 }
 
 export async function requestDataRoomAccess(payload: DataRoomAccessRequestPayload) {
-  const body = dataRoomAccessRequestPayloadSchema.parse(payload);
+  const parsed = dataRoomAccessRequestPayloadSchema.safeParse(normalizeDataRoomAccessPayload(payload));
+  if (!parsed.success) {
+    throw new ApiError(parsed.error.issues[0]?.message ?? "Please check the form fields.");
+  }
+
   return postRequest({
     url: apiEndpoints.auth.dataRoomAccessRequests,
-    body: { ...body, email: normalizeEmail(body.email) },
+    body: parsed.data,
     schema: dataRoomAccessRequestResponseSchema
   });
 }

@@ -10,7 +10,6 @@ import { ForgotPasswordPage } from "@/pages/auth/ForgotPasswordPage";
 import { ResetPasswordPage } from "@/pages/auth/ResetPasswordPage";
 import { RegisterUserPage } from "@/pages/auth/RegisterUserPage";
 import { DataRoomAccessRequestsPage } from "@/pages/auth/DataRoomAccessRequestsPage";
-import { DataRoomAccessRequestPage } from "@/pages/auth/DataRoomAccessRequestPage";
 import { DashboardPage } from "@/pages/dashboard/DashboardPage";
 import { NotFoundPage } from "@/pages/not-found/NotFoundPage";
 import { ExploracionesPage } from "@/pages/exploraciones/ExploracionesPage";
@@ -41,7 +40,6 @@ export function DataRoomRouter() {
         <Route path="/mineria-responsable" element={<ResponsibleMiningPage />} />
         <Route path="/medio-ambiente" element={<EnvironmentPage />} />
         <Route path="/seguridad-industrial" element={<IndustrialSafetyPage />} />
-        <Route path="/solicitar-acceso-data-room" element={<DataRoomAccessRequestPage />} />
 
         <Route element={<ProtectedRoute />}>
           <Route path="/dashboard" element={<DashboardPage />} />

@@ -162,11 +162,11 @@ export const authSessionSchema = z.object({
 });
 
 export const dataRoomAccessRequestPayloadSchema = z.object({
-  fullName: z.string().min(2),
-  email: z.string().email(),
-  phone: z.string().min(5),
-  company: z.string().optional(),
-  reason: z.string().min(8)
+  fullName: z.string().trim().min(2, "Full name is required."),
+  email: z.string().trim().email("Enter a valid email address."),
+  phone: z.string().trim().min(5, "Phone number is required."),
+  company: z.string().trim().optional(),
+  reason: z.string().trim().min(3, "Please add a reason for the request.")
 });
 
 export const dataRoomAccessRequestSchema = z.object({

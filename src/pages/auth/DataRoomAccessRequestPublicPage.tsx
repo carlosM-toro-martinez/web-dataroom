@@ -27,10 +27,10 @@ export function DataRoomAccessRequestPublicPage() {
     setIsSubmitting(true);
     try {
       await requestDataRoomAccess(form);
-      showSuccess("Solicitud enviada. Minera Marte evaluara tu acceso al Data Room.");
+      showSuccess("Request sent. Minera Marte will review your Data Room access request.");
       setForm({ fullName: "", email: "", phone: "", company: "", reason: "" });
     } catch (error) {
-      const message = error instanceof ApiError ? error.message : "No se pudo enviar la solicitud.";
+      const message = error instanceof ApiError ? error.message : "The request could not be sent.";
       showError(message);
     } finally {
       setIsSubmitting(false);
@@ -53,18 +53,18 @@ export function DataRoomAccessRequestPublicPage() {
               className="inline-flex items-center gap-2 border border-white/30 bg-white/10 px-4 py-2 text-sm font-bold text-white transition hover:bg-white/20"
             >
               <ArrowLeft size={16} />
-              Volver al sitio
+              Back to website
             </Link>
             <div className="mt-8 inline-flex items-center gap-2 border border-[#f0b35f]/50 bg-[#f0b35f]/15 px-3 py-1 text-xs font-bold uppercase tracking-[0.16em] text-[#f2c879]">
               <ShieldCheck size={14} />
-              Acceso controlado
+              Controlled access
             </div>
             <h1 className="mt-5 font-headline text-4xl font-extrabold leading-tight md:text-5xl">
-              Solicitud de acceso al Data Room
+              Data Room Access Request
             </h1>
             <p className="mt-4 text-base leading-7 text-white/80">
-              Completa tus datos de contacto para que administracion evalúe tu solicitud. Si se aprueba,
-              recibiras credenciales temporales con vencimiento y uso en un solo dispositivo.
+              Submit your contact details so our administration team can review your request. Approved
+              visitors receive temporary credentials with an expiration date and single-device access.
             </p>
           </div>
 
@@ -74,45 +74,50 @@ export function DataRoomAccessRequestPublicPage() {
           >
             <div className="grid gap-4 md:grid-cols-2">
               <div className="md:col-span-2">
-                <label className={labelClass}>Nombre completo</label>
+                <label className={labelClass}>Full name</label>
                 <input
                   required
+                  placeholder="Jane Doe"
                   value={form.fullName}
                   onChange={(event) => setForm((current) => ({ ...current, fullName: event.target.value }))}
                   className={inputClass}
                 />
               </div>
               <div>
-                <label className={labelClass}>Correo</label>
+                <label className={labelClass}>Email</label>
                 <input
                   required
                   type="email"
+                  placeholder="jane.doe@company.com"
                   value={form.email}
                   onChange={(event) => setForm((current) => ({ ...current, email: event.target.value }))}
                   className={inputClass}
                 />
               </div>
               <div>
-                <label className={labelClass}>Numero de contacto</label>
+                <label className={labelClass}>Contact number</label>
                 <input
                   required
+                  placeholder="+591 70000000"
                   value={form.phone}
                   onChange={(event) => setForm((current) => ({ ...current, phone: event.target.value }))}
                   className={inputClass}
                 />
               </div>
               <div className="md:col-span-2">
-                <label className={labelClass}>Empresa</label>
+                <label className={labelClass}>Company</label>
                 <input
+                  placeholder="Company or institution"
                   value={form.company}
                   onChange={(event) => setForm((current) => ({ ...current, company: event.target.value }))}
                   className={inputClass}
                 />
               </div>
               <div className="md:col-span-2">
-                <label className={labelClass}>Motivo de acceso</label>
+                <label className={labelClass}>Reason for access</label>
                 <textarea
                   required
+                  placeholder="Briefly describe why you need to review the Data Room."
                   value={form.reason}
                   onChange={(event) => setForm((current) => ({ ...current, reason: event.target.value }))}
                   className={`${inputClass} min-h-36 resize-y`}
@@ -126,7 +131,7 @@ export function DataRoomAccessRequestPublicPage() {
               className="mt-5 inline-flex w-full items-center justify-center gap-2 bg-[#0a4d68] px-5 py-3 text-sm font-bold text-white transition hover:bg-[#07384b] disabled:cursor-not-allowed disabled:opacity-60"
             >
               <Send size={16} />
-              {isSubmitting ? "Enviando solicitud..." : "Enviar solicitud"}
+              {isSubmitting ? "Sending request..." : "Send request"}
             </button>
           </form>
         </section>
