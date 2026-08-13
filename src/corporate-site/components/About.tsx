@@ -173,7 +173,7 @@ export default function About() {
             </p>
           </div>
           <div className="overflow-hidden rounded-sm border border-white/12 bg-black">
-            <video className="h-full w-full" controls preload="metadata" playsInline>
+            <video className="h-full w-full" controls preload="none" playsInline>
               <source src={presentationVideo} type="video/mp4" />
               Your browser does not support the video tag.
             </video>

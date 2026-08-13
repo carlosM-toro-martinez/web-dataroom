@@ -1,4 +1,12 @@
-import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import {
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type CSSProperties,
+  type MouseEventHandler,
+  type ReactNode
+} from "react";
 import { Link, Navigate, useParams } from "react-router-dom";
 import { ChevronRight, Plus, X } from "lucide-react";
 import imgGeneralPlata from "@/assets/images/GENERAL_1PLATA.jpg";
@@ -151,6 +159,70 @@ function getSampleTopNumericValue(sample: any): number {
   return numeric.reduce((max: number, r: any) => (r.value > max ? r.value : max), Number.NEGATIVE_INFINITY);
 }
 
+function isGifMedia(src?: string) {
+  return Boolean(src?.toLowerCase().split("?")[0]?.endsWith(".gif"));
+}
+
+function DeferredMediaImage({
+  src,
+  alt,
+  className,
+  imageClassName,
+  loaded,
+  onLoad,
+  draggable,
+  onMouseDown,
+  style
+}: {
+  src: string;
+  alt: string;
+  className?: string;
+  imageClassName?: string;
+  loaded: boolean;
+  onLoad: () => void;
+  draggable?: boolean;
+  onMouseDown?: MouseEventHandler<HTMLImageElement>;
+  style?: CSSProperties;
+}) {
+  if (isGifMedia(src)) {
+    return (
+      <div className={`relative overflow-hidden bg-black ${className ?? ""}`}>
+        <img
+          src={src}
+          alt={alt}
+          draggable={draggable}
+          onMouseDown={onMouseDown}
+          onLoad={onLoad}
+          decoding="async"
+          className={`${imageClassName ?? className ?? ""} ${loaded ? "opacity-100" : "opacity-0"} transition-opacity duration-300`}
+          style={style}
+        />
+        {!loaded ? (
+          <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-black text-white">
+            <span className="h-8 w-8 animate-spin rounded-full border-2 border-white/25 border-t-white" />
+            <span className="text-xs font-semibold uppercase tracking-[0.18em] text-white/70">
+              Loading animation
+            </span>
+          </div>
+        ) : null}
+      </div>
+    );
+  }
+
+  return (
+    <img
+      src={src}
+      alt={alt}
+      draggable={draggable}
+      onMouseDown={onMouseDown}
+      loading="lazy"
+      decoding="async"
+      className={imageClassName ?? className}
+      style={style}
+    />
+  );
+}
+
 export function ExploracionesSurfaceDataRoomPage() {
   const { user } = useAuth();
   const canManage = user?.role === "ADMIN" || user?.role === "GEOLOGOADMIN" || user?.role === "SUPERINTENDENTE";
@@ -163,6 +235,7 @@ export function ExploracionesSurfaceDataRoomPage() {
   const [pan, setPan] = useState({ x: 0, y: 0 });
   const [dragging, setDragging] = useState(false);
   const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
+  const [loadedMedia, setLoadedMedia] = useState<Set<string>>(() => new Set());
   const [sampleRowsPerPage, setSampleRowsPerPage] = useState<5 | 10>(5);
   const [samplePage, setSamplePage] = useState(0);
   const relevantSampleRef = useRef<HTMLDivElement | null>(null);
@@ -176,6 +249,29 @@ export function ExploracionesSurfaceDataRoomPage() {
   const qaqc = useSampleQaqcQuery(sampleId);
   const laboratories = useSurfaceLaboratoriesQuery();
   const elements = useSurfaceElementsQuery();
+  const isLoading = useMemo(
+    () =>
+      areas.isLoading ||
+      levels.isLoading ||
+      labors.isLoading ||
+      samples.isLoading ||
+      sampleLabs.isLoading ||
+      results.isLoading ||
+      qaqc.isLoading ||
+      laboratories.isLoading ||
+      elements.isLoading,
+    [
+      areas.isLoading,
+      levels.isLoading,
+      labors.isLoading,
+      samples.isLoading,
+      sampleLabs.isLoading,
+      results.isLoading,
+      qaqc.isLoading,
+      laboratories.isLoading,
+      elements.isLoading
+    ]
+  );
 
   const createArea = useCreateMiningAreaMutation();
   const createLevel = useCreateMiningLevelMutation();
@@ -327,6 +423,14 @@ export function ExploracionesSurfaceDataRoomPage() {
     }
     return allImages;
   }, [areaId, levelId, laborId]);
+  const markMediaLoaded = (src: string) => {
+    setLoadedMedia((current) => {
+      if (current.has(src)) return current;
+      const next = new Set(current);
+      next.add(src);
+      return next;
+    });
+  };
   const getTopResult = (sample: any) => {
     const direct = Array.isArray(sample?.results) ? sample.results : [];
     const byLab = Array.isArray(sample?.sampleLabs)
@@ -389,6 +493,8 @@ export function ExploracionesSurfaceDataRoomPage() {
         description="Modelo de areas, niveles, labores, muestras y resultados superficiales."
       />
 
+      {isLoading ? <LoadingPanel label="Loading surface data..." /> : null}
+
       <article className="rounded-xl border border-[var(--color-border-soft)] bg-[var(--color-surface-container-low)] p-4">
         <div className="mb-3 flex items-center justify-between">
           <h2 className="text-base font-bold">Hierarchy</h2>
@@ -434,10 +540,13 @@ export function ExploracionesSurfaceDataRoomPage() {
             </button>
           </div>
           <div className="overflow-hidden rounded-xl border border-[var(--color-border-soft)]">
-            <img
+            <DeferredMediaImage
               src={modelImages[slide]}
               alt={`Model ${slide + 1}`}
-              className="h-[320px] w-full object-cover"
+              loaded={loadedMedia.has(modelImages[slide])}
+              onLoad={() => markMediaLoaded(modelImages[slide])}
+              className="h-[320px] w-full"
+              imageClassName="h-[320px] w-full object-cover"
             />
           </div>
           <div className="mt-3 flex items-center justify-between">
@@ -682,10 +791,12 @@ export function ExploracionesSurfaceDataRoomPage() {
             }}
             onDoubleClick={resetView}
           >
-            <img
+            <DeferredMediaImage
               src={modelImages[slide]}
               alt={`Model ${slide + 1}`}
               draggable={false}
+              loaded={loadedMedia.has(modelImages[slide])}
+              onLoad={() => markMediaLoaded(modelImages[slide])}
               onMouseDown={(e) => {
                 if (zoom <= 1) return;
                 setDragging(true);
@@ -694,7 +805,8 @@ export function ExploracionesSurfaceDataRoomPage() {
                   y: e.clientY - pan.y
                 });
               }}
-              className={`max-h-[90vh] max-w-[90vw] select-none object-contain ${zoom > 1 ? "cursor-grab active:cursor-grabbing" : "cursor-zoom-in"}`}
+              className="h-[90vh] w-[90vw]"
+              imageClassName={`max-h-[90vh] max-w-[90vw] select-none object-contain ${zoom > 1 ? "cursor-grab active:cursor-grabbing" : "cursor-zoom-in"}`}
               style={{
                 transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})`,
                 transformOrigin: "center center",
@@ -1275,6 +1387,22 @@ function AddBtn({ label, onClick }: { label: string; onClick: () => void }) {
     >
       <Plus size={13} /> {label}
     </button>
+  );
+}
+
+function LoadingPanel({ label }: { label: string }) {
+  return (
+    <section className="rounded-xl border border-[var(--color-border-soft)] bg-[var(--color-surface-container-low)] p-4">
+      <div className="flex items-center gap-3">
+        <span className="h-5 w-5 animate-spin rounded-full border-2 border-[var(--color-border-soft)] border-t-[var(--color-primary)]" />
+        <span className="text-sm font-semibold text-[var(--color-on-surface)]">{label}</span>
+      </div>
+      <div className="mt-4 grid gap-3 md:grid-cols-3">
+        {[0, 1, 2].map((item) => (
+          <div key={item} className="h-16 animate-pulse rounded-lg bg-[var(--color-surface-container-high)]" />
+        ))}
+      </div>
+    </section>
   );
 }
 

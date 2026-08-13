@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type CSSProperties, type MouseEventHandler } from "react";
 import { Link, Navigate, useLocation, useNavigate, useParams } from "react-router-dom";
 import { ChevronRight, Plus, X } from "lucide-react";
 import L from "leaflet";
@@ -136,6 +136,70 @@ const DRILLHOLES_MEDIA_BY_NAME: Record<string, string> = {
   "GENERAL_2COBRE.jpg": drillMediaFallback02
 };
 
+function isGifMedia(src?: string) {
+  return Boolean(src?.toLowerCase().split("?")[0]?.endsWith(".gif"));
+}
+
+function DeferredMediaImage({
+  src,
+  alt,
+  className,
+  imageClassName,
+  loaded,
+  onLoad,
+  draggable,
+  onMouseDown,
+  style
+}: {
+  src: string;
+  alt: string;
+  className?: string;
+  imageClassName?: string;
+  loaded: boolean;
+  onLoad: () => void;
+  draggable?: boolean;
+  onMouseDown?: MouseEventHandler<HTMLImageElement>;
+  style?: CSSProperties;
+}) {
+  if (isGifMedia(src)) {
+    return (
+      <div className={`relative overflow-hidden bg-black ${className ?? ""}`}>
+        <img
+          src={src}
+          alt={alt}
+          draggable={draggable}
+          onMouseDown={onMouseDown}
+          onLoad={onLoad}
+          decoding="async"
+          className={`${imageClassName ?? className ?? ""} ${loaded ? "opacity-100" : "opacity-0"} transition-opacity duration-300`}
+          style={style}
+        />
+        {!loaded ? (
+          <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-black text-white">
+            <span className="h-8 w-8 animate-spin rounded-full border-2 border-white/25 border-t-white" />
+            <span className="text-xs font-semibold uppercase tracking-[0.18em] text-white/70">
+              Loading animation
+            </span>
+          </div>
+        ) : null}
+      </div>
+    );
+  }
+
+  return (
+    <img
+      src={src}
+      alt={alt}
+      draggable={draggable}
+      onMouseDown={onMouseDown}
+      loading="lazy"
+      decoding="async"
+      className={imageClassName ?? className}
+      style={style}
+    />
+  );
+}
+
 export function ExploracionesDataRoomPage() {
   const { user } = useAuth();
   const { showError, showSuccess } = useToast();
@@ -160,6 +224,7 @@ export function ExploracionesDataRoomPage() {
   const [mediaPan, setMediaPan] = useState({ x: 0, y: 0 });
   const [mediaDragging, setMediaDragging] = useState(false);
   const [mediaDragStart, setMediaDragStart] = useState({ x: 0, y: 0 });
+  const [loadedMedia, setLoadedMedia] = useState<Set<string>>(() => new Set());
   const projectsQuery = useProjectsQuery({ page: 1, limit: 100 });
   const projectDetail = useProjectDetailQuery(projectId);
   const zonesQuery = useZonesByProjectQuery(projectId);
@@ -219,6 +284,26 @@ export function ExploracionesDataRoomPage() {
     const fallback = resolve(DRILLHOLES_MEDIA_SCHEME.default);
     return fallback.length ? fallback : [modelGifDefault];
   }, [projectId, zoneId]);
+  const topInterceptByDrillHole = useMemo(() => {
+    const map = new Map<number, any>();
+    (significantInterceptsByZoneQuery.data?.data ?? []).forEach((intercept) => {
+      const current = map.get(intercept.drillHoleId);
+      const score = Math.max(intercept.au ?? Number.NEGATIVE_INFINITY, intercept.cu ?? Number.NEGATIVE_INFINITY, intercept.ag ?? Number.NEGATIVE_INFINITY);
+      const currentScore = current
+        ? Math.max(current.au ?? Number.NEGATIVE_INFINITY, current.cu ?? Number.NEGATIVE_INFINITY, current.ag ?? Number.NEGATIVE_INFINITY)
+        : Number.NEGATIVE_INFINITY;
+      if (!current || score > currentScore) map.set(intercept.drillHoleId, intercept);
+    });
+    return map;
+  }, [significantInterceptsByZoneQuery.data?.data]);
+  const markMediaLoaded = (src: string) => {
+    setLoadedMedia((current) => {
+      if (current.has(src)) return current;
+      const next = new Set(current);
+      next.add(src);
+      return next;
+    });
+  };
 
   useEffect(() => {
     if (!isLanding && !projectId && projectsQuery.data?.data?.length) {
@@ -255,6 +340,19 @@ export function ExploracionesDataRoomPage() {
   const resetMediaView = () => {
     setMediaZoom(1);
     setMediaPan({ x: 0, y: 0 });
+  };
+  const formatTopIntercept = (drillHoleId: number) => {
+    const intercept = topInterceptByDrillHole.get(drillHoleId);
+    if (!intercept) return null;
+    const values = [
+      intercept.au != null ? `Au ${intercept.au} g/t` : null,
+      intercept.cu != null ? `Cu ${intercept.cu}%` : null,
+      intercept.ag != null ? `Ag ${intercept.ag} g/t` : null
+    ].filter(Boolean);
+    return {
+      label: values[0] ?? `Width ${intercept.width}`,
+      interval: `${intercept.fromDepth} - ${intercept.toDepth} m`
+    };
   };
 
   const isLoading = useMemo(
@@ -316,9 +414,7 @@ export function ExploracionesDataRoomPage() {
       />
 
       {isLoading ? (
-        <section className="rounded-xl bg-[var(--color-surface-container-low)] p-4">
-          Loading...
-        </section>
+        <LoadingPanel label="Loading exploration data..." />
       ) : null}
 
       {isLanding ? (
@@ -349,7 +445,7 @@ export function ExploracionesDataRoomPage() {
                 className="h-[160px] w-full object-cover opacity-90"
                 muted
                 playsInline
-                preload="metadata"
+                preload="none"
               >
                 <source src={EXPLORACIONES_INTRO_VIDEO_URL} type="video/mp4" />
               </video>
@@ -381,7 +477,7 @@ export function ExploracionesDataRoomPage() {
               Enter the surface exploration data room.
             </p>
           </button>
-          {!isVisitante ? (
+          {isAdmin ? (
             <button
               type="button"
               className="rounded-xl border border-[var(--color-border-soft)] bg-[var(--color-surface-container-low)] p-5 text-left opacity-75"
@@ -421,7 +517,7 @@ export function ExploracionesDataRoomPage() {
             controls
             autoPlay
             playsInline
-            preload="metadata"
+            preload="none"
           >
             <source src={EXPLORACIONES_INTRO_VIDEO_URL} type="video/mp4" />
           </video>
@@ -487,10 +583,12 @@ export function ExploracionesDataRoomPage() {
             }}
             onDoubleClick={resetMediaView}
           >
-            <img
+            <DeferredMediaImage
               src={drillholesMedia[mediaSlide]}
               alt={`Drillholes media fullscreen ${mediaSlide + 1}`}
               draggable={false}
+              loaded={loadedMedia.has(drillholesMedia[mediaSlide])}
+              onLoad={() => markMediaLoaded(drillholesMedia[mediaSlide])}
               onMouseDown={(e) => {
                 if (mediaZoom <= 1) return;
                 setMediaDragging(true);
@@ -499,7 +597,8 @@ export function ExploracionesDataRoomPage() {
                   y: e.clientY - mediaPan.y
                 });
               }}
-              className={`max-h-[90vh] max-w-[90vw] select-none object-contain ${mediaZoom > 1 ? "cursor-grab active:cursor-grabbing" : "cursor-zoom-in"}`}
+              className="h-[90vh] w-[90vw]"
+              imageClassName={`max-h-[90vh] max-w-[90vw] select-none object-contain ${mediaZoom > 1 ? "cursor-grab active:cursor-grabbing" : "cursor-zoom-in"}`}
               style={{
                 transform: `translate(${mediaPan.x}px, ${mediaPan.y}px) scale(${mediaZoom})`,
                 transformOrigin: "center center",
@@ -603,18 +702,53 @@ export function ExploracionesDataRoomPage() {
               {zoneDetail.data?.description ?? "No description"}
             </p>
           </header>
+          <article className="rounded-xl border border-[var(--color-border-soft)] bg-[var(--color-surface-container-low)] p-4">
+            <div className="mb-3 flex items-center justify-between">
+              <h2 className="text-base font-bold">Hierarchy</h2>
+              {canManage ? (
+                <div className="flex flex-wrap gap-2">
+                  <AddBtn label="Add Zone" onClick={() => setModal("zone")} />
+                  <AddBtn label="Add Drillhole" onClick={() => setModal("drillhole")} />
+                </div>
+              ) : null}
+            </div>
+            <div className="grid gap-3 md:grid-cols-2">
+              <MiniList
+                title="Projects"
+                items={(projectsQuery.data?.data ?? []).map((project) => ({
+                  id: String(project.id),
+                  label: project.name,
+                  to: pathFor(project.id),
+                  selected: project.id === projectId
+                }))}
+              />
+              <MiniList
+                title="Zones"
+                items={(zonesQuery.data?.data ?? []).map((zone) => ({
+                  id: String(zone.id),
+                  label: zone.name,
+                  to: pathFor(projectId, zone.id),
+                  selected: zone.id === zoneId
+                }))}
+              />
+            </div>
+          </article>
           <div className="animate-[fadeIn_.28s_ease-out]">
             {!drillHoleId ? (
-              <div className="space-y-4">
+              <div className="grid gap-4 xl:grid-cols-9">
+                <div className="xl:col-span-3">
                 <Card
                   title="Drillholes Media Viewer"
                   description="Model/image preview for the current drillholes context."
                 >
                   <div className="overflow-hidden rounded-xl border border-[var(--color-border-soft)] bg-black">
-                    <img
+                    <DeferredMediaImage
                       src={drillholesMedia[mediaSlide]}
                       alt={`Drillholes media ${mediaSlide + 1}`}
-                      className="h-[320px] w-full object-contain"
+                      loaded={loadedMedia.has(drillholesMedia[mediaSlide])}
+                      onLoad={() => markMediaLoaded(drillholesMedia[mediaSlide])}
+                      className="h-[320px] w-full"
+                      imageClassName="h-[320px] w-full object-contain"
                     />
                   </div>
                   <div className="mt-3 flex items-center justify-between">
@@ -656,6 +790,8 @@ export function ExploracionesDataRoomPage() {
                     Add more images or gifs in <code>DRILLHOLES_MEDIA_SCHEME</code> (this file).
                   </p>
                 </Card>
+                </div>
+                <div className="space-y-4 xl:col-span-6">
                 <Card
                   title="Significant Intercepts"
                   description={`Significant intercepts registered for zone ${zoneDetail.data?.name ?? `#${zoneId}`}.`}
@@ -763,30 +899,22 @@ export function ExploracionesDataRoomPage() {
                   }
                 >
                   <SimpleTable
-                    headers={[
-                      "Hole",
-                      "Type",
-                      "East",
-                      "North",
-                      "Elevation",
-                      "Depth",
-                      "Azimuth",
-                      "Dip",
-                      "Campaign",
-                      "Year",
-                      "Action"
-                    ]}
+                    headers={["Hole", "Type", "Best Grade", "Depth", "Campaign", "Open"]}
                     rows={(drillHolesQuery.data?.data ?? []).map((d) => [
                       d.name,
                       d.type,
-                      String(d.east),
-                      String(d.north),
-                      d.elevation === null ? "-" : String(d.elevation),
+                      (() => {
+                        const top = formatTopIntercept(d.id);
+                        if (!top) return <span className="text-[var(--color-on-surface-variant)]">-</span>;
+                        return (
+                          <span className="inline-flex flex-col rounded-lg bg-lime-400 px-2 py-1 text-xs font-bold text-lime-950 ring-1 ring-lime-500/70">
+                            <span>{top.label}</span>
+                            <span className="font-medium opacity-80">{top.interval}</span>
+                          </span>
+                        );
+                      })(),
                       String(d.depth),
-                      d.azimuth === null ? "-" : String(d.azimuth),
-                      d.dip === null ? "-" : String(d.dip),
                       d.campaign ?? "-",
-                      d.year === null ? "-" : String(d.year),
                       <Link
                         key={d.id}
                         className="text-[var(--color-primary)]"
@@ -798,6 +926,7 @@ export function ExploracionesDataRoomPage() {
                     empty="No drillholes in this zone."
                   />
                 </Card>
+                </div>
               </div>
             ) : null}
 
@@ -1258,6 +1387,53 @@ function Card({
       </div>
       {children}
     </article>
+  );
+}
+
+function MiniList({
+  title,
+  items
+}: {
+  title: string;
+  items: Array<{ id: string; label: string; to: string; selected: boolean }>;
+}) {
+  return (
+    <div className="rounded-lg border border-[var(--color-border-soft)] bg-[var(--color-surface-container-high)] p-2">
+      <p className="mb-2 text-xs font-bold uppercase tracking-wide text-[var(--color-on-surface-variant)]">
+        {title}
+      </p>
+      <div className="grid max-h-56 grid-cols-2 gap-1 overflow-y-auto pr-1 xl:grid-cols-3">
+        {items.length ? (
+          items.map((item) => (
+            <Link
+              key={item.id}
+              to={item.to}
+              className={`block rounded px-2 py-1.5 text-sm ${item.selected ? "bg-[var(--color-primary)] text-[var(--color-on-primary)]" : "hover:bg-[var(--color-surface-container-highest)]"}`}
+            >
+              {item.label}
+            </Link>
+          ))
+        ) : (
+          <p className="px-2 py-1 text-xs text-[var(--color-on-surface-variant)]">No data</p>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function LoadingPanel({ label }: { label: string }) {
+  return (
+    <section className="rounded-xl border border-[var(--color-border-soft)] bg-[var(--color-surface-container-low)] p-4">
+      <div className="flex items-center gap-3">
+        <span className="h-5 w-5 animate-spin rounded-full border-2 border-[var(--color-border-soft)] border-t-[var(--color-primary)]" />
+        <span className="text-sm font-semibold text-[var(--color-on-surface)]">{label}</span>
+      </div>
+      <div className="mt-4 grid gap-3 md:grid-cols-3">
+        {[0, 1, 2].map((item) => (
+          <div key={item} className="h-16 animate-pulse rounded-lg bg-[var(--color-surface-container-high)]" />
+        ))}
+      </div>
+    </section>
   );
 }
 
