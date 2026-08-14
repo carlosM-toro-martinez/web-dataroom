@@ -1,6 +1,7 @@
 import { useEffect, useRef, type PropsWithChildren } from "react";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter } from "react-router-dom";
+import { HelmetProvider } from "react-helmet-async";
 import {
   queryClient,
   restoreQueryCacheFromStorage,
@@ -25,14 +26,16 @@ export function AppProviders({ children }: PropsWithChildren) {
   }, []);
 
   return (
-    <QueryClientProvider client={queryClient}>
-      <BrowserRouter>
-        <ThemeProvider>
-          <ToastProvider>
-            <AuthProvider>{children}</AuthProvider>
-          </ToastProvider>
-        </ThemeProvider>
-      </BrowserRouter>
-    </QueryClientProvider>
+    <HelmetProvider>
+      <QueryClientProvider client={queryClient}>
+        <BrowserRouter>
+          <ThemeProvider>
+            <ToastProvider>
+              <AuthProvider>{children}</AuthProvider>
+            </ToastProvider>
+          </ThemeProvider>
+        </BrowserRouter>
+      </QueryClientProvider>
+    </HelmetProvider>
   );
 }

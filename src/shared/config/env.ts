@@ -6,6 +6,11 @@ const envSchema = z.object({
     .url()
     .default("http://localhost:3000")
     .transform((value) => value.replace(/\/+$/, "")),
+  VITE_PUBLIC_SITE_URL: z
+    .string()
+    .url()
+    .default("https://minmartesrl.com")
+    .transform((value) => value.replace(/\/+$/, "")),
   VITE_BIOMETRIC_SYNC_USERS_URL: z
     .string()
     .url()

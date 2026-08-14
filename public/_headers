@@ -1,0 +1,44 @@
+/dashboard
+  X-Robots-Tag: noindex, nofollow, noarchive
+
+/dashboard/*
+  X-Robots-Tag: noindex, nofollow, noarchive
+
+/exploraciones
+  X-Robots-Tag: noindex, nofollow, noarchive
+
+/exploraciones/*
+  X-Robots-Tag: noindex, nofollow, noarchive
+
+/exploraciones-data-room
+  X-Robots-Tag: noindex, nofollow, noarchive
+
+/exploraciones-data-room/*
+  X-Robots-Tag: noindex, nofollow, noarchive
+
+/solicitudes-data-room
+  X-Robots-Tag: noindex, nofollow, noarchive
+
+/solicitudes-data-room/*
+  X-Robots-Tag: noindex, nofollow, noarchive
+
+/trabajadores
+  X-Robots-Tag: noindex, nofollow, noarchive
+
+/trabajadores/*
+  X-Robots-Tag: noindex, nofollow, noarchive
+
+/usuarios
+  X-Robots-Tag: noindex, nofollow, noarchive
+
+/usuarios/*
+  X-Robots-Tag: noindex, nofollow, noarchive
+
+/login
+  X-Robots-Tag: noindex, nofollow, noarchive
+
+/forgot-password
+  X-Robots-Tag: noindex, nofollow, noarchive
+
+/reset-password
+  X-Robots-Tag: noindex, nofollow, noarchive

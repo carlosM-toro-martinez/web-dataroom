@@ -23,10 +23,12 @@ import { ProtectedRoute } from "@/app/router/guards/ProtectedRoute";
 import { PublicOnlyRoute } from "@/app/router/guards/PublicOnlyRoute";
 import { AdminRoute } from "@/app/router/guards/AdminRoute";
 import { ExploracionesAdminRoute } from "@/app/router/guards/ExploracionesAdminRoute";
+import { SeoManager } from "@/shared/seo/SeoManager";
 
 export function DataRoomRouter() {
   return (
     <>
+      <SeoManager />
       <ScrollToRouteTarget />
       <Routes>
         <Route element={<PublicOnlyRoute />}>
