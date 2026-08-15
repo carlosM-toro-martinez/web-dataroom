@@ -1,8 +1,10 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { AlertTriangle, CheckCircle2, RefreshCw, Search } from "lucide-react";
+import { useState } from "react";
+import { AlertTriangle, CheckCircle2, RefreshCw, RotateCcw, Search } from "lucide-react";
 import {
   getDuplicateSampleCodes,
   repairSampleCodes,
+  revertSampleCodeRepair,
   type DuplicateSampleCodeReport,
   type SampleCodeCorrection
 } from "@/features/exploraciones/api/sampleCodesApi";
@@ -15,10 +17,14 @@ const primaryButton =
   "inline-flex items-center justify-center gap-2 rounded-lg bg-[var(--color-primary)] px-4 py-2.5 text-sm font-bold text-[var(--color-on-primary)] transition hover:brightness-95 disabled:cursor-not-allowed disabled:opacity-60";
 const secondaryButton =
   "inline-flex items-center justify-center gap-2 rounded-lg border border-[var(--color-outline-variant)] px-4 py-2.5 text-sm font-bold text-[var(--color-on-surface-variant)] transition hover:border-[var(--color-primary)] hover:text-[var(--color-on-surface)] disabled:cursor-not-allowed disabled:opacity-60";
+const dangerButton =
+  "inline-flex items-center justify-center gap-2 rounded-lg border border-red-500/40 px-4 py-2.5 text-sm font-bold text-red-600 transition hover:bg-red-500/10 disabled:cursor-not-allowed disabled:opacity-60";
+const lastRepairStorageKey = "minera-marte-last-sample-code-repair";
 
 export function ExploracionesAjustesPage() {
   const queryClient = useQueryClient();
   const { showSuccess, showError } = useToast();
+  const [lastRepairChanges, setLastRepairChanges] = useState<SampleCodeCorrection[]>(readLastRepairChanges);
   const duplicatesQuery = useQuery({
     queryKey: ["exploraciones", "sample-codes", "duplicates"],
     queryFn: getDuplicateSampleCodes
@@ -27,15 +33,32 @@ export function ExploracionesAjustesPage() {
     mutationFn: repairSampleCodes,
     onSuccess: async (result) => {
       showSuccess(`Reajuste completado. ${result.correctedCount} registros corregidos.`);
+      saveLastRepairChanges(result.corrected);
+      setLastRepairChanges(result.corrected);
       await queryClient.invalidateQueries({ queryKey: ["exploraciones"] });
+      await duplicatesQuery.refetch();
     },
     onError: (error) => {
       showError(error instanceof Error ? error.message : "No se pudo reajustar los talones.");
     }
   });
+  const revertMutation = useMutation({
+    mutationFn: () => revertSampleCodeRepair(lastRepairChanges),
+    onSuccess: async (result) => {
+      showSuccess(`Reversion completada. ${result.revertedCount} registros restaurados.`);
+      clearLastRepairChanges();
+      setLastRepairChanges([]);
+      repairMutation.reset();
+      await queryClient.invalidateQueries({ queryKey: ["exploraciones"] });
+      await duplicatesQuery.refetch();
+    },
+    onError: (error) => {
+      showError(error instanceof Error ? error.message : "No se pudo revertir el ultimo reajuste.");
+    }
+  });
 
   const report = duplicatesQuery.data;
-  const corrected = repairMutation.data?.corrected ?? [];
+  const corrected = repairMutation.data?.corrected ?? lastRepairChanges;
 
   return (
     <div className="mx-auto w-full max-w-7xl space-y-6 px-4 pb-8 sm:px-6 lg:px-8">
@@ -67,10 +90,19 @@ export function ExploracionesAjustesPage() {
               type="button"
               className={primaryButton}
               onClick={() => repairMutation.mutate()}
-              disabled={repairMutation.isPending}
+              disabled={repairMutation.isPending || revertMutation.isPending}
             >
               <RefreshCw size={16} className={repairMutation.isPending ? "animate-spin" : ""} />
               {repairMutation.isPending ? "Reajustando..." : "Reajustar codigos"}
+            </button>
+            <button
+              type="button"
+              className={dangerButton}
+              onClick={() => revertMutation.mutate()}
+              disabled={lastRepairChanges.length === 0 || repairMutation.isPending || revertMutation.isPending}
+            >
+              <RotateCcw size={16} className={revertMutation.isPending ? "animate-spin" : ""} />
+              {revertMutation.isPending ? "Revirtiendo..." : "Revertir ultimo reajuste"}
             </button>
           </div>
         </div>
@@ -168,4 +200,28 @@ function CorrectionsTable({ rows }: { rows: SampleCodeCorrection[] }) {
       </div>
     </section>
   );
+}
+
+function readLastRepairChanges() {
+  if (typeof window === "undefined") return [];
+  try {
+    const raw = window.localStorage.getItem(lastRepairStorageKey);
+    return raw ? (JSON.parse(raw) as SampleCodeCorrection[]) : [];
+  } catch {
+    return [];
+  }
+}
+
+function saveLastRepairChanges(changes: SampleCodeCorrection[]) {
+  if (typeof window === "undefined") return;
+  if (changes.length === 0) {
+    clearLastRepairChanges();
+    return;
+  }
+  window.localStorage.setItem(lastRepairStorageKey, JSON.stringify(changes));
+}
+
+function clearLastRepairChanges() {
+  if (typeof window === "undefined") return;
+  window.localStorage.removeItem(lastRepairStorageKey);
 }

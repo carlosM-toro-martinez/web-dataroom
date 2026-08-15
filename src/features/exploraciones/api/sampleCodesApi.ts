@@ -39,6 +39,12 @@ export type RepairSampleCodesResult = {
   correctedCount: number;
 };
 
+export type RevertSampleCodesResult = {
+  reverted: SampleCodeCorrection[];
+  revertedCount: number;
+  duplicatesAfter: DuplicateSampleCodeReport;
+};
+
 export async function getDuplicateSampleCodes() {
   const response = await httpClient.get<{ data: DuplicateSampleCodeReport }>(apiEndpoints.exploraciones.sampleCodeDuplicates);
   return response.data.data;
@@ -46,5 +52,13 @@ export async function getDuplicateSampleCodes() {
 
 export async function repairSampleCodes() {
   const response = await httpClient.post<{ data: RepairSampleCodesResult }>(apiEndpoints.exploraciones.sampleCodeRepair);
+  return response.data.data;
+}
+
+export async function revertSampleCodeRepair(changes: SampleCodeCorrection[]) {
+  const response = await httpClient.post<{ data: RevertSampleCodesResult }>(
+    apiEndpoints.exploraciones.sampleCodeRevert,
+    { changes }
+  );
   return response.data.data;
 }

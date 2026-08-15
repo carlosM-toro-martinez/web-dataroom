@@ -103,6 +103,7 @@ export const exploracionesEndpoints = {
   surfaceProposalDispatchById: (id: string) => `/api/surface-sample/dispatches/${id}`,
   sampleCodeDuplicates: "/api/sample-codes/duplicates",
   sampleCodeRepair: "/api/sample-codes/repair",
+  sampleCodeRevert: "/api/sample-codes/revert",
   miningExcelValidate: "/api/imports/mining-excel/validate",
   miningExcelExecute: "/api/imports/mining-excel/execute"
 } as const;
