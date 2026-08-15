@@ -125,15 +125,9 @@ const MAP_TILE_RADIUS_BY_ZOOM: Record<(typeof MAP_TILE_ZOOMS)[number], number> =
   17: 3
 };
 const MAP_READY_ZOOM = 16;
-const REGIONAL_MAP_CACHE_VERSION = "sud-lipez-v1";
+const REGIONAL_MAP_CACHE_VERSION = "sud-lipez-v3";
 const REGIONAL_MAP_CACHE_KEY = `marte-regional-map-${REGIONAL_MAP_CACHE_VERSION}`;
 const CERRO_LIPENA_CENTER = { latitude: -21.735132963511546, longitude: -66.45902922579812 };
-const POTOSI_OVERVIEW_BOUNDS = {
-  south: -23.2,
-  west: -68.2,
-  north: -18.8,
-  east: -64.4
-};
 const SUD_LIPEZ_BOUNDS = {
   south: -22.9,
   west: -67.9,
@@ -1118,6 +1112,7 @@ function ExploracionesRegisterPage({ sampleCategory }: { sampleCategory: SampleC
   const [showLabResults, setShowLabResults] = useState(false);
   const autoLocationRequestedRef = useRef(false);
   const autoMapCacheKeyRef = useRef<string | null>(null);
+  const autoRegionalMapCacheRequestedRef = useRef(false);
   const sampleFormRef = useRef<HTMLElement | null>(null);
   const syncInFlightRef = useRef(false);
   const lastSilentSyncAtRef = useRef(0);
@@ -1570,7 +1565,7 @@ function ExploracionesRegisterPage({ sampleCategory }: { sampleCategory: SampleC
     const elementById = new Map(elements.map((element) => [element.id, element]));
     const localRows = localVisibleSamples.map((item) => ({
       id: item.localId,
-      code: item.synced ? item.code : `${item.code} (offline)`,
+      code: item.synced && item.code ? item.code : "Pendiente de sincronizar",
       name: (item.payload as any).name ?? null,
       voucherNumber: (item.payload as any).voucherNumber ?? null,
       voucherCode: (item.payload as any).voucherCode ?? null,
@@ -2218,7 +2213,7 @@ function ExploracionesRegisterPage({ sampleCategory }: { sampleCategory: SampleC
     }
 
     setIsCachingRegionalMap(true);
-    setMapCacheStatus("Descargando mapa regional de Potosí / Sud Lípez...");
+    setMapCacheStatus("Descargando base offline de Sud Lípez / Cerro Lipeña...");
 
     try {
       const cache = await caches.open(MAP_TILE_CACHE_NAME);
@@ -2236,13 +2231,16 @@ function ExploracionesRegisterPage({ sampleCategory }: { sampleCategory: SampleC
         }
         saved += 1;
         if (saved % 50 === 0 || saved === tiles.length) {
-          setMapCacheStatus(`Guardando mapa regional ${saved}/${tiles.length}...`);
+          setMapCacheStatus(`Guardando base regional ${saved}/${tiles.length}...`);
+        }
+        if (saved % 24 === 0) {
+          await waitForMapCacheBreath();
         }
       }
 
       window.localStorage.setItem(REGIONAL_MAP_CACHE_KEY, new Date().toISOString());
-      setMapCacheStatus(`Mapa regional offline listo (${tiles.length} mosaicos).`);
-      if (!options.silent) showSuccess("Mapa regional de Sud Lípez guardado.");
+      setMapCacheStatus(`Base offline de Sud Lípez lista (${tiles.length} mosaicos).`);
+      if (!options.silent) showSuccess("Base offline de Sud Lípez guardada.");
     } catch (error) {
       setMapCacheStatus("No se pudo descargar el mapa regional offline.");
       if (!options.silent) {
@@ -2323,7 +2321,19 @@ function ExploracionesRegisterPage({ sampleCategory }: { sampleCategory: SampleC
   useEffect(() => {
     if (!("caches" in window) || !navigator.onLine) return;
     if (window.localStorage.getItem(REGIONAL_MAP_CACHE_KEY)) return;
-    void cacheRegionalExplorationMap({ silent: true });
+    if (autoRegionalMapCacheRequestedRef.current) return;
+    autoRegionalMapCacheRequestedRef.current = true;
+
+    const timeoutId = window.setTimeout(() => {
+      const run = () => void cacheRegionalExplorationMap({ silent: true });
+      if ("requestIdleCallback" in window) {
+        (window as any).requestIdleCallback(run, { timeout: 8_000 });
+        return;
+      }
+      run();
+    }, 4_500);
+
+    return () => window.clearTimeout(timeoutId);
   }, []);
 
   useEffect(() => {
@@ -3976,7 +3986,7 @@ function dispatchItemToSampleRow(
   const sampleCode = item.sample?.code;
   const row =
     (sampleId ? rows.find((candidate) => candidate.id === sampleId) : undefined) ??
-    (sampleCode ? rows.find((candidate) => candidate.code.replace(" (offline)", "") === sampleCode) : undefined);
+    (sampleCode ? rows.find((candidate) => candidate.code === sampleCode) : undefined);
 
   if (row) return row;
 
@@ -4399,11 +4409,14 @@ function buildOfflineMapTiles(latitude: number, longitude: number) {
 
 function buildRegionalOfflineMapTiles() {
   return uniqueTiles([
-    ...buildTilesForBounds(POTOSI_OVERVIEW_BOUNDS, [8, 9, 10]),
-    ...buildTilesForBounds(SUD_LIPEZ_BOUNDS, [11, 12, 13]),
-    ...buildTilesForBounds(CERRO_LIPENA_DETAIL_BOUNDS, [14, 15, 16]),
+    ...buildTilesForBounds(SUD_LIPEZ_BOUNDS, [9, 10, 11]),
+    ...buildTilesForBounds(CERRO_LIPENA_DETAIL_BOUNDS, [12, 13]),
     ...buildOfflineMapTiles(CERRO_LIPENA_CENTER.latitude, CERRO_LIPENA_CENTER.longitude)
   ]);
+}
+
+function waitForMapCacheBreath() {
+  return new Promise<void>((resolve) => window.setTimeout(resolve, 120));
 }
 
 function buildTilesForBounds(

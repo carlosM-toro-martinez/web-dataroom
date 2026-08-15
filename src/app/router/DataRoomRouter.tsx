@@ -19,6 +19,7 @@ import { ExploracionesHierarchyPage } from "@/pages/exploraciones/ExploracionesH
 import { ExploracionesDataRoomPage } from "@/pages/exploraciones/ExploracionesDataRoomPage";
 import { ExploracionesSurfaceDataRoomPage } from "@/pages/exploraciones/ExploracionesSurfaceDataRoomPage";
 import { ExploracionesFormsPage } from "@/pages/exploraciones/ExploracionesFormsPage";
+import { ExploracionesAjustesPage } from "@/pages/exploraciones/ExploracionesAjustesPage";
 import { ProtectedRoute } from "@/app/router/guards/ProtectedRoute";
 import { PublicOnlyRoute } from "@/app/router/guards/PublicOnlyRoute";
 import { AdminRoute } from "@/app/router/guards/AdminRoute";
@@ -68,6 +69,7 @@ export function DataRoomRouter() {
           </Route>
 
           <Route element={<AdminRoute />}>
+            <Route path="/exploraciones/ajustes" element={<ExploracionesAjustesPage />} />
             <Route path="/exploraciones-data-room/forms" element={<ExploracionesFormsPage />} />
             <Route path="/solicitudes-data-room" element={<DataRoomAccessRequestsPage />} />
             <Route path="/trabajadores" element={<RegisterUserPage />} />

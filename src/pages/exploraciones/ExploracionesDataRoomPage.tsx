@@ -121,10 +121,10 @@ const EXPLORACIONES_INTRO_VIDEO_URL =
   import.meta.env.VITE_EXPLORACIONES_INTRO_VIDEO_URL ?? introVideoDefault;
 const DRILLHOLES_MEDIA_SCHEME = {
   default: [
-    "1MODELO.gif",
-    "2MODELO_.gif",
     "GENERAL_1PLATA.jpg",
-    "GENERAL_2COBRE.jpg"
+    "GENERAL_2COBRE.jpg",
+    "1MODELO.gif",
+    "2MODELO_.gif"
   ],
   byProjectId: {} as Record<number, string[]>,
   byZoneId: {} as Record<number, string[]>
@@ -170,6 +170,7 @@ function DeferredMediaImage({
           draggable={draggable}
           onMouseDown={onMouseDown}
           onLoad={onLoad}
+          loading="lazy"
           decoding="async"
           className={`${imageClassName ?? className ?? ""} ${loaded ? "opacity-100" : "opacity-0"} transition-opacity duration-300`}
           style={style}

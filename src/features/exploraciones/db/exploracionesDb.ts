@@ -85,7 +85,7 @@ export interface OfflineProposalSample {
   localId: string;
   remoteId?: string;
   module: Exclude<ProposalModule, "shared">;
-  code: string;
+  code?: string;
   payload: InteriorSampleWithResultsPayload | SurfaceSampleWithResultsPayload;
   synced: boolean;
   syncError?: string;

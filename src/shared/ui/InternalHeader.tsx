@@ -1,5 +1,5 @@
 import { Link, useLocation, useNavigate } from "react-router-dom";
-import { ArrowLeft, ClipboardList, Database, LayoutDashboard, MapPinned, MoonStar, Sun, Users } from "lucide-react";
+import { ArrowLeft, ClipboardList, Database, LayoutDashboard, MapPinned, MoonStar, Settings, Sun, Users } from "lucide-react";
 import { useAuth } from "@/features/auth/context/AuthContext";
 import { useTheme } from "@/shared/theme/ThemeProvider";
 import { UserRouteMenu } from "@/shared/ui/UserRouteMenu";
@@ -20,6 +20,12 @@ const MAIN_ROUTES: MainRoute[] = [
     to: "/exploraciones",
     icon: MapPinned,
     roles: ["ADMIN", "SUPERINTENDENTE", "GEOLOGO"]
+  },
+  {
+    label: "Ajustes",
+    to: "/exploraciones/ajustes",
+    icon: Settings,
+    roles: ["ADMIN"]
   },
   {
     label: "Trabajadores",
@@ -121,7 +127,7 @@ export function InternalHeader({
           const Icon = route.icon;
           const active =
             location.pathname === route.to ||
-            (route.to !== "/dashboard" && location.pathname.startsWith(route.to));
+            (route.to !== "/dashboard" && route.to !== "/exploraciones" && location.pathname.startsWith(route.to));
           return (
             <Link
               key={route.to}

@@ -193,6 +193,7 @@ function DeferredMediaImage({
           draggable={draggable}
           onMouseDown={onMouseDown}
           onLoad={onLoad}
+          loading="lazy"
           decoding="async"
           className={`${imageClassName ?? className ?? ""} ${loaded ? "opacity-100" : "opacity-0"} transition-opacity duration-300`}
           style={style}

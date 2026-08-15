@@ -163,11 +163,9 @@ export function useQueueProposalSampleMutation() {
       payload: InteriorSampleWithResultsPayload | SurfaceSampleWithResultsPayload;
     }) => {
       const localId = buildProposalLocalId("sample");
-      const code = `Pendiente/${new Date().toLocaleTimeString("es-BO", { hour: "2-digit", minute: "2-digit" })}`;
       await saveProposalSample({
         localId,
         module: input.module,
-        code,
         payload: input.payload,
         synced: false
       });
