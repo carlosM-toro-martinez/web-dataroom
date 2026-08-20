@@ -103,7 +103,8 @@ const privatePrefixes = [
   "/usuarios",
   "/login",
   "/forgot-password",
-  "/reset-password"
+  "/reset-password",
+  "/404"
 ];
 
 export function SeoManager() {
@@ -162,7 +163,10 @@ export function SeoManager() {
       <title>{title}</title>
       <meta name="description" content={description} />
       <meta name="keywords" content={keywords} />
-      <meta name="robots" content={shouldIndex ? "index,follow" : "noindex,nofollow"} />
+      <meta
+        name="robots"
+        content={shouldIndex ? "index,follow" : "noindex,nofollow,noarchive,nosnippet,noimageindex"}
+      />
       <link rel="canonical" href={canonical} />
 
       <meta property="og:type" content="website" />

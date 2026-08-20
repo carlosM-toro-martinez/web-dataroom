@@ -48,8 +48,8 @@ export default function Footer() {
           <div>
             <h4 className="font-bold mb-4">Access</h4>
             <ul className="space-y-3">
-              <li><Link to="/login" className="text-white/70 hover:text-[#d4a574] transition-colors">Data Room Login</Link></li>
-              <li><Link to="/exploraciones-data-room" className="text-white/70 hover:text-[#d4a574] transition-colors">Exploration Portal</Link></li>
+              <li><Link to="/solicitar-acceso-data-room" className="text-white/70 hover:text-[#d4a574] transition-colors">Request Data Room Access</Link></li>
+              <li><Link to="/login" rel="nofollow" className="text-white/70 hover:text-[#d4a574] transition-colors">Data Room Login</Link></li>
               <li><Link to="/#contact" className="text-white/70 hover:text-[#d4a574] transition-colors">Corporate Contact</Link></li>
             </ul>
           </div>

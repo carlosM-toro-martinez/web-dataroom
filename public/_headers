@@ -1,44 +1,47 @@
 /dashboard
-  X-Robots-Tag: noindex, nofollow, noarchive
+  X-Robots-Tag: noindex, nofollow, noarchive, nosnippet, noimageindex
 
 /dashboard/*
-  X-Robots-Tag: noindex, nofollow, noarchive
+  X-Robots-Tag: noindex, nofollow, noarchive, nosnippet, noimageindex
 
 /exploraciones
-  X-Robots-Tag: noindex, nofollow, noarchive
+  X-Robots-Tag: noindex, nofollow, noarchive, nosnippet, noimageindex
 
 /exploraciones/*
-  X-Robots-Tag: noindex, nofollow, noarchive
+  X-Robots-Tag: noindex, nofollow, noarchive, nosnippet, noimageindex
 
 /exploraciones-data-room
-  X-Robots-Tag: noindex, nofollow, noarchive
+  X-Robots-Tag: noindex, nofollow, noarchive, nosnippet, noimageindex
 
 /exploraciones-data-room/*
-  X-Robots-Tag: noindex, nofollow, noarchive
+  X-Robots-Tag: noindex, nofollow, noarchive, nosnippet, noimageindex
 
 /solicitudes-data-room
-  X-Robots-Tag: noindex, nofollow, noarchive
+  X-Robots-Tag: noindex, nofollow, noarchive, nosnippet, noimageindex
 
 /solicitudes-data-room/*
-  X-Robots-Tag: noindex, nofollow, noarchive
+  X-Robots-Tag: noindex, nofollow, noarchive, nosnippet, noimageindex
 
 /trabajadores
-  X-Robots-Tag: noindex, nofollow, noarchive
+  X-Robots-Tag: noindex, nofollow, noarchive, nosnippet, noimageindex
 
 /trabajadores/*
-  X-Robots-Tag: noindex, nofollow, noarchive
+  X-Robots-Tag: noindex, nofollow, noarchive, nosnippet, noimageindex
 
 /usuarios
-  X-Robots-Tag: noindex, nofollow, noarchive
+  X-Robots-Tag: noindex, nofollow, noarchive, nosnippet, noimageindex
 
 /usuarios/*
-  X-Robots-Tag: noindex, nofollow, noarchive
+  X-Robots-Tag: noindex, nofollow, noarchive, nosnippet, noimageindex
 
 /login
-  X-Robots-Tag: noindex, nofollow, noarchive
+  X-Robots-Tag: noindex, nofollow, noarchive, nosnippet, noimageindex
 
 /forgot-password
-  X-Robots-Tag: noindex, nofollow, noarchive
+  X-Robots-Tag: noindex, nofollow, noarchive, nosnippet, noimageindex
 
 /reset-password
-  X-Robots-Tag: noindex, nofollow, noarchive
+  X-Robots-Tag: noindex, nofollow, noarchive, nosnippet, noimageindex
+
+/404
+  X-Robots-Tag: noindex, nofollow, noarchive, nosnippet, noimageindex

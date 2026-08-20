@@ -83,6 +83,7 @@ export default function Hero() {
           </Link>
           <Link
             to="/login"
+            rel="nofollow"
             className="px-8 py-4 bg-white/10 hover:bg-white/20 text-white border border-white/30 rounded-lg backdrop-blur-sm transition-all duration-300 font-medium"
           >
             Log In to Data Room

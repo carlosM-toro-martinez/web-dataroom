@@ -122,6 +122,7 @@ export default function Navbar() {
                 </Link>
                 <Link
                   to="/login"
+                  rel="nofollow"
                   className="px-6 py-2.5 bg-[#f0b35f] hover:bg-[#ffd08a] text-[#10252d] transition-all duration-300 font-bold shadow-lg"
                 >
                   Log In
@@ -186,6 +187,7 @@ export default function Navbar() {
                 </Link>
                 <Link
                   to="/login"
+                  rel="nofollow"
                   className="block w-full px-6 py-2.5 bg-[#f0b35f] hover:bg-[#ffd08a] text-[#10252d] transition-all duration-300 font-bold text-center"
                   onClick={() => setIsOpen(false)}
                 >

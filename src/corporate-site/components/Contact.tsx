@@ -44,13 +44,14 @@ export default function Contact() {
               <p className="text-[#64748b] mb-6">
                 Authorized users can sign in to access geological and operational information.
               </p>
-            <Link
-              to="/login"
+              <Link
+                to="/login"
+                rel="nofollow"
                 className="inline-flex px-8 py-4 bg-[#0a4d68] hover:bg-[#083d54] text-white transition-all duration-300 items-center justify-center gap-2 font-bold"
-            >
-              Log In
-              <Send className="w-5 h-5" />
-            </Link>
+              >
+                Log In
+                <Send className="w-5 h-5" />
+              </Link>
             </div>
           </div>
         </div>
