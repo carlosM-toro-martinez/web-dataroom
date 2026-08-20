@@ -1,0 +1,110 @@
+---
+import MainLayout from "../layouts/MainLayout.astro";
+import PublicShell from "../layouts/PublicShell.astro";
+import bocamina from "../assets/nueva-bocamina.jpeg";
+---
+
+<MainLayout
+  title="Request Mining Data Room Access | Minera Marte Bolivia"
+  description="Request controlled visitor access to Minera Marte's mining Data Room for technical review of exploration information in Bolivia."
+  canonicalPath="/solicitar-acceso-data-room"
+>
+  <PublicShell current="/solicitar-acceso-data-room">
+    <main class="form-shell">
+      <img src={bocamina.src} alt="Mining access related to Minera Marte Data Room request" />
+      <section class="container form-grid">
+        <div>
+          <p class="eyebrow">Controlled Access</p>
+          <h1>Data Room Access Request</h1>
+          <p class="hero-copy">
+            Submit your contact details so Minera Marte administration can review your request.
+            Approved visitors receive temporary credentials with single-device access.
+          </p>
+        </div>
+
+        <form class="access-form" id="data-room-request-form">
+          <div class="field-grid">
+            <div class="field full">
+              <label for="fullName">Full name</label>
+              <input id="fullName" name="fullName" required placeholder="Jane Doe" autocomplete="name" />
+            </div>
+            <div class="field">
+              <label for="email">Email</label>
+              <input id="email" name="email" type="email" required placeholder="jane.doe@company.com" autocomplete="email" />
+            </div>
+            <div class="field">
+              <label for="phone">Contact number</label>
+              <input id="phone" name="phone" required placeholder="+591 70000000" autocomplete="tel" />
+            </div>
+            <div class="field full">
+              <label for="company">Company</label>
+              <input id="company" name="company" placeholder="Company or institution" autocomplete="organization" />
+            </div>
+            <div class="field full">
+              <label for="reason">Reason for access</label>
+              <textarea id="reason" name="reason" required placeholder="Briefly describe why you need to review the Data Room."></textarea>
+            </div>
+          </div>
+          <button class="button" type="submit" id="data-room-request-submit">Send request</button>
+          <div class="notice" id="data-room-request-notice" role="status" aria-live="polite"></div>
+        </form>
+      </section>
+    </main>
+  </PublicShell>
+</MainLayout>
+
+<script>
+  const API_BASE_URL = "https://api-exploracion.marte.encuentrass.lat";
+  const form = document.querySelector("#data-room-request-form");
+  const submit = document.querySelector("#data-room-request-submit");
+  const notice = document.querySelector("#data-room-request-notice");
+
+  function showNotice(type, message) {
+    if (!notice) return;
+    notice.className = `notice ${type}`;
+    notice.textContent = message;
+  }
+
+  form?.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    if (!(form instanceof HTMLFormElement)) return;
+    const data = new FormData(form);
+    const payload = {
+      fullName: String(data.get("fullName") ?? "").trim(),
+      email: String(data.get("email") ?? "").trim().toLowerCase(),
+      phone: String(data.get("phone") ?? "").trim(),
+      company: String(data.get("company") ?? "").trim() || undefined,
+      reason: String(data.get("reason") ?? "").trim()
+    };
+
+    if (submit instanceof HTMLButtonElement) {
+      submit.disabled = true;
+      submit.textContent = "Sending request...";
+    }
+
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/auth/data-room/access-requests`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Accept: "application/json",
+          "X-Requested-With": "XMLHttpRequest"
+        },
+        body: JSON.stringify(payload)
+      });
+      const result = await response.json().catch(() => null);
+      if (!response.ok || result?.success === false) {
+        throw new Error(result?.error || result?.message || "The request could not be sent.");
+      }
+      form.reset();
+      showNotice("ok", "Request sent. Minera Marte will review your Data Room access request.");
+    } catch (error) {
+      showNotice("error", error instanceof Error ? error.message : "The request could not be sent.");
+    } finally {
+      if (submit instanceof HTMLButtonElement) {
+        submit.disabled = false;
+        submit.textContent = "Send request";
+      }
+    }
+  });
+</script>

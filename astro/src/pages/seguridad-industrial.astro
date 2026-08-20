@@ -1,0 +1,31 @@
+---
+import MainLayout from "../layouts/MainLayout.astro";
+import PublicShell from "../layouts/PublicShell.astro";
+import bocamina from "../assets/nueva-bocamina.jpeg";
+---
+
+<MainLayout
+  title="Mining Safety and Industrial Safety in Bolivia | Minera Marte"
+  description="Industrial safety, mining safety controls and operational standards for exploration and mining work in Potosi and Sud Lipez, Bolivia."
+  canonicalPath="/seguridad-industrial"
+>
+  <PublicShell current="/seguridad-industrial">
+    <main>
+      <section class="hero">
+        <img src={bocamina.src} alt="Mining safety and underground access at Minera Marte" />
+        <div class="container hero-content">
+          <p class="eyebrow">Mining Safety Bolivia</p>
+          <h1>Industrial Safety for Mining Operations</h1>
+          <p class="hero-copy">Prevention, training and operational controls support safer underground and surface work.</p>
+        </div>
+      </section>
+      <section class="section">
+        <div class="container grid three">
+          <article class="card"><h3>Operational Control</h3><p>Supervision of critical tasks and working conditions.</p></article>
+          <article class="card"><h3>Risk Management</h3><p>Hazard identification before and during field activities.</p></article>
+          <article class="card"><h3>Emergency Preparedness</h3><p>Internal practices for response readiness and prevention culture.</p></article>
+        </div>
+      </section>
+    </main>
+  </PublicShell>
+</MainLayout>

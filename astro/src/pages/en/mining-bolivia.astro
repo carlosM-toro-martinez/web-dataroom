@@ -1,0 +1,36 @@
+---
+import MainLayout from "../../layouts/MainLayout.astro";
+import PublicShell from "../../layouts/PublicShell.astro";
+import cobre from "../../assets/lipena-cobre.jpg";
+---
+
+<MainLayout
+  title="Mining in Bolivia, Potosi and Sud Lipez | Minera Marte"
+  description="Minera Marte S.R.L. is a private Bolivian mining company focused on gold, copper and silver exploration in Potosi and Sud Lipez, Bolivia."
+  canonicalPath="/en/mining-bolivia"
+>
+  <PublicShell>
+    <main>
+      <section class="hero">
+        <img src={cobre.src} alt="Copper mineralization in Bolivia exploration project" />
+        <div class="container hero-content">
+          <p class="eyebrow">Mining Investment Bolivia</p>
+          <h1>Gold, Copper and Silver Exploration in Southern Bolivia</h1>
+          <p class="hero-copy">
+            Technical mining information, responsible field work and controlled Data Room access for qualified review.
+          </p>
+          <div class="hero-actions">
+            <a class="button gold" href="/solicitar-acceso-data-room">Request Data Room Access</a>
+          </div>
+        </div>
+      </section>
+      <section class="section">
+        <div class="container grid three">
+          <article class="card"><h3>Potosi Mining</h3><p>A historic mining region with active exploration relevance.</p></article>
+          <article class="card"><h3>Sud Lipez</h3><p>Strategic southern Bolivian project area.</p></article>
+          <article class="card"><h3>Investment Review</h3><p>Structured technical access through controlled visitor credentials.</p></article>
+        </div>
+      </section>
+    </main>
+  </PublicShell>
+</MainLayout>

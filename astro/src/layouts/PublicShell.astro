@@ -1,0 +1,50 @@
+---
+type Props = {
+  current?: string;
+};
+
+const { current = "/" } = Astro.props;
+const nav = [
+  { href: "/#about", label: "Overview" },
+  { href: "/#operations", label: "Operations" },
+  { href: "/mineria-responsable", label: "Stewardship" },
+  { href: "/medio-ambiente", label: "Environment" },
+  { href: "/seguridad-industrial", label: "Safety" },
+  { href: "/#contact", label: "Contact" }
+];
+---
+
+<header class="site-header">
+  <div class="container nav">
+    <a class="brand" href="/" aria-label="Empresa Minera Marte S.R.L. home">
+      <span class="brand-mark">M</span>
+      <span>
+        <span class="brand-name">Minera Marte S.R.L.</span>
+        <span class="brand-subtitle">Bolivian Private Mining Company</span>
+      </span>
+    </a>
+    <nav class="nav-links" aria-label="Primary navigation">
+      {nav.map((item) => (
+        <a href={item.href} aria-current={current === item.href ? "page" : undefined}>{item.label}</a>
+      ))}
+      <a href="/solicitar-acceso-data-room">Data Room Access</a>
+      <a href="/login" rel="nofollow">Log In</a>
+    </nav>
+  </div>
+</header>
+
+<slot />
+
+<footer class="footer">
+  <div class="container grid two">
+    <div>
+      <strong class="brand-name">Empresa Minera Marte S.R.L.</strong>
+      <p>Private Bolivian mining company focused on responsible exploration and development in Sud Lipez, Potosi, Bolivia.</p>
+    </div>
+    <div>
+      <p><a href="/solicitar-acceso-data-room">Request Data Room Access</a></p>
+      <p><a href="/login" rel="nofollow">Data Room Login</a></p>
+      <p><a href="/#contact">Corporate Contact</a></p>
+    </div>
+  </div>
+</footer>

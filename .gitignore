@@ -1,5 +1,7 @@
 node_modules
 dist
+dist-public
+dist-react
 *.tsbuildinfo
 npm-debug.log*
 .DS_Store
@@ -16,6 +18,5 @@ INVENTARIO_WORKFLOW.md
 historico-inventario.md
 BIOMETRIC_MODULE.md
 PERSONAL_MODULE.md
-Dockerfile
 docker-compose*.yml
 API_DOCS.md

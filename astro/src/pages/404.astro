@@ -1,0 +1,22 @@
+---
+import MainLayout from "../layouts/MainLayout.astro";
+import PublicShell from "../layouts/PublicShell.astro";
+---
+
+<MainLayout
+  title="Page Not Found | Minera Marte S.R.L."
+  description="The requested Minera Marte page could not be found."
+  canonicalPath="/404"
+  noindex
+>
+  <PublicShell>
+    <main class="section">
+      <div class="container">
+        <p class="eyebrow">404</p>
+        <h1>Page Not Found</h1>
+        <p class="hero-copy" style="color: var(--muted)">The page you are looking for is not available.</p>
+        <p><a class="button" href="/">Return to website</a></p>
+      </div>
+    </main>
+  </PublicShell>
+</MainLayout>

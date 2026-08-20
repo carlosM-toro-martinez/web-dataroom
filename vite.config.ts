@@ -4,11 +4,15 @@ import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 
 function versionServiceWorkerPlugin() {
+  let resolvedOutDir = "dist";
   return {
     name: "version-service-worker",
     apply: "build" as const,
+    configResolved(config: { build: { outDir: string }; root: string }) {
+      resolvedOutDir = resolve(config.root, config.build.outDir);
+    },
     closeBundle() {
-      const serviceWorkerPath = resolve(__dirname, "dist", "sw.js");
+      const serviceWorkerPath = resolve(resolvedOutDir, "sw.js");
       if (!existsSync(serviceWorkerPath)) return;
 
       const source = readFileSync(serviceWorkerPath, "utf8");
@@ -22,7 +26,8 @@ function versionServiceWorkerPlugin() {
   };
 }
 
-export default defineConfig({
+export default defineConfig(({ command }) => ({
+  base: command === "build" ? "/app/" : "/",
   build: {
     chunkSizeWarningLimit: 2500
   },
@@ -40,4 +45,4 @@ export default defineConfig({
       "@": "/src"
     }
   }
-});
+}));

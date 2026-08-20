@@ -1,0 +1,86 @@
+---
+import "../styles/global.css";
+
+type Props = {
+  title: string;
+  description: string;
+  canonicalPath?: string;
+  keywords?: string;
+  lang?: "en" | "es";
+  noindex?: boolean;
+};
+
+const {
+  title,
+  description,
+  canonicalPath = Astro.url.pathname,
+  keywords = "Bolivian mining company, gold mining Bolivia, copper mining Bolivia, silver mining Bolivia, mining investment Bolivia, Potosi mining, Sud Lipez mining",
+  lang = "en",
+  noindex = false
+} = Astro.props;
+
+const siteUrl = "https://minmartesrl.com";
+const canonical = `${siteUrl}${canonicalPath === "/" ? "" : canonicalPath.replace(/\/$/, "")}`;
+const image = `${siteUrl}/icons/app-icon-512.png`;
+const organization = {
+  "@context": "https://schema.org",
+  "@type": "Organization",
+  name: "Empresa Minera Marte S.R.L.",
+  url: siteUrl,
+  logo: image,
+  description,
+  address: {
+    "@type": "PostalAddress",
+    addressCountry: "BO",
+    addressRegion: "Potosi",
+    addressLocality: "Sud Lipez"
+  },
+  knowsAbout: [
+    "Gold mining",
+    "Copper mining",
+    "Silver mining",
+    "Mining exploration",
+    "Mining investment in Bolivia",
+    "Responsible mining"
+  ]
+};
+---
+
+<!doctype html>
+<html lang={lang}>
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#0a4d68" />
+    <title>{title}</title>
+    <meta name="description" content={description} />
+    <meta name="keywords" content={keywords} />
+    <meta name="robots" content={noindex ? "noindex,nofollow,noarchive,nosnippet,noimageindex" : "index,follow"} />
+    <link rel="canonical" href={canonical} />
+    <link rel="alternate" hreflang="en" href={`${siteUrl}/`} />
+    <link rel="alternate" hreflang="es-BO" href={`${siteUrl}/es/mineria-bolivia`} />
+    <link rel="alternate" hreflang="x-default" href={`${siteUrl}/`} />
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="Empresa Minera Marte S.R.L." />
+    <meta property="og:title" content={title} />
+    <meta property="og:description" content={description} />
+    <meta property="og:url" content={canonical} />
+    <meta property="og:image" content={image} />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content={title} />
+    <meta name="twitter:description" content={description} />
+    <meta name="twitter:image" content={image} />
+    <link rel="icon" href="/icons/app-icon-192.png" />
+    <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Manrope:wght@600;700;800;900&family=Inter:wght@400;500;600;700;800&display=swap"
+      rel="stylesheet"
+    />
+    <script type="application/ld+json" set:html={JSON.stringify(organization)} />
+  </head>
+  <body>
+    <slot />
+  </body>
+</html>

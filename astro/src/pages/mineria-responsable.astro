@@ -1,0 +1,31 @@
+---
+import MainLayout from "../layouts/MainLayout.astro";
+import PublicShell from "../layouts/PublicShell.astro";
+import personal from "../assets/personal-minero-nivel0.jpg";
+---
+
+<MainLayout
+  title="Responsible Mining in Bolivia | Minera Marte S.R.L."
+  description="Responsible mining practices, safety, environmental stewardship and sustainable exploration by Minera Marte in Potosi and Sud Lipez, Bolivia."
+  canonicalPath="/mineria-responsable"
+>
+  <PublicShell current="/mineria-responsable">
+    <main>
+      <section class="hero">
+        <img src={personal.src} alt="Responsible mining team at Minera Marte in Bolivia" />
+        <div class="container hero-content">
+          <p class="eyebrow">Responsible Mining Bolivia</p>
+          <h1>Stewardship for Long-Term Mining Development</h1>
+          <p class="hero-copy">Safety, integrity, environmental care and regional commitment guide Minera Marte's exploration work.</p>
+        </div>
+      </section>
+      <section class="section">
+        <div class="container grid three">
+          <article class="card"><h3>Health & Safety</h3><p>Risk controls and training for underground and surface work.</p></article>
+          <article class="card"><h3>Environmental Management</h3><p>Practical field controls for water, soil, air and waste management.</p></article>
+          <article class="card"><h3>Community Respect</h3><p>Operational discipline aligned with the Lipez region and its communities.</p></article>
+        </div>
+      </section>
+    </main>
+  </PublicShell>
+</MainLayout>

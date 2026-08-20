@@ -1,8 +1,23 @@
 const APP_VERSION = "__BUILD_VERSION__";
 const CACHE_NAME = `minera-marte-pwa-${APP_VERSION}`;
 const TILE_CACHE_NAME = "minera-marte-map-tiles-v1";
-const APP_SHELL = ["/", "/manifest.webmanifest", "/icons/app-icon-192.png", "/icons/app-icon-512.png"];
+const APP_SHELL = ["/login", "/manifest.webmanifest", "/icons/app-icon-192.png", "/icons/app-icon-512.png"];
 const TILE_HOSTS = new Set(["a.tile.openstreetmap.org", "b.tile.openstreetmap.org", "c.tile.openstreetmap.org", "tile.openstreetmap.org"]);
+const PRIVATE_PREFIXES = [
+  "/dashboard",
+  "/exploraciones",
+  "/exploraciones-data-room",
+  "/solicitudes-data-room",
+  "/trabajadores",
+  "/usuarios",
+  "/login",
+  "/forgot-password",
+  "/reset-password"
+];
+
+function isPrivateAppPath(pathname) {
+  return PRIVATE_PREFIXES.some((prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`));
+}
 
 self.addEventListener("message", (event) => {
   if (event.data?.type === "SKIP_WAITING") {
@@ -76,14 +91,16 @@ self.addEventListener("fetch", (event) => {
   }
 
   if (request.mode === "navigate") {
+    if (!isPrivateAppPath(url.pathname)) return;
+
     event.respondWith(
       fetch(request)
         .then((response) => {
           const copy = response.clone();
-          caches.open(CACHE_NAME).then((cache) => cache.put("/", copy));
+          caches.open(CACHE_NAME).then((cache) => cache.put("/login", copy));
           return response;
         })
-        .catch(() => caches.match("/") || Response.error())
+        .catch(() => caches.match("/login") || Response.error())
     );
     return;
   }

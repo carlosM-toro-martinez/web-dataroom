@@ -1,0 +1,39 @@
+---
+import MainLayout from "../../layouts/MainLayout.astro";
+import PublicShell from "../../layouts/PublicShell.astro";
+import campamento from "../../assets/campamento-la-lipena.jpeg";
+---
+
+<MainLayout
+  title="Mineria en Bolivia, Potosi y Sud Lipez | Minera Marte S.R.L."
+  description="Empresa Minera Marte S.R.L. desarrolla exploracion minera de oro, cobre y plata en Potosi, Sud Lipez y Bolivia con enfoque tecnico y responsable."
+  canonicalPath="/es/mineria-bolivia"
+  lang="es"
+  keywords="mineria Bolivia, mineria Potosi, mineria Sud Lipez, oro Bolivia, cobre Bolivia, plata Bolivia, inversion minera Bolivia"
+>
+  <PublicShell>
+    <main>
+      <section class="hero">
+        <img src={campamento.src} alt="Campamento minero en Sud Lipez Potosi Bolivia" />
+        <div class="container hero-content">
+          <p class="eyebrow">Mineria en Bolivia</p>
+          <h1>Exploracion de Oro, Cobre y Plata en Potosi</h1>
+          <p class="hero-copy">
+            Minera Marte S.R.L. es una empresa minera boliviana privada enfocada en recursos metalicos
+            no ferrosos, inversion minera responsable y desarrollo tecnico en Sud Lipez.
+          </p>
+          <div class="hero-actions">
+            <a class="button gold" href="/solicitar-acceso-data-room">Solicitar acceso al Data Room</a>
+          </div>
+        </div>
+      </section>
+      <section class="section">
+        <div class="container grid three">
+          <article class="card"><h3>Potosi</h3><p>Region minera historica con potencial para exploracion moderna.</p></article>
+          <article class="card"><h3>Sud Lipez</h3><p>Area estrategica para revision tecnica de proyectos mineros.</p></article>
+          <article class="card"><h3>Oro, Cobre y Plata</h3><p>Metales de interes para programas de exploracion y evaluacion.</p></article>
+        </div>
+      </section>
+    </main>
+  </PublicShell>
+</MainLayout>

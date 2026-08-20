@@ -1,0 +1,31 @@
+---
+import MainLayout from "../layouts/MainLayout.astro";
+import PublicShell from "../layouts/PublicShell.astro";
+import campamento from "../assets/campamento-la-lipena.jpeg";
+---
+
+<MainLayout
+  title="Environmental Management for Mining in Bolivia | Minera Marte"
+  description="Environmental management, field controls and responsible exploration practices for mining projects in Potosi, Sud Lipez and Bolivia."
+  canonicalPath="/medio-ambiente"
+>
+  <PublicShell current="/medio-ambiente">
+    <main>
+      <section class="hero">
+        <img src={campamento.src} alt="Mining environmental setting in Sud Lipez Bolivia" />
+        <div class="container hero-content">
+          <p class="eyebrow">Environmental Management</p>
+          <h1>Environmental Controls for Responsible Exploration</h1>
+          <p class="hero-copy">Minera Marte applies environmental criteria to field work, water stewardship, soil protection and operating discipline.</p>
+        </div>
+      </section>
+      <section class="section">
+        <div class="container grid three">
+          <article class="card"><h3>Water Management</h3><p>Field awareness and operating controls around water use and protection.</p></article>
+          <article class="card"><h3>Soil Protection</h3><p>Care for work areas, access routes and operational footprints.</p></article>
+          <article class="card"><h3>Waste Control</h3><p>Orderly handling practices in support areas and exploration activities.</p></article>
+        </div>
+      </section>
+    </main>
+  </PublicShell>
+</MainLayout>
