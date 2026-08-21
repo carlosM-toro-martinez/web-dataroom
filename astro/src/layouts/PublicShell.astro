@@ -43,8 +43,8 @@ const nav = isSpanish
       {nav.map((item) => (
         <a href={item.href} aria-current={current === item.href ? "page" : undefined}>{item.label}</a>
       ))}
-      <a href={accessPath}>{isSpanish ? "Acceso Data Room" : "Data Room Access"}</a>
-      <a href="/login" rel="nofollow">{isSpanish ? "Ingresar" : "Log In"}</a>
+      <a class="nav-cta" href={accessPath}>{isSpanish ? "Acceso Data Room" : "Data Room Access"}</a>
+      <a class="nav-login" href="/login" rel="nofollow">{isSpanish ? "Ingresar" : "Log In"}</a>
       <span class="language-switch" aria-label="Language selector">
         <a href="/es" aria-current={isSpanish ? "page" : undefined}>ES</a>
         <a href="/en" aria-current={!isSpanish ? "page" : undefined}>EN</a>

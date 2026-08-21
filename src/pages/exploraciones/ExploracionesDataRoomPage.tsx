@@ -7,14 +7,12 @@ import "leaflet/dist/leaflet.css";
 import markerIcon2x from "leaflet/dist/images/marker-icon-2x.png";
 import markerIcon from "leaflet/dist/images/marker-icon.png";
 import markerShadow from "leaflet/dist/images/marker-shadow.png";
-import introVideoDefault from "@/assets/images/VIDEO DE PRESENTACION.mp4";
-import modelGifDefault from "@/assets/images/1MODELO.gif";
-import modelGifDef2ault from "@/assets/images/2MODELO_.gif";
 import drillMediaFallback01 from "@/assets/images/GENERAL_1PLATA.jpg";
 import drillMediaFallback02 from "@/assets/images/GENERAL_2COBRE.jpg";
 import { useAuth } from "@/features/auth/context/AuthContext";
 import { useToast } from "@/shared/ui/toast/ToastProvider";
 import { InternalHeader } from "@/shared/ui/InternalHeader";
+import { dataRoomMediaUrl } from "@/features/exploraciones/lib/dataRoomMedia";
 import {
   useAssayDetailQuery,
   useAssaysByIntervalQuery,
@@ -118,7 +116,7 @@ const mapMarkerIcon = L.icon({
 const DEFAULT_PROJECT_MAP_LAT = Number(import.meta.env.VITE_PROJECT_MAP_LAT ?? -21.734012998021456);
 const DEFAULT_PROJECT_MAP_LNG = Number(import.meta.env.VITE_PROJECT_MAP_LNG ?? -66.4585126387057);
 const EXPLORACIONES_INTRO_VIDEO_URL =
-  import.meta.env.VITE_EXPLORACIONES_INTRO_VIDEO_URL ?? introVideoDefault;
+  import.meta.env.VITE_EXPLORACIONES_INTRO_VIDEO_URL ?? dataRoomMediaUrl("intro-video");
 const DRILLHOLES_MEDIA_SCHEME = {
   default: [
     "GENERAL_1PLATA.jpg",
@@ -130,14 +128,15 @@ const DRILLHOLES_MEDIA_SCHEME = {
   byZoneId: {} as Record<number, string[]>
 } as const;
 const DRILLHOLES_MEDIA_BY_NAME: Record<string, string> = {
-  "1MODELO.gif": modelGifDefault,
-  "2MODELO_.gif": modelGifDef2ault,
+  "1MODELO.gif": dataRoomMediaUrl("model-1"),
+  "2MODELO_.gif": dataRoomMediaUrl("model-2"),
   "GENERAL_1PLATA.jpg": drillMediaFallback01,
   "GENERAL_2COBRE.jpg": drillMediaFallback02
 };
 
 function isGifMedia(src?: string) {
-  return Boolean(src?.toLowerCase().split("?")[0]?.endsWith(".gif"));
+  const cleanSrc = src?.toLowerCase().split("?")[0] ?? "";
+  return cleanSrc.endsWith(".gif") || cleanSrc.endsWith("/model-1") || cleanSrc.endsWith("/model-2");
 }
 
 function DeferredMediaImage({
@@ -283,7 +282,7 @@ export function ExploracionesDataRoomPage() {
       if (list.length) return list;
     }
     const fallback = resolve(DRILLHOLES_MEDIA_SCHEME.default);
-    return fallback.length ? fallback : [modelGifDefault];
+    return fallback.length ? fallback : [dataRoomMediaUrl("model-1")];
   }, [projectId, zoneId]);
   const topInterceptByDrillHole = useMemo(() => {
     const map = new Map<number, any>();

@@ -1,10 +1,11 @@
 import { Award, CheckCircle2, ChevronLeft, ChevronRight, Globe, Shield, Users } from "lucide-react";
 import { useEffect, useState } from "react";
 import newMina from "../../assets/images/imagesCorp/NUEVA BOCAMINA.jpeg";
-import presentationVideo from "@/assets/images/VIDEO DE PRESENTACION.mp4";
 import aboutPhotoA from "@/assets/images/photos-marte/about1.jpg";
 import aboutPhotoB from "@/assets/images/photos-marte/about2.jpg";
 import ClickableImage from "./ClickableImage";
+
+const presentationVideo = import.meta.env.VITE_PUBLIC_PRESENTATION_VIDEO_URL ?? "";
 
 const aboutImages = [
   {
@@ -173,10 +174,16 @@ export default function About() {
             </p>
           </div>
           <div className="overflow-hidden rounded-sm border border-white/12 bg-black">
-            <video className="h-full w-full" controls preload="none" playsInline>
-              <source src={presentationVideo} type="video/mp4" />
-              Your browser does not support the video tag.
-            </video>
+            {presentationVideo ? (
+              <video className="h-full w-full" controls preload="none" playsInline>
+                <source src={presentationVideo} type="video/mp4" />
+                Your browser does not support the video tag.
+              </video>
+            ) : (
+              <div className="flex min-h-64 items-center justify-center p-8 text-center text-sm text-white/70">
+                Presentation video available in the controlled Data Room.
+              </div>
+            )}
           </div>
         </div>
       </div>

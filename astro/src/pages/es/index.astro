@@ -47,19 +47,23 @@ const operations = [
   <PublicShell lang="es">
     <main>
       <section class="hero">
-        <img src={campamento.src} alt="Campamento minero de Minera Marte en Sud Lipez, Potosi, Bolivia" />
+        <div class="hero-media" aria-hidden="true">
+          <img class="hero-slide is-first" src={campamento.src} alt="" />
+          <img class="hero-slide is-second" src={bocamina.src} alt="" />
+          <img class="hero-slide is-third" src={cobre.src} alt="" />
+        </div>
         <div class="container hero-content">
-          <p class="eyebrow">Empresa minera privada boliviana - Sud Lipez, Potosi</p>
-          <h1>Exploracion de oro, cobre y plata en Bolivia</h1>
-          <p class="hero-copy">
+          <p class="eyebrow reveal-up">Empresa minera privada boliviana - Sud Lipez, Potosi</p>
+          <h1 class="reveal-up reveal-delay-1">Exploracion de oro, cobre y plata en Bolivia</h1>
+          <p class="hero-copy reveal-up reveal-delay-2">
             Empresa Minera Marte S.R.L. desarrolla exploracion minera responsable con enfoque tecnico
             en recursos metalicos no ferrosos en la region de Lipez, Potosi, Bolivia.
           </p>
-          <div class="hero-actions">
+          <div class="hero-actions reveal-up reveal-delay-3">
             <a class="button gold" href="/solicitar-acceso-data-room">Solicitar acceso al Data Room</a>
             <a class="button ghost" href="/login" rel="nofollow">Ingresar al Data Room</a>
           </div>
-          <div class="stats" aria-label="Datos principales de la empresa">
+          <div class="stats reveal-up reveal-delay-3" aria-label="Datos principales de la empresa">
             <div class="stat"><strong>Sud Lipez</strong><span>Region del proyecto</span></div>
             <div class="stat"><strong>Cu + Au + Ag</strong><span>Metales estrategicos</span></div>
             <div class="stat"><strong>Potosi</strong><span>Distrito minero boliviano</span></div>

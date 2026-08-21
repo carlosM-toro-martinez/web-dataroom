@@ -37,10 +37,9 @@ import imgMosaEsperanza3Oro from "@/assets/images/MOSA_NIVEL_ESPERANZA_3ORO.jpg"
 import imgMosaLuz0Estructuras from "@/assets/images/MOSA_NIVEL_LUZ_0ESTRUCTURAS.jpg";
 import imgMosaLuz1Plata from "@/assets/images/MOSA_NIVEL_LUZ_1PLATA.jpg";
 import imgMosaLuz2Cobre from "@/assets/images/MOSA_NIVEL_LUZ_2COBRE.jpg";
-import imgModelo1 from "@/assets/images/1MODELO.gif";
-import imgModelo2 from "@/assets/images/2MODELO_.gif";
 import { useAuth } from "@/features/auth/context/AuthContext";
 import { InternalHeader } from "@/shared/ui/InternalHeader";
+import { dataRoomMediaUrl } from "@/features/exploraciones/lib/dataRoomMedia";
 import {
   useCreateMiningAreaMutation,
   useCreateMiningLaborMutation,
@@ -160,7 +159,8 @@ function getSampleTopNumericValue(sample: any): number {
 }
 
 function isGifMedia(src?: string) {
-  return Boolean(src?.toLowerCase().split("?")[0]?.endsWith(".gif"));
+  const cleanSrc = src?.toLowerCase().split("?")[0] ?? "";
+  return cleanSrc.endsWith(".gif") || cleanSrc.endsWith("/model-1") || cleanSrc.endsWith("/model-2");
 }
 
 function DeferredMediaImage({
@@ -370,8 +370,8 @@ export function ExploracionesSurfaceDataRoomPage() {
       imgMosaLuz0Estructuras,
       imgMosaLuz1Plata,
       imgMosaLuz2Cobre,
-      imgModelo1,
-      imgModelo2
+      dataRoomMediaUrl("model-1"),
+      dataRoomMediaUrl("model-2")
     ];
 
     const imageByName: Record<string, string> = {
@@ -403,8 +403,8 @@ export function ExploracionesSurfaceDataRoomPage() {
       "MOSA_NIVEL_LUZ_0ESTRUCTURAS.jpg": imgMosaLuz0Estructuras,
       "MOSA_NIVEL_LUZ_1PLATA.jpg": imgMosaLuz1Plata,
       "MOSA_NIVEL_LUZ_2COBRE.jpg": imgMosaLuz2Cobre,
-      "1MODELO.gif": imgModelo1,
-      "2MODELO_.gif": imgModelo2
+      "1MODELO.gif": dataRoomMediaUrl("model-1"),
+      "2MODELO_.gif": dataRoomMediaUrl("model-2")
     };
 
     const resolve = (names: string[]) =>
