@@ -19,6 +19,11 @@ html {
   scroll-behavior: smooth;
 }
 
+html.has-lightbox,
+html.has-lightbox body {
+  overflow: hidden;
+}
+
 body {
   margin: 0;
   background: var(--paper);
@@ -105,6 +110,22 @@ img {
 .nav-links a:hover,
 .nav-links a[aria-current="page"] {
   color: #f2c879;
+}
+
+.language-switch {
+  display: inline-flex;
+  overflow: hidden;
+  border: 1px solid rgb(255 255 255 / 0.24);
+}
+
+.language-switch a {
+  padding: 7px 9px;
+  color: rgb(255 255 255 / 0.72);
+}
+
+.language-switch a[aria-current="page"] {
+  background: var(--gold-strong);
+  color: var(--ink);
 }
 
 .button {
@@ -578,6 +599,55 @@ h1 {
 
 .topic-gallery img:hover {
   transform: scale(1.035);
+}
+
+.hero img,
+.topic-hero img,
+.image-panel img,
+.operations-card img,
+.preview-image img,
+.topic-gallery img,
+.media-card img {
+  cursor: zoom-in;
+}
+
+.image-lightbox {
+  position: fixed;
+  inset: 0;
+  z-index: 200;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  padding: 28px;
+  background: rgb(5 13 18 / 0.92);
+}
+
+.image-lightbox.is-open {
+  display: flex;
+}
+
+.image-lightbox img {
+  width: auto;
+  max-width: min(1280px, 94vw);
+  max-height: 90vh;
+  object-fit: contain;
+  box-shadow: 0 24px 80px rgb(0 0 0 / 0.55);
+  cursor: zoom-out;
+}
+
+.image-lightbox-close {
+  position: fixed;
+  top: 18px;
+  right: 18px;
+  display: grid;
+  width: 44px;
+  height: 44px;
+  place-items: center;
+  border: 1px solid rgb(255 255 255 / 0.28);
+  background: rgb(255 255 255 / 0.12);
+  color: #fff;
+  font: 900 1.2rem/1 Inter, sans-serif;
+  cursor: pointer;
 }
 
 .program-grid {

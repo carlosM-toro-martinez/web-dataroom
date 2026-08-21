@@ -1,0 +1,202 @@
+---
+import MainLayout from "../../layouts/MainLayout.astro";
+import PublicShell from "../../layouts/PublicShell.astro";
+import campamento from "../../assets/campamento-la-lipena.jpeg";
+import bocamina from "../../assets/nueva-bocamina.jpeg";
+import cobre from "../../assets/lipena-cobre.jpg";
+import environment from "../../assets/environment-management.jpg";
+import safety from "../../assets/safety-training.jpg";
+
+const features = [
+  ["Empresa boliviana privada", "Exploracion y desarrollo de recursos metalicos no ferrosos en el sur de Bolivia."],
+  ["Excelencia tecnica", "Trabajo de campo, muestreo y operacion bajo criterios geologicos y control operacional."],
+  ["Mineria responsable", "Seguridad, medio ambiente y gestion transparente como base del crecimiento del proyecto."],
+  ["Compromiso regional", "Vision de largo plazo para empleo, desarrollo territorial y relacion responsable con el entorno."]
+];
+
+const operations = [
+  {
+    name: "Area Lipena",
+    location: "Sud Lipez, Potosi - Bolivia",
+    method: "Cielo abierto + interior mina",
+    mineralization: "Sistema de vetas tipo stockwork Ag-Pb-Bi-Cu",
+    host: "Dacita biotitica miocena alterada",
+    image: campamento.src
+  },
+  {
+    name: "Area La Mosa",
+    location: "Corredor vecino a Lipena",
+    method: "Mineria a cielo abierto",
+    mineralization: "Vetas con plata, plomo, bismuto y cobre",
+    host: "Continuidad geologica con Lipena",
+    image: cobre.src
+  }
+];
+---
+
+<MainLayout
+  title="Minera Marte S.R.L. | Mineria de oro, cobre y plata en Bolivia"
+  description="Empresa minera privada boliviana enfocada en exploracion de oro, cobre y plata, mineria responsable y desarrollo tecnico en Potosi y Sud Lipez, Bolivia."
+  canonicalPath="/es"
+  lang="es"
+  alternateEnPath="/en"
+  alternateEsPath="/es"
+  xDefaultPath="/"
+  keywords="mineria Bolivia, oro Bolivia, cobre Bolivia, plata Bolivia, inversion minera Bolivia, mineria Potosi, Sud Lipez mineria"
+>
+  <PublicShell lang="es">
+    <main>
+      <section class="hero">
+        <img src={campamento.src} alt="Campamento minero de Minera Marte en Sud Lipez, Potosi, Bolivia" />
+        <div class="container hero-content">
+          <p class="eyebrow">Empresa minera privada boliviana - Sud Lipez, Potosi</p>
+          <h1>Exploracion de oro, cobre y plata en Bolivia</h1>
+          <p class="hero-copy">
+            Empresa Minera Marte S.R.L. desarrolla exploracion minera responsable con enfoque tecnico
+            en recursos metalicos no ferrosos en la region de Lipez, Potosi, Bolivia.
+          </p>
+          <div class="hero-actions">
+            <a class="button gold" href="/solicitar-acceso-data-room">Solicitar acceso al Data Room</a>
+            <a class="button ghost" href="/login" rel="nofollow">Ingresar al Data Room</a>
+          </div>
+          <div class="stats" aria-label="Datos principales de la empresa">
+            <div class="stat"><strong>Sud Lipez</strong><span>Region del proyecto</span></div>
+            <div class="stat"><strong>Cu + Au + Ag</strong><span>Metales estrategicos</span></div>
+            <div class="stat"><strong>Potosi</strong><span>Distrito minero boliviano</span></div>
+            <div class="stat"><strong>Privada</strong><span>Capital boliviano</span></div>
+          </div>
+        </div>
+      </section>
+
+      <section class="signal-grid" aria-label="Senales operativas de Minera Marte">
+        <div class="signal" style="background:#153746"><p>Ubicacion</p><p>Sud Lipez</p></div>
+        <div class="signal" style="background:#b77b38"><p>Enfoque</p><p>Cu + Au</p></div>
+        <div class="signal" style="background:#5b6d72"><p>Modelo</p><p>Capital boliviano</p></div>
+        <div class="signal" style="background:#10252d"><p>Gestion</p><p>Seguridad + Ambiente</p></div>
+      </section>
+
+      <section class="section soft" id="about">
+        <div class="container">
+          <div class="sticky-grid">
+            <div class="sticky-copy">
+              <p class="eyebrow">Resumen corporativo</p>
+              <h2>Sobre <span style="color:var(--brand)">Minera Marte</span></h2>
+              <p>
+                Minera Marte S.R.L. es una empresa privada boliviana dedicada a la exploracion y
+                desarrollo de recursos metalicos no ferrosos, con enfasis en cobre y oro en el sur
+                minero de Bolivia.
+              </p>
+              <div class="check-grid">
+                <div class="check-item">Empresa privada boliviana</div>
+                <div class="check-item">Sud Lipez, Potosi</div>
+                <div class="check-item">Enfoque en cobre y oro</div>
+                <div class="check-item">Disciplina tecnica</div>
+              </div>
+            </div>
+            <div class="image-panel">
+              <img src={bocamina.src} alt="Operaciones mineras de campo de Minera Marte" />
+              <div class="image-caption">
+                <p class="eyebrow">Proyecto Lipena</p>
+                <h3>Planificacion tecnica, ejecucion de campo y desarrollo responsable de recursos.</h3>
+              </div>
+            </div>
+          </div>
+
+          <div class="feature-grid">
+            {features.map(([title, description]) => (
+              <article class="feature-card">
+                <h3>{title}</h3>
+                <p>{description}</p>
+              </article>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      <section class="section" id="operations">
+        <div class="container">
+          <div class="section-head">
+            <p class="eyebrow">Operaciones del Proyecto Lipena</p>
+            <h2>Areas <span style="color:var(--brand)">operativas</span></h2>
+            <p>
+              Minera Marte desarrolla areas principales dentro del Proyecto Lipena, con continuidad
+              tecnica y geologica que fortalece el potencial distrital.
+            </p>
+          </div>
+          <div class="grid two">
+            {operations.map((site) => (
+              <article class="operations-card">
+                <figure>
+                  <img src={site.image} alt={site.name} />
+                  <figcaption>
+                    <h3>{site.name}</h3>
+                    <p>{site.location}</p>
+                  </figcaption>
+                </figure>
+                <div>
+                  <div class="kv-row"><span>Metodo minero</span><span>{site.method}</span></div>
+                  <div class="kv-row"><span>Mineralizacion</span><span>{site.mineralization}</span></div>
+                  <div class="kv-row"><span>Roca hospedante</span><span>{site.host}</span></div>
+                </div>
+              </article>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      <section class="section soft" id="responsible-mining">
+        <div class="container preview-layout">
+          <div>
+            <p class="eyebrow">Mineria responsable</p>
+            <h2>Desarrollo minero con disciplina tecnica, humana y ambiental</h2>
+            <p>
+              Las practicas responsables de Minera Marte integran salud y seguridad ocupacional,
+              cuidado ambiental y estandares operativos disciplinados.
+            </p>
+            <a class="button" href="/mineria-responsable">Ver marco de sostenibilidad</a>
+          </div>
+          <div class="preview-visual">
+            <div class="preview-image">
+              <img src={safety.src} alt="Capacitacion de seguridad en Minera Marte" />
+            </div>
+            <div class="preview-stack">
+              <div class="preview-image">
+                <img src={environment.src} alt="Gestion ambiental en Minera Marte" />
+              </div>
+              <a class="motion-card" href="/seguridad-industrial"><h3>Seguridad y salud</h3><p>Prevencion, capacitacion y cultura de control.</p></a>
+              <a class="motion-card" href="/medio-ambiente"><h3>Gestion ambiental</h3><p>Controles de agua, suelo, aire y residuos.</p></a>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="section dark">
+        <div class="container grid two">
+          <div class="section-head">
+            <p class="eyebrow">Data Room</p>
+            <h2>Acceso controlado para revision tecnica.</h2>
+            <p>Inversionistas y visitantes autorizados pueden solicitar credenciales temporales bajo aprobacion administrativa.</p>
+          </div>
+          <div class="card">
+            <h3>Solicitar acceso</h3>
+            <p>Registra datos de contacto, empresa y motivo de revision. El acceso aprobado es temporal y limitado por dispositivo.</p>
+            <p><a class="button gold" href="/solicitar-acceso-data-room">Abrir formulario</a></p>
+          </div>
+        </div>
+      </section>
+
+      <section class="section" id="contact">
+        <div class="container grid two">
+          <div>
+            <p class="eyebrow">Contacto</p>
+            <h2>Contacto corporativo</h2>
+          </div>
+          <div class="card">
+            <p><strong>Email:</strong> contact@minmartesrl.com</p>
+            <p><strong>Region del proyecto:</strong> Sud Lipez, Potosi, Bolivia</p>
+          </div>
+        </div>
+      </section>
+    </main>
+  </PublicShell>
+</MainLayout>

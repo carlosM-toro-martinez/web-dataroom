@@ -8,6 +8,9 @@ type Props = {
   keywords?: string;
   lang?: "en" | "es";
   noindex?: boolean;
+  alternateEnPath?: string;
+  alternateEsPath?: string;
+  xDefaultPath?: string;
 };
 
 const {
@@ -16,11 +19,15 @@ const {
   canonicalPath = Astro.url.pathname,
   keywords = "Bolivian mining company, gold mining Bolivia, copper mining Bolivia, silver mining Bolivia, mining investment Bolivia, Potosi mining, Sud Lipez mining",
   lang = "en",
-  noindex = false
+  noindex = false,
+  alternateEnPath = "/en",
+  alternateEsPath = "/es",
+  xDefaultPath = "/"
 } = Astro.props;
 
 const siteUrl = "https://minmartesrl.com";
-const canonical = `${siteUrl}${canonicalPath === "/" ? "" : canonicalPath.replace(/\/$/, "")}`;
+const withSite = (path: string) => `${siteUrl}${path === "/" ? "" : path.replace(/\/$/, "")}`;
+const canonical = withSite(canonicalPath);
 const image = `${siteUrl}/icons/app-icon-512.png`;
 const organization = {
   "@context": "https://schema.org",
@@ -57,9 +64,9 @@ const organization = {
     <meta name="keywords" content={keywords} />
     <meta name="robots" content={noindex ? "noindex,nofollow,noarchive,nosnippet,noimageindex" : "index,follow"} />
     <link rel="canonical" href={canonical} />
-    <link rel="alternate" hreflang="en" href={`${siteUrl}/`} />
-    <link rel="alternate" hreflang="es-BO" href={`${siteUrl}/es/mineria-bolivia`} />
-    <link rel="alternate" hreflang="x-default" href={`${siteUrl}/`} />
+    <link rel="alternate" hreflang="en" href={withSite(alternateEnPath)} />
+    <link rel="alternate" hreflang="es-BO" href={withSite(alternateEsPath)} />
+    <link rel="alternate" hreflang="x-default" href={withSite(xDefaultPath)} />
     <meta property="og:type" content="website" />
     <meta property="og:site_name" content="Empresa Minera Marte S.R.L." />
     <meta property="og:title" content={title} />
@@ -82,5 +89,46 @@ const organization = {
   </head>
   <body>
     <slot />
+    <div class="image-lightbox" id="image-lightbox" aria-hidden="true" role="dialog" aria-label="Expanded image preview">
+      <button class="image-lightbox-close" type="button" aria-label="Close image preview">x</button>
+      <img id="image-lightbox-image" alt="" />
+    </div>
+    <script>
+      const lightbox = document.querySelector("#image-lightbox");
+      const lightboxImage = document.querySelector("#image-lightbox-image");
+      const closeButton = document.querySelector(".image-lightbox-close");
+      const selector = ".hero img, .topic-hero img, .image-panel img, .operations-card img, .preview-image img, .topic-gallery img, .media-card img";
+
+      function closeLightbox() {
+        lightbox?.classList.remove("is-open");
+        document.documentElement.classList.remove("has-lightbox");
+        lightbox?.setAttribute("aria-hidden", "true");
+        if (lightboxImage instanceof HTMLImageElement) {
+          lightboxImage.removeAttribute("src");
+          lightboxImage.alt = "";
+        }
+      }
+
+      document.addEventListener("click", (event) => {
+        const target = event.target;
+        if (!(target instanceof Element)) return;
+        const image = target.closest(selector);
+        if (!(image instanceof HTMLImageElement) || image.closest("a")) return;
+        if (!(lightboxImage instanceof HTMLImageElement)) return;
+        lightboxImage.src = image.currentSrc || image.src;
+        lightboxImage.alt = image.alt || "Expanded Minera Marte image";
+        lightbox?.classList.add("is-open");
+        document.documentElement.classList.add("has-lightbox");
+        lightbox?.setAttribute("aria-hidden", "false");
+      });
+
+      closeButton?.addEventListener("click", closeLightbox);
+      lightbox?.addEventListener("click", (event) => {
+        if (event.target === lightbox) closeLightbox();
+      });
+      document.addEventListener("keydown", (event) => {
+        if (event.key === "Escape") closeLightbox();
+      });
+    </script>
   </body>
 </html>

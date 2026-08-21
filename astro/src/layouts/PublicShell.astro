@@ -1,34 +1,54 @@
 ---
 type Props = {
   current?: string;
+  lang?: "en" | "es";
 };
 
-const { current = "/" } = Astro.props;
-const nav = [
-  { href: "/#about", label: "Overview" },
-  { href: "/#operations", label: "Operations" },
-  { href: "/mineria-responsable", label: "Stewardship" },
-  { href: "/medio-ambiente", label: "Environment" },
-  { href: "/seguridad-industrial", label: "Safety" },
-  { href: "/#contact", label: "Contact" }
-];
+const { current = "/", lang = "en" } = Astro.props;
+const isSpanish = lang === "es";
+const homePath = isSpanish ? "/es" : "/en";
+const stewardshipPath = "/mineria-responsable";
+const environmentPath = "/medio-ambiente";
+const safetyPath = "/seguridad-industrial";
+const accessPath = "/solicitar-acceso-data-room";
+const nav = isSpanish
+  ? [
+      { href: "/es#about", label: "Resumen" },
+      { href: "/es#operations", label: "Operaciones" },
+      { href: stewardshipPath, label: "Sostenibilidad" },
+      { href: environmentPath, label: "Medio ambiente" },
+      { href: safetyPath, label: "Seguridad" },
+      { href: "/es#contact", label: "Contacto" }
+    ]
+  : [
+      { href: "/en#about", label: "Overview" },
+      { href: "/en#operations", label: "Operations" },
+      { href: stewardshipPath, label: "Stewardship" },
+      { href: environmentPath, label: "Environment" },
+      { href: safetyPath, label: "Safety" },
+      { href: "/en#contact", label: "Contact" }
+    ];
 ---
 
 <header class="site-header">
   <div class="container nav">
-    <a class="brand" href="/" aria-label="Empresa Minera Marte S.R.L. home">
+    <a class="brand" href={homePath} aria-label="Empresa Minera Marte S.R.L. home">
       <span class="brand-mark">M</span>
       <span>
         <span class="brand-name">Minera Marte S.R.L.</span>
-        <span class="brand-subtitle">Bolivian Private Mining Company</span>
+        <span class="brand-subtitle">{isSpanish ? "Empresa minera privada boliviana" : "Bolivian Private Mining Company"}</span>
       </span>
     </a>
     <nav class="nav-links" aria-label="Primary navigation">
       {nav.map((item) => (
         <a href={item.href} aria-current={current === item.href ? "page" : undefined}>{item.label}</a>
       ))}
-      <a href="/solicitar-acceso-data-room">Data Room Access</a>
-      <a href="/login" rel="nofollow">Log In</a>
+      <a href={accessPath}>{isSpanish ? "Acceso Data Room" : "Data Room Access"}</a>
+      <a href="/login" rel="nofollow">{isSpanish ? "Ingresar" : "Log In"}</a>
+      <span class="language-switch" aria-label="Language selector">
+        <a href="/es" aria-current={isSpanish ? "page" : undefined}>ES</a>
+        <a href="/en" aria-current={!isSpanish ? "page" : undefined}>EN</a>
+      </span>
     </nav>
   </div>
 </header>
@@ -39,12 +59,16 @@ const nav = [
   <div class="container grid two">
     <div>
       <strong class="brand-name">Empresa Minera Marte S.R.L.</strong>
-      <p>Private Bolivian mining company focused on responsible exploration and development in Sud Lipez, Potosi, Bolivia.</p>
+      <p>
+        {isSpanish
+          ? "Empresa minera privada boliviana enfocada en exploracion y desarrollo responsable en Sud Lipez, Potosi, Bolivia."
+          : "Private Bolivian mining company focused on responsible exploration and development in Sud Lipez, Potosi, Bolivia."}
+      </p>
     </div>
     <div>
-      <p><a href="/solicitar-acceso-data-room">Request Data Room Access</a></p>
-      <p><a href="/login" rel="nofollow">Data Room Login</a></p>
-      <p><a href="/#contact">Corporate Contact</a></p>
+      <p><a href={accessPath}>{isSpanish ? "Solicitar acceso al Data Room" : "Request Data Room Access"}</a></p>
+      <p><a href="/login" rel="nofollow">{isSpanish ? "Ingreso al Data Room" : "Data Room Login"}</a></p>
+      <p><a href={isSpanish ? "/es#contact" : "/en#contact"}>{isSpanish ? "Contacto corporativo" : "Corporate Contact"}</a></p>
     </div>
   </div>
 </footer>
