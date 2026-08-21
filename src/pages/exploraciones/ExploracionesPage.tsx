@@ -2,9 +2,11 @@ import { FormEvent, useEffect, useMemo, useRef, useState, type InputHTMLAttribut
 import { createPortal } from "react-dom";
 import { Link } from "react-router-dom";
 import L from "leaflet";
+import * as XLSX from "xlsx";
 import {
   Beaker,
   ChevronDown,
+  Download,
   Eye,
   FlaskConical,
   Landmark,
@@ -755,6 +757,181 @@ function flattenAssignmentResults(assignments?: any[], fallbackResults?: any[]) 
 
 function hasResults(results: unknown[]) {
   return results.length > 0;
+}
+
+function exportCell(value: unknown) {
+  if (value === null || value === undefined) return "";
+  if (typeof value === "number") return Number.isFinite(value) ? value : "";
+  if (typeof value === "boolean") return value ? "Sí" : "No";
+  return String(value);
+}
+
+function getSamplePayload(row: SampleTableRow) {
+  const raw = row.raw as any;
+  return row.source === "local" ? raw.payload ?? {} : raw;
+}
+
+function resultElementLabel(result: any) {
+  return result.element?.symbol ?? result.element?.name ?? result.elementId ?? "";
+}
+
+function resultLaboratoryLabel(result: any) {
+  return result.labAssignmentLabel ?? result.laboratory?.name ?? result.surfaceLaboratoryId ?? result.interiorLaboratoryId ?? "";
+}
+
+function resultValueLabel(result: any) {
+  const value = result.value ?? "";
+  const unit = result.unit ? ` ${result.unit}` : "";
+  const qualifier = result.qualifier ? `${result.qualifier} ` : "";
+  return `${qualifier}${value}${unit}`.trim();
+}
+
+function getLabAssignmentsText(row: SampleTableRow) {
+  return (row.labAssignments ?? [])
+    .map((assignment: any, index: number) => {
+      const slot = assignment.slot ?? `LAB ${index + 1}`;
+      const laboratory =
+        assignment.laboratory?.name ??
+        assignment.laboratory?.abbreviation ??
+        assignment.interiorLaboratoryId ??
+        assignment.surfaceLaboratoryId ??
+        "";
+      return [slot, laboratory].filter(Boolean).join(" - ");
+    })
+    .filter(Boolean)
+    .join(" | ");
+}
+
+function getResultsText(row: SampleTableRow) {
+  if (!hasResults(row.results)) return "";
+  return row.results
+    .map((result: any) => {
+      const element = resultElementLabel(result);
+      const value = resultValueLabel(result);
+      const laboratory = resultLaboratoryLabel(result);
+      return [element, value, laboratory ? `(${laboratory})` : ""].filter(Boolean).join(" ");
+    })
+    .join(" | ");
+}
+
+function findDispatchForRow(row: SampleTableRow, dispatches: SampleDispatch[], registerType: RegisterType) {
+  const rowCode = row.code.replace(" (offline)", "");
+  for (const dispatch of dispatches) {
+    const item = (dispatch.items ?? []).find((dispatchItem) => {
+      const sampleId =
+        registerType === "interior"
+          ? dispatchItem.interiorSampleId ?? dispatchItem.sample?.id
+          : dispatchItem.surfaceSampleId ?? dispatchItem.sample?.id;
+      return sampleId === row.id || dispatchItem.sample?.code === rowCode;
+    });
+    if (item) return { dispatch, item };
+  }
+  return undefined;
+}
+
+function requestedElementsText(item?: NonNullable<SampleDispatch["items"]>[number]) {
+  return (item?.requestedElements ?? [])
+    .map((requested) => requested.element?.symbol ?? requested.element?.name ?? requested.elementId)
+    .filter(Boolean)
+    .join(", ");
+}
+
+function sampleExportRow(row: SampleTableRow, dispatches: SampleDispatch[], registerType: RegisterType) {
+  const payload = getSamplePayload(row);
+  const dispatchMatch = findDispatchForRow(row, dispatches, registerType);
+  return {
+    "Módulo": registerType === "interior" ? "Interior Mina" : "Superficie",
+    "Categoría": CATEGORY_LABELS[row.category],
+    "Nombre": exportCell(row.name),
+    "Código": exportCell(row.code),
+    "Código / Talón": formatVoucherLabel(row),
+    "Talón numérico": exportCell(row.voucherNumber),
+    "Talón texto": exportCell(row.voucherCode),
+    "Estado": row.source === "local" ? "Pendiente local" : SAMPLE_STATUS_LABELS[row.status],
+    "Prioridad": PRIORITY_LABELS[row.priority],
+    "Ubicación": row.location,
+    "Objetivo": row.objectiveName,
+    "Registrado por": row.createdByName,
+    "Fecha de muestreo": formatDate(row.sampledAt),
+    "Fecha ISO": exportCell(row.sampledAt),
+    "Este": exportCell(payload.east),
+    "Norte": exportCell(payload.north),
+    "Elevación": exportCell(payload.elevation),
+    "Laboratorios": getLabAssignmentsText(row),
+    "Resultados": hasResults(row.results) ? "Con resultados" : "Sin resultados",
+    "Cantidad resultados": row.results.length,
+    "Detalle resultados": getResultsText(row),
+    "Lote / Proyecto": exportCell(dispatchMatch?.dispatch.projectName),
+    "Laboratorio de lote": exportCell(dispatchMatch?.dispatch.laboratory?.name),
+    "Fecha envío lote": dispatchMatch?.dispatch.sentAt ? formatDate(dispatchMatch.dispatch.sentAt) : "",
+    "Estado lote": dispatchMatch?.dispatch.status ? DISPATCH_STATUS_LABELS[dispatchMatch.dispatch.status ?? "PENDING"] : "",
+    "Ensayos solicitados": requestedElementsText(dispatchMatch?.item),
+    "Sincronización": row.source === "local" ? "Pendiente" : "Sincronizado",
+    "Error sincronización": getRowSyncError(row) ?? ""
+  };
+}
+
+function resultExportRows(rows: SampleTableRow[]) {
+  return rows.flatMap((row) =>
+    row.results.map((result: any, index) => ({
+      "Código / Talón": formatVoucherLabel(row),
+      "Nombre muestra": exportCell(row.name),
+      "Categoría": CATEGORY_LABELS[row.category],
+      "Ubicación": row.location,
+      "Elemento": resultElementLabel(result),
+      "Valor": exportCell(result.value),
+      "Unidad": exportCell(result.unit),
+      "Calificador": exportCell(result.qualifier),
+      "Laboratorio": resultLaboratoryLabel(result),
+      "Comentarios": exportCell(result.comments),
+      "Orden resultado": index + 1
+    }))
+  );
+}
+
+function batchExportRows(rows: SampleTableRow[], dispatches: SampleDispatch[], registerType: RegisterType) {
+  return buildDispatchGroups(rows, dispatches, registerType).flatMap((group) =>
+    group.rows.map((row, index) => {
+      const dispatchMatch = findDispatchForRow(row, dispatches, registerType);
+      return {
+        "Lote / Proyecto": group.title,
+        "Laboratorio": group.laboratory,
+        "Fecha envío": group.sentAt ? formatDate(group.sentAt) : "",
+        "Estado lote": DISPATCH_STATUS_LABELS[group.status],
+        "Orden": index + 1,
+        "Código / Talón": formatVoucherLabel(row),
+        "Nombre": exportCell(row.name),
+        "Estado muestra": SAMPLE_STATUS_LABELS[row.status],
+        "Prioridad": PRIORITY_LABELS[row.priority],
+        "Ubicación": row.location,
+        "Objetivo": row.objectiveName,
+        "Resultados": hasResults(row.results) ? getResultsText(row) : "Sin resultados",
+        "Ensayos solicitados": requestedElementsText(dispatchMatch?.item)
+      };
+    })
+  );
+}
+
+function appendJsonSheet(workbook: XLSX.WorkBook, name: string, rows: Record<string, unknown>[]) {
+  const sheet = XLSX.utils.json_to_sheet(rows.length > 0 ? rows : [{ "Sin datos": "No hay registros para los filtros actuales" }]);
+  const headers = Object.keys(rows[0] ?? { "Sin datos": "" });
+  sheet["!cols"] = headers.map((header) => ({
+    wch: Math.min(Math.max(header.length + 4, 14), 42)
+  }));
+  XLSX.utils.book_append_sheet(workbook, sheet, name);
+}
+
+function exportSamplesToExcel(rows: SampleTableRow[], dispatches: SampleDispatch[], registerType: RegisterType, category: SampleCategory) {
+  const workbook = XLSX.utils.book_new();
+  const sampleRows = rows.map((row) => sampleExportRow(row, dispatches, registerType));
+  appendJsonSheet(workbook, "Muestras", sampleRows);
+  appendJsonSheet(workbook, "Resultados", resultExportRows(rows));
+  appendJsonSheet(workbook, "Lotes", batchExportRows(rows, dispatches, registerType));
+
+  const moduleLabel = registerType === "interior" ? "interior-mina" : "superficie";
+  const categoryLabel = category === "EXPLORATION" ? "exploracion" : "produccion";
+  const date = new Intl.DateTimeFormat("en-CA", { timeZone: "America/La_Paz" }).format(new Date());
+  XLSX.writeFile(workbook, `registros-recientes-${moduleLabel}-${categoryLabel}-${date}.xlsx`);
 }
 
 function stringifyDetail(value: unknown) {
@@ -3480,6 +3657,7 @@ function ExploracionesRegisterPage({ sampleCategory }: { sampleCategory: SampleC
         rows={sampleRows}
         dispatches={activeDispatches}
         registerType={registerType}
+        sampleCategory={sampleCategory}
         search={search}
         priorityFilter={priorityFilter}
         resultStatusFilter={resultStatusFilter}
@@ -4522,6 +4700,7 @@ function SamplesTable({
   rows,
   dispatches,
   registerType,
+  sampleCategory,
   search,
   priorityFilter,
   resultStatusFilter,
@@ -4542,6 +4721,7 @@ function SamplesTable({
   rows: SampleTableRow[];
   dispatches: SampleDispatch[];
   registerType: RegisterType;
+  sampleCategory: SampleCategory;
   search: string;
   priorityFilter: SamplePriority | "";
   resultStatusFilter: ResultStatusFilter;
@@ -4707,6 +4887,15 @@ function SamplesTable({
               onClick={() => onOnlyMineChange(!onlyMine)}
             >
               Mis registros
+            </button>
+            <button
+              type="button"
+              className={`${secondaryButton} px-3 py-2`}
+              onClick={() => exportSamplesToExcel(rows, dispatches, registerType, sampleCategory)}
+              disabled={rows.length === 0}
+            >
+              <Download size={14} />
+              Exportar Excel
             </button>
           </div>
         </div>
