@@ -3,7 +3,9 @@ import MainLayout from "../layouts/MainLayout.astro";
 import PublicShell from "../layouts/PublicShell.astro";
 import campamento from "../assets/campamento-la-lipena.jpeg";
 import bocamina from "../assets/nueva-bocamina.jpeg";
-import personal from "../assets/personal-minero-nivel0.jpg";
+import personal from "../assets/hero-personal-minero.jpg";
+import nevadoNocturno from "../assets/hero-nevado-nocturno.jpeg";
+import nuevaBocaminaHero from "../assets/hero-nueva-bocamina.jpeg";
 import cobre from "../assets/lipena-cobre.jpg";
 import about1 from "../assets/about1.jpg";
 import about2 from "../assets/about2.jpg";
@@ -57,8 +59,9 @@ const visionBlocks = [
       <section class="hero">
         <div class="hero-media" aria-hidden="true">
           <img class="hero-slide is-first" src={campamento.src} alt="" />
-          <img class="hero-slide is-second" src={bocamina.src} alt="" />
-          <img class="hero-slide is-third" src={cobre.src} alt="" />
+          <img class="hero-slide is-second" src={personal.src} alt="" />
+          <img class="hero-slide is-third" src={nevadoNocturno.src} alt="" />
+          <img class="hero-slide is-fourth" src={nuevaBocaminaHero.src} alt="" />
         </div>
         <div class="container hero-content">
           <p class="eyebrow reveal-up">Private Bolivian Mining Company - Sud Lipez, Potosi</p>

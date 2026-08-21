@@ -4,29 +4,50 @@ type Props = {
   lang?: "en" | "es";
 };
 
-const { current = "/", lang = "en" } = Astro.props;
+const { current = Astro.url.pathname, lang = "en" } = Astro.props;
 const isSpanish = lang === "es";
 const homePath = isSpanish ? "/es" : "/en";
 const stewardshipPath = "/mineria-responsable";
 const environmentPath = "/medio-ambiente";
 const safetyPath = "/seguridad-industrial";
 const accessPath = "/solicitar-acceso-data-room";
-const nav = isSpanish
+const currentPath = current.replace(/\/+$/, "") || "/";
+const isActive = (href: string) => {
+  const path = href.split("#")[0]?.replace(/\/+$/, "") || "/";
+  return currentPath === path;
+};
+const companyItems = isSpanish
   ? [
-      { href: "/es#about", label: "Resumen" },
-      { href: "/es#operations", label: "Operaciones" },
-      { href: stewardshipPath, label: "Sostenibilidad" },
-      { href: environmentPath, label: "Medio ambiente" },
-      { href: safetyPath, label: "Seguridad" },
-      { href: "/es#contact", label: "Contacto" }
+      { href: "/es#about", label: "Resumen", description: "Perfil corporativo y enfoque tecnico" },
+      { href: "/es#responsible-mining", label: "Sostenibilidad", description: "Gestion responsable del proyecto" },
+      { href: "/es#contact", label: "Contacto", description: "Canales corporativos" }
     ]
   : [
-      { href: "/en#about", label: "Overview" },
-      { href: "/en#operations", label: "Operations" },
-      { href: stewardshipPath, label: "Stewardship" },
-      { href: environmentPath, label: "Environment" },
-      { href: safetyPath, label: "Safety" },
-      { href: "/en#contact", label: "Contact" }
+      { href: "/en#about", label: "Overview", description: "Corporate profile and technical focus" },
+      { href: "/en#responsible-mining", label: "Stewardship", description: "Responsible project management" },
+      { href: "/en#contact", label: "Contact", description: "Corporate channels" }
+    ];
+const operationItems = isSpanish
+  ? [
+      { href: "/es#operations", label: "Areas operativas", description: "Lipena y La Mosa" },
+      { href: "/es/mineria-bolivia", label: "Mineria en Bolivia", description: "Contexto tecnico y territorial" },
+      { href: "/es/oro-cobre-plata-bolivia", label: "Oro, cobre y plata", description: "Metales estrategicos" }
+    ]
+  : [
+      { href: "/en#operations", label: "Operating areas", description: "Lipena and La Mosa" },
+      { href: "/en/mining-bolivia", label: "Mining in Bolivia", description: "Technical and regional context" },
+      { href: "/en/mining-investment-bolivia", label: "Mining investment", description: "Controlled technical review" }
+    ];
+const stewardshipItems = isSpanish
+  ? [
+      { href: stewardshipPath, label: "Mineria responsable", description: "Marco operativo integral" },
+      { href: environmentPath, label: "Medio ambiente", description: "Agua, suelo, aire y residuos" },
+      { href: safetyPath, label: "Seguridad industrial", description: "Prevencion y capacitacion" }
+    ]
+  : [
+      { href: stewardshipPath, label: "Responsible mining", description: "Integrated operating framework" },
+      { href: environmentPath, label: "Environment", description: "Water, soil, air and waste controls" },
+      { href: safetyPath, label: "Industrial safety", description: "Prevention and training" }
     ];
 ---
 
@@ -40,9 +61,39 @@ const nav = isSpanish
       </span>
     </a>
     <nav class="nav-links" aria-label="Primary navigation">
-      {nav.map((item) => (
-        <a href={item.href} aria-current={current === item.href ? "page" : undefined}>{item.label}</a>
-      ))}
+      <div class="nav-select">
+        <span class="nav-trigger" tabindex="0">{isSpanish ? "Empresa" : "Company"}</span>
+        <div class="nav-menu">
+          {companyItems.map((item) => (
+            <a href={item.href} aria-current={isActive(item.href) ? "page" : undefined}>
+              <span>{item.label}</span>
+              <small>{item.description}</small>
+            </a>
+          ))}
+        </div>
+      </div>
+      <div class="nav-select">
+        <span class="nav-trigger" tabindex="0">{isSpanish ? "Operaciones" : "Operations"}</span>
+        <div class="nav-menu">
+          {operationItems.map((item) => (
+            <a href={item.href} aria-current={isActive(item.href) ? "page" : undefined}>
+              <span>{item.label}</span>
+              <small>{item.description}</small>
+            </a>
+          ))}
+        </div>
+      </div>
+      <div class="nav-select">
+        <span class="nav-trigger" tabindex="0">{isSpanish ? "Gestion" : "Stewardship"}</span>
+        <div class="nav-menu">
+          {stewardshipItems.map((item) => (
+            <a href={item.href} aria-current={isActive(item.href) ? "page" : undefined}>
+              <span>{item.label}</span>
+              <small>{item.description}</small>
+            </a>
+          ))}
+        </div>
+      </div>
       <a class="nav-cta" href={accessPath}>{isSpanish ? "Acceso Data Room" : "Data Room Access"}</a>
       <a class="nav-login" href="/login" rel="nofollow">{isSpanish ? "Ingresar" : "Log In"}</a>
       <span class="language-switch" aria-label="Language selector">
