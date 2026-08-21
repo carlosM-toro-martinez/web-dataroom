@@ -1,0 +1,32 @@
+---
+import MainLayout from "../../layouts/MainLayout.astro";
+import PublicShell from "../../layouts/PublicShell.astro";
+import hero from "../../assets/campamento-la-lipena.jpeg";
+---
+
+<MainLayout
+  title="Inversion Minera en Bolivia y Potosi | Minera Marte S.R.L."
+  description="Informacion corporativa y tecnica para inversion minera en Bolivia, Potosi y Sud Lipez, con enfoque en oro, cobre, plata y desarrollo responsable."
+  canonicalPath="/es/inversion-minera-bolivia"
+  lang="es"
+  keywords="inversion minera Bolivia, inversion minera Potosi, proyectos mineros Bolivia, oro cobre plata Bolivia, Sud Lipez mineria"
+>
+  <PublicShell>
+    <main>
+      <section class="topic-hero">
+        <img src={hero.src} alt="Inversion minera en Sud Lipez Potosi Bolivia" />
+        <div class="container topic-content">
+          <p class="eyebrow">Inversion Minera Bolivia</p>
+          <h1>Proyecto Minero Privado en Potosi y Sud Lipez</h1>
+          <p class="hero-copy">Minera Marte S.R.L. ofrece una plataforma minera boliviana con informacion tecnica, enfoque responsable y acceso controlado a Data Room para revision calificada.</p>
+          <div class="hero-actions"><a class="button gold" href="/solicitar-acceso-data-room">Solicitar acceso tecnico</a></div>
+        </div>
+      </section>
+      <section class="section"><div class="container grid three">
+        <article class="card"><h3>Oro, Cobre y Plata</h3><p>Metales estrategicos para evaluacion minera en Bolivia.</p></article>
+        <article class="card"><h3>Potosi y Sud Lipez</h3><p>Region minera historica con potencial para exploracion moderna.</p></article>
+        <article class="card"><h3>Data Room</h3><p>Revision tecnica mediante credenciales temporales aprobadas por administracion.</p></article>
+      </div></section>
+    </main>
+  </PublicShell>
+</MainLayout>

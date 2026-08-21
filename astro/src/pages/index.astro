@@ -5,6 +5,43 @@ import campamento from "../assets/campamento-la-lipena.jpeg";
 import bocamina from "../assets/nueva-bocamina.jpeg";
 import personal from "../assets/personal-minero-nivel0.jpg";
 import cobre from "../assets/lipena-cobre.jpg";
+import about1 from "../assets/about1.jpg";
+import about2 from "../assets/about2.jpg";
+import environment from "../assets/environment-management.jpg";
+import safety from "../assets/safety-training.jpg";
+
+const features = [
+  ["Corporate Overview", "Empresa Minera Marte S.R.L. is a private Bolivian mining company focused on metallic resources."],
+  ["Technical Excellence", "Operations are executed under geological criteria, combining underground and surface methods where appropriate."],
+  ["Responsible Development", "Safe operations, environmental preservation and accountable resource management guide project execution."],
+  ["Regional Commitment", "A long-term approach to employment and territorial development in the Lipez region of southwestern Bolivia."]
+];
+
+const operations = [
+  {
+    name: "Lipeña Area",
+    location: "Sud Lipez, Potosi - Bolivia",
+    method: "Open Pit + Underground Mining",
+    mineralization: "Ag-Pb-Bi-Cu vein stockwork system",
+    host: "Hosted in altered Miocene biotitic dacite",
+    image: campamento.src
+  },
+  {
+    name: "La Mosa Area",
+    location: "Neighboring Lipeña, same project corridor",
+    method: "Open Pit Mining",
+    mineralization: "Silver, lead, bismuth and copper-bearing veins",
+    host: "Geological continuity with Lipeña",
+    image: cobre.src
+  }
+];
+
+const visionBlocks = [
+  ["Vision", "To be a world-class Bolivian mining company, promoting efficient and sustainable development of mineral resources while creating value for workers, management and nearby communities.", "World-Class Goal"],
+  ["Mission", "To position Mina La Lipeña for international recognition by operating with technical excellence and an uncompromising commitment to worker safety and environmental preservation.", "Technical Excellence"],
+  ["Territorial Contribution", "A long-term commitment to employment generation, regional development, and respect for local cultures across the Lipez region.", "Regional Impact"],
+  ["Strategic Focus", "Responsible development of copper and gold resources under transparent governance, operational discipline, and continuous improvement.", "Cu + Au Focus"]
+];
 ---
 
 <MainLayout
@@ -36,52 +73,185 @@ import cobre from "../assets/lipena-cobre.jpg";
         </div>
       </section>
 
-      <section class="section" id="about">
-        <div class="container">
-          <div class="section-head">
-            <p class="eyebrow">Corporate Overview</p>
-            <h2>Technical exploration with regional commitment.</h2>
-            <p>
-              Minera Marte combines geological work, operational discipline and responsible
-              stewardship to evaluate copper, gold and silver potential in southern Bolivia.
-            </p>
+      <section class="signal-grid" aria-label="Minera Marte operating signals">
+        <div class="signal" style="background:#153746"><p>Project Location</p><p>Sud Lipez</p></div>
+        <div class="signal" style="background:#b77b38"><p>Strategic Focus</p><p>Cu + Au</p></div>
+        <div class="signal" style="background:#5b6d72"><p>Operating Model</p><p>Private Bolivian Capital</p></div>
+        <div class="signal" style="background:#10252d"><p>Stewardship</p><p>Safety + Environment</p></div>
+      </section>
+
+      <section class="signal-strip">
+        <div class="container grid two">
+          <div>
+            <p class="eyebrow">Lipez, Potosi - Bolivia</p>
+            <h2>A focused Bolivian mining platform with a clearer public presence.</h2>
           </div>
           <div class="grid three">
-            <article class="card">
-              <h3>Mining Exploration</h3>
-              <p>Field programs, sampling controls and geological interpretation for mineralized systems.</p>
-            </article>
-            <article class="card">
-              <h3>Responsible Development</h3>
-              <p>Safety, environmental care and community respect as operating principles.</p>
-            </article>
-            <article class="card">
-              <h3>Investment Readiness</h3>
-              <p>Structured technical information available through controlled Data Room access.</p>
-            </article>
+            <p>Exploration and development of non-ferrous resources.</p>
+            <p>Preventive safety culture across field operations.</p>
+            <p>Technical discipline with long-term regional vision.</p>
           </div>
         </div>
       </section>
 
-      <section class="section soft" id="operations">
+      <section class="section soft" id="about">
+        <div class="container">
+          <div class="sticky-grid">
+            <div class="sticky-copy">
+              <p class="eyebrow">Company Overview</p>
+              <h2>About <span style="color:var(--brand)">Minera Marte</span></h2>
+              <p>
+                Minera Marte S.R.L. is a private Bolivian company dedicated to the exploration and
+                development of non-ferrous metallic resources, with emphasis on copper and gold in
+                the southern mining region of Bolivia.
+              </p>
+              <div class="check-grid">
+                <div class="check-item">Private Bolivian Company</div>
+                <div class="check-item">Sud Lipez, Potosi</div>
+                <div class="check-item">Copper and Gold Focus</div>
+                <div class="check-item">Technical Discipline</div>
+              </div>
+            </div>
+
+            <div class="image-panel">
+              <img src={bocamina.src} alt="Mining field operations at Minera Marte" />
+              <div class="image-caption">
+                <p class="eyebrow">Lipeña Project</p>
+                <h3>Technical planning, field execution and accountable resource development.</h3>
+              </div>
+            </div>
+          </div>
+
+          <div class="feature-grid">
+            {features.map(([title, description]) => (
+              <article class="feature-card">
+                <h3>{title}</h3>
+                <p>{description}</p>
+              </article>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      <section class="section" id="presentation-doc">
+        <div class="container">
+          <div class="doc-panel">
+            <div class="doc-grid">
+              <div class="doc-copy">
+                <p class="eyebrow">Corporate File</p>
+                <h2>Lipeña Project Presentation Deck</h2>
+                <p>Access the official presentation document with project highlights, technical context and strategic corporate information.</p>
+                <div class="hero-actions">
+                  <a class="button" href="/docs/Lipena_Presentation_PRELIMINAR.pdf" target="_blank">Open Document</a>
+                  <a class="button ghost" style="color:var(--brand);border-color:#b6c7d8;background:#fff" href="/docs/Lipena_Presentation_PRELIMINAR.pdf" download>Download</a>
+                </div>
+              </div>
+              <div class="doc-side">
+                <h3>Presentation Format</h3>
+                <p>Portable Document Format (.pdf)</p>
+                <div class="stat"><strong>PDF</strong><span>Format</span></div>
+                <div class="stat" style="margin-top:12px"><strong>IR</strong><span>Review</span></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="section" id="operations">
         <div class="container">
           <div class="section-head">
-            <p class="eyebrow">Operations</p>
-            <h2>Exploration areas in Potosi and Sud Lipez.</h2>
+            <p class="eyebrow">Lipeña Project Operations</p>
+            <h2>Operational <span style="color:var(--brand)">Areas</span></h2>
+            <p>
+              Minera Marte currently develops two principal areas inside the Lipeña Project, with
+              technical and geological continuity that strengthens district-scale potential.
+            </p>
           </div>
-          <div class="grid three">
-            <article class="media-card">
-              <img src={bocamina.src} alt="Mining access at Minera Marte Bolivia" />
-              <div><h3>Underground Access</h3><p>Operational work areas connected to geological review.</p></div>
-            </article>
-            <article class="media-card">
-              <img src={personal.src} alt="Minera Marte mining personnel in Bolivia" />
-              <div><h3>Technical Teams</h3><p>Local operating knowledge and field execution capacity.</p></div>
-            </article>
-            <article class="media-card">
-              <img src={cobre.src} alt="Copper mineralization from Lipez Bolivia" />
-              <div><h3>Mineral Focus</h3><p>Copper, gold and silver targets in a historic mining country.</p></div>
-            </article>
+
+          <div class="grid two">
+            {operations.map((site) => (
+              <article class="operations-card">
+                <figure>
+                  <img src={site.image} alt={site.name} />
+                  <figcaption>
+                    <h3>{site.name}</h3>
+                    <p>{site.location}</p>
+                  </figcaption>
+                </figure>
+                <div>
+                  <div class="kv-row"><span>Mining Method</span><span>{site.method}</span></div>
+                  <div class="kv-row"><span>Mineralization</span><span>{site.mineralization}</span></div>
+                  <div class="kv-row"><span>Geological Host</span><span>{site.host}</span></div>
+                </div>
+              </article>
+            ))}
+          </div>
+
+          <div class="approach">
+            <div class="grid two">
+              <div>
+                <h3>Technical Operating Approach</h3>
+                <p>Lipeña and La Mosa are separate but neighboring mines developed over the same stockwork vein system.</p>
+                <p>Underground galleries are used for mapping, drilling and sampling to reach higher-grade structures at depth.</p>
+              </div>
+              <div class="grid two">
+                <div class="stat"><strong>Lipeña</strong><span>Primary District</span></div>
+                <div class="stat"><strong>La Mosa</strong><span>Second Front</span></div>
+                <div class="stat"><strong>Cu-Au-Ag-Pb-Bi</strong><span>Metals</span></div>
+                <div class="stat"><strong>Bolivia</strong><span>Country</span></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="section dark">
+        <div class="container">
+          <div class="section-head">
+            <p class="eyebrow">Strategic Direction</p>
+            <h2>Vision & <span style="color:#f2c879">Mission</span></h2>
+            <p>Minera Marte aligns operational growth with safety, sustainability and long-term regional development.</p>
+          </div>
+          <div class="grid two">
+            {visionBlocks.map(([title, description, highlight]) => (
+              <article class="card">
+                <p class="eyebrow">{highlight}</p>
+                <h3>{title}</h3>
+                <p>{description}</p>
+              </article>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      <section class="section soft" id="responsible-mining">
+        <div class="container preview-layout">
+          <div>
+            <p class="eyebrow">Stewardship</p>
+            <h2>Mining Development With Technical, Human And Environmental Discipline</h2>
+            <p>
+              Responsible mining practices at Minera Marte combine occupational health and safety,
+              environmental care and disciplined operating standards.
+            </p>
+            <p>
+              The framework is built around practical field controls, preventive culture and a
+              commitment to long-term regional development.
+            </p>
+            <a class="button" href="/mineria-responsable">View Stewardship Framework</a>
+          </div>
+
+          <div class="preview-visual">
+            <div class="preview-image">
+              <img src={safety.src} alt="Safety training at Minera Marte" />
+            </div>
+            <div class="preview-stack">
+              <div class="preview-image">
+                <img src={environment.src} alt="Environmental management at Minera Marte" />
+              </div>
+              <a class="motion-card" href="/seguridad-industrial"><h3>Health & Safety</h3><p>Risk prevention, training and control culture.</p></a>
+              <a class="motion-card" href="/medio-ambiente"><h3>Environmental Management</h3><p>Water, soil, air and waste operating controls.</p></a>
+              <a class="motion-card" href="/mineria-responsable"><h3>Community & Development</h3><p>Long-term regional commitment in Sud Lipez.</p></a>
+            </div>
           </div>
         </div>
       </section>

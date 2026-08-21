@@ -1,0 +1,26 @@
+---
+import MainLayout from "../../layouts/MainLayout.astro";
+import PublicShell from "../../layouts/PublicShell.astro";
+import hero from "../../assets/lipena-cobre.jpg";
+---
+
+<MainLayout
+  title="Oro, Cobre y Plata en Bolivia | Minera Marte S.R.L."
+  description="Exploracion minera de oro, cobre y plata en Bolivia, Potosi y Sud Lipez por Empresa Minera Marte S.R.L."
+  canonicalPath="/es/oro-cobre-plata-bolivia"
+  lang="es"
+  keywords="oro Bolivia, cobre Bolivia, plata Bolivia, mineria Potosi, mineria Sud Lipez, empresa minera Bolivia"
+>
+  <PublicShell>
+    <main>
+      <section class="topic-hero">
+        <img src={hero.src} alt="Mineralizacion de cobre oro plata en Bolivia" />
+        <div class="container topic-content">
+          <p class="eyebrow">Oro Cobre Plata Bolivia</p>
+          <h1>Exploracion de Metales Estrategicos en Bolivia</h1>
+          <p class="hero-copy">Minera Marte S.R.L. trabaja en la evaluacion tecnica de recursos metalicos no ferrosos con enfoque en cobre, oro y plata.</p>
+        </div>
+      </section>
+    </main>
+  </PublicShell>
+</MainLayout>

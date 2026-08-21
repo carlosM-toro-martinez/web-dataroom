@@ -1,29 +1,72 @@
 ---
 import MainLayout from "../layouts/MainLayout.astro";
 import PublicShell from "../layouts/PublicShell.astro";
-import campamento from "../assets/campamento-la-lipena.jpeg";
+import hero from "../assets/environment-hero.jpg";
+import envA from "../assets/environment-a.jpg";
+import envB from "../assets/environment-management.jpg";
+import envC from "../assets/environment-c.jpg";
+
+const programs = [
+  ["Water Management", "Periodic water quality monitoring, consumption follow-up, drainage inspection and septic system management.", ["Periodic water quality monitoring.", "Control and follow-up of water consumption.", "Maintenance and inspection of drainage systems.", "Permanent evaluation of improvement opportunities."]],
+  ["Air Quality", "Dust mitigation and monitoring in operating and access areas.", ["Periodic road watering.", "Dust control in operating areas.", "Environmental monitoring.", "Follow-up and evaluation of mitigation measures."]],
+  ["Soil Protection", "Prevention controls for fuels, lubricants, access routes and operating areas.", ["Spill prevention and control.", "Controlled storage of fuels and lubricants.", "Periodic environmental inspections.", "Follow-up of operating areas."]],
+  ["Waste Management", "Classification, segregation and training practices for orderly environmental management.", ["Classification and segregation of waste.", "Differentiated management of industrial waste.", "Proper handling of used oils.", "Permanent personnel training."]]
+];
 ---
 
 <MainLayout
   title="Environmental Management for Mining in Bolivia | Minera Marte"
-  description="Environmental management, field controls and responsible exploration practices for mining projects in Potosi, Sud Lipez and Bolivia."
+  description="Environmental management, monitoring, water control, air quality, soil protection and responsible exploration practices by Minera Marte in Potosi, Sud Lipez and Bolivia."
   canonicalPath="/medio-ambiente"
+  keywords="environmental mining Bolivia, medio ambiente mineria Bolivia, mining environmental management, water management mining Bolivia, responsible exploration Bolivia"
 >
   <PublicShell current="/medio-ambiente">
     <main>
-      <section class="hero">
-        <img src={campamento.src} alt="Mining environmental setting in Sud Lipez Bolivia" />
-        <div class="container hero-content">
-          <p class="eyebrow">Environmental Management</p>
-          <h1>Environmental Controls for Responsible Exploration</h1>
-          <p class="hero-copy">Minera Marte applies environmental criteria to field work, water stewardship, soil protection and operating discipline.</p>
+      <section class="topic-hero">
+        <img src={hero.src} alt="Environmental management at Minera Marte in Bolivia" />
+        <div class="container topic-content">
+          <a class="back-link" href="/mineria-responsable">Back To Stewardship</a>
+          <p class="eyebrow" style="margin-top:34px">Environmental Management</p>
+          <h1>Environmental Management</h1>
+          <p class="hero-copy">Empresa Minera Marte operates with a commitment to prevent, control and minimize the environmental impacts associated with mining activities.</p>
         </div>
       </section>
+
+      <section class="impact-strip">
+        <div class="container">
+          <div class="impact-item"><span>Management Scope</span><strong>4 Programs</strong></div>
+          <div class="impact-item"><span>Operating Standard</span><strong>Monitoring + Controls</strong></div>
+          <div class="impact-item"><span>Improvement Culture</span><strong>Continuous Follow-Up</strong></div>
+        </div>
+      </section>
+
       <section class="section">
-        <div class="container grid three">
-          <article class="card"><h3>Water Management</h3><p>Field awareness and operating controls around water use and protection.</p></article>
-          <article class="card"><h3>Soil Protection</h3><p>Care for work areas, access routes and operational footprints.</p></article>
-          <article class="card"><h3>Waste Control</h3><p>Orderly handling practices in support areas and exploration activities.</p></article>
+        <div class="container grid two">
+          <div>
+            <h2>Prevention, Control And Continuous Improvement</h2>
+            <p>Our environmental management is based on permanent monitoring, regulatory compliance and continuous improvement, with special attention to water, air, soil and waste.</p>
+          </div>
+          <div class="topic-gallery">
+            {[envA, envB, envC].map((image) => <img src={image.src} alt="Environmental management program at Minera Marte" />)}
+          </div>
+        </div>
+      </section>
+
+      <section class="section soft">
+        <div class="container">
+          <div class="section-head" style="margin-inline:auto;text-align:center">
+            <h2>Action Lines</h2>
+            <p>Operational management supported by follow-up, training and continuous improvement.</p>
+          </div>
+          <div class="program-grid">
+            {programs.map(([title, description, items]) => (
+              <article class="program-card">
+                <h3>{title}</h3>
+                <p>{description}</p>
+                <ul>{items.map((item) => <li>{item}</li>)}</ul>
+              </article>
+            ))}
+          </div>
         </div>
       </section>
     </main>

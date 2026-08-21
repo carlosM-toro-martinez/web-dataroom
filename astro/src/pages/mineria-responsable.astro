@@ -1,29 +1,151 @@
 ---
 import MainLayout from "../layouts/MainLayout.astro";
 import PublicShell from "../layouts/PublicShell.astro";
-import personal from "../assets/personal-minero-nivel0.jpg";
+import hero from "../assets/environment-hero.jpg";
+import environmentA from "../assets/environment-a.jpg";
+import environmentB from "../assets/environment-management.jpg";
+import safetyA from "../assets/safety-gases.jpg";
+import safetyB from "../assets/safety-first-aid.jpg";
+import safetyC from "../assets/safety-ppe.jpg";
+
+const pillars = [
+  ["Health & Safety", "The safety and health of our workers, contractors and visitors are a permanent priority for Empresa Minera Marte.", "/seguridad-industrial"],
+  ["Environmental Management", "We operate with a commitment to prevent, control and minimize the environmental impacts associated with mining activities.", "/medio-ambiente"],
+  ["Community & Development", "We build transparent, respectful and lasting relationships with communities and local stakeholders linked to the Mina Lipena Project.", "/mineria-responsable"]
+];
+
+const environmentalPrograms = [
+  ["Water Management", ["Periodic water quality monitoring.", "Control and follow-up of water consumption.", "Maintenance and inspection of drainage systems.", "Management and control of septic systems."]],
+  ["Air Quality", ["Periodic road watering.", "Dust control in operating areas.", "Environmental monitoring.", "Follow-up and evaluation of mitigation measures."]],
+  ["Soil Protection", ["Spill prevention and control.", "Controlled storage of fuels and lubricants.", "Periodic environmental inspections.", "Follow-up of operating areas."]],
+  ["Waste Management", ["Classification and segregation of waste.", "Differentiated management of industrial waste.", "Proper handling of used oils.", "Permanent personnel training."]]
+];
+
+const safetyPractices = [
+  "Hazard identification and permanent risk evaluation.",
+  "Implementation of operational controls in the field.",
+  "Continuous training and preventive culture.",
+  "Active participation from workers, contractors and visitors."
+];
+
+const communityCommitments = [
+  "Promote open and transparent dialogue.",
+  "Generate local employment opportunities.",
+  "Encourage participation from local suppliers.",
+  "Maintain respectful and cooperative relationships.",
+  "Contribute to sustainable development in our area of influence."
+];
 ---
 
 <MainLayout
   title="Responsible Mining in Bolivia | Minera Marte S.R.L."
-  description="Responsible mining practices, safety, environmental stewardship and sustainable exploration by Minera Marte in Potosi and Sud Lipez, Bolivia."
+  description="Responsible mining practices, occupational safety, environmental management and sustainable exploration by Minera Marte in Potosi and Sud Lipez, Bolivia."
   canonicalPath="/mineria-responsable"
+  keywords="responsible mining Bolivia, mineria responsable Bolivia, sustainable mining Bolivia, environmental mining management Bolivia, mining safety Bolivia"
 >
   <PublicShell current="/mineria-responsable">
     <main>
-      <section class="hero">
-        <img src={personal.src} alt="Responsible mining team at Minera Marte in Bolivia" />
-        <div class="container hero-content">
-          <p class="eyebrow">Responsible Mining Bolivia</p>
-          <h1>Stewardship for Long-Term Mining Development</h1>
-          <p class="hero-copy">Safety, integrity, environmental care and regional commitment guide Minera Marte's exploration work.</p>
+      <section class="topic-hero">
+        <img src={hero.src} alt="Environmental stewardship at Minera Marte" />
+        <div class="container topic-content">
+          <a class="back-link reveal-up" href="/">Back To Home</a>
+          <div style="max-width:880px;margin-top:34px">
+            <p class="eyebrow reveal-up reveal-delay-1">Empresa Minera Marte S.R.L.</p>
+            <h1 class="reveal-up reveal-delay-2">Sustainability Stewardship</h1>
+            <p class="hero-copy reveal-up reveal-delay-3">
+              At Empresa Minera Marte S.R.L., sustainable development requires balancing economic
+              value creation with the protection of people, environmental care and strong
+              relationships with the communities around our project.
+            </p>
+          </div>
+          <div class="stats" style="max-width:760px">
+            <div class="stat"><strong>3</strong><span>Management pillars</span></div>
+            <div class="stat"><strong>24/7</strong><span>Preventive culture</span></div>
+            <div class="stat"><strong>4</strong><span>Environmental programs</span></div>
+          </div>
         </div>
       </section>
+
+      <section class="pillars-strip">
+        <div class="container">
+          {pillars.map(([title, , href], index) => (
+            <a class="pillar-link" href={href}>
+              <p class="eyebrow">Pillar 0{index + 1}</p>
+              <h3>{title}</h3>
+              <span>View Detail</span>
+            </a>
+          ))}
+        </div>
+      </section>
+
       <section class="section">
-        <div class="container grid three">
-          <article class="card"><h3>Health & Safety</h3><p>Risk controls and training for underground and surface work.</p></article>
-          <article class="card"><h3>Environmental Management</h3><p>Practical field controls for water, soil, air and waste management.</p></article>
-          <article class="card"><h3>Community Respect</h3><p>Operational discipline aligned with the Lipez region and its communities.</p></article>
+        <div class="container">
+          <div class="section-head" style="margin-inline:auto;text-align:center">
+            <h2>Three Pillars For Sustainable Operations</h2>
+            <p>
+              As we advance the Mina La Lipena Project, we continue strengthening our management
+              systems, implementing operational improvements and promoting accountability across every activity.
+            </p>
+          </div>
+          <div class="grid three">
+            {pillars.map(([title, summary, href]) => (
+              <a class="motion-card" href={href}>
+                <h3>{title}</h3>
+                <p>{summary}</p>
+                <strong style="color:var(--brand)">View Detail</strong>
+              </a>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      <section class="section soft">
+        <div class="container grid two">
+          <div>
+            <p class="eyebrow">Health & Safety</p>
+            <h2>Preventive Culture In Every Activity</h2>
+            <p>The safety and health of workers, contractors and visitors are a permanent priority.</p>
+            <div class="grid" style="margin-top:24px">
+              {safetyPractices.map((practice) => <div class="check-item">{practice}</div>)}
+            </div>
+          </div>
+          <div class="topic-gallery">
+            {[safetyA, safetyB, safetyC].map((image) => <img src={image.src} alt="Safety practice at Minera Marte" />)}
+          </div>
+        </div>
+      </section>
+
+      <section class="section">
+        <div class="container">
+          <div class="section-head">
+            <p class="eyebrow">Environmental Management</p>
+            <h2>Prevention, Control And Continuous Improvement</h2>
+            <p>Environmental management is based on permanent monitoring, regulatory compliance and operational actions focused on minimizing impacts.</p>
+          </div>
+          <div class="topic-gallery" style="margin-bottom:36px">
+            {[environmentA, environmentB, hero].map((image) => <img src={image.src} alt="Environmental management at Minera Marte" />)}
+          </div>
+          <div class="program-grid">
+            {environmentalPrograms.map(([title, items]) => (
+              <article class="program-card">
+                <h3>{title}</h3>
+                <ul>{items.map((item) => <li>{item}</li>)}</ul>
+              </article>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      <section class="section dark">
+        <div class="container grid two">
+          <div>
+            <p class="eyebrow">Community & Development</p>
+            <h2>Transparent And Lasting Relationships</h2>
+            <p>Responsible mining can contribute to regional socioeconomic growth through open dialogue, local opportunities and cooperative relationships.</p>
+          </div>
+          <div class="grid two">
+            {communityCommitments.map((commitment) => <div class="card"><p>{commitment}</p></div>)}
+          </div>
         </div>
       </section>
     </main>

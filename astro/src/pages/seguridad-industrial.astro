@@ -1,29 +1,72 @@
 ---
 import MainLayout from "../layouts/MainLayout.astro";
 import PublicShell from "../layouts/PublicShell.astro";
-import bocamina from "../assets/nueva-bocamina.jpeg";
+import hero from "../assets/safety-training.jpg";
+import safetyA from "../assets/safety-gases.jpg";
+import safetyB from "../assets/safety-first-aid.jpg";
+import safetyC from "../assets/safety-ppe.jpg";
+
+const programs = [
+  ["Operational Control", "Supervision of critical tasks and working conditions across operating areas.", ["Preventive field inspections.", "Verification of personal protective equipment.", "Gas control in underground mine areas.", "Follow-up of safe working conditions."]],
+  ["Risk Management", "Hazard identification and control application before and during each task.", ["Permanent risk evaluation.", "Implementation of operational controls.", "Reporting of unsafe conditions.", "Active personnel participation."]],
+  ["Emergency Preparedness", "Internal capabilities to respond to unwanted events.", ["Fire extinguisher handling training.", "First aid practices.", "Preventive signage.", "Organized incident response."]],
+  ["Preventive Culture", "Safe habits supported by communication, training and leadership.", ["Weekly training sessions.", "Preventive control testing.", "Induction for contractors and visitors.", "Care for individual and collective safety."]]
+];
 ---
 
 <MainLayout
   title="Mining Safety and Industrial Safety in Bolivia | Minera Marte"
-  description="Industrial safety, mining safety controls and operational standards for exploration and mining work in Potosi and Sud Lipez, Bolivia."
+  description="Industrial safety, mining safety controls, emergency preparedness and preventive culture for exploration and mining work in Potosi and Sud Lipez, Bolivia."
   canonicalPath="/seguridad-industrial"
+  keywords="mining safety Bolivia, seguridad minera Bolivia, industrial safety mining, safety controls underground mining, mine emergency preparedness Bolivia"
 >
   <PublicShell current="/seguridad-industrial">
     <main>
-      <section class="hero">
-        <img src={bocamina.src} alt="Mining safety and underground access at Minera Marte" />
-        <div class="container hero-content">
-          <p class="eyebrow">Mining Safety Bolivia</p>
-          <h1>Industrial Safety for Mining Operations</h1>
-          <p class="hero-copy">Prevention, training and operational controls support safer underground and surface work.</p>
+      <section class="topic-hero">
+        <img src={hero.src} alt="Industrial safety training at Minera Marte" />
+        <div class="container topic-content">
+          <a class="back-link" href="/mineria-responsable">Back To Stewardship</a>
+          <p class="eyebrow" style="margin-top:34px">Health and safety</p>
+          <h1>Industrial Safety</h1>
+          <p class="hero-copy">The safety and health of our workers, contractors and visitors are a permanent priority for Empresa Minera Marte.</p>
         </div>
       </section>
+
+      <section class="impact-strip">
+        <div class="container">
+          <div class="impact-item"><span>Management Scope</span><strong>4 Programs</strong></div>
+          <div class="impact-item"><span>Operating Standard</span><strong>Monitoring + Controls</strong></div>
+          <div class="impact-item"><span>Improvement Culture</span><strong>Continuous Follow-Up</strong></div>
+        </div>
+      </section>
+
       <section class="section">
-        <div class="container grid three">
-          <article class="card"><h3>Operational Control</h3><p>Supervision of critical tasks and working conditions.</p></article>
-          <article class="card"><h3>Risk Management</h3><p>Hazard identification before and during field activities.</p></article>
-          <article class="card"><h3>Emergency Preparedness</h3><p>Internal practices for response readiness and prevention culture.</p></article>
+        <div class="container grid two">
+          <div>
+            <h2>Preventive Culture In Every Activity</h2>
+            <p>We continuously identify hazards, evaluate risks and implement controls that allow activities to be carried out under safe and healthy conditions.</p>
+          </div>
+          <div class="topic-gallery">
+            {[safetyA, safetyB, safetyC].map((image) => <img src={image.src} alt="Mining safety practice at Minera Marte" />)}
+          </div>
+        </div>
+      </section>
+
+      <section class="section soft">
+        <div class="container">
+          <div class="section-head" style="margin-inline:auto;text-align:center">
+            <h2>Action Lines</h2>
+            <p>Operational management supported by follow-up, training and continuous improvement.</p>
+          </div>
+          <div class="program-grid">
+            {programs.map(([title, description, items]) => (
+              <article class="program-card">
+                <h3>{title}</h3>
+                <p>{description}</p>
+                <ul>{items.map((item) => <li>{item}</li>)}</ul>
+              </article>
+            ))}
+          </div>
         </div>
       </section>
     </main>
