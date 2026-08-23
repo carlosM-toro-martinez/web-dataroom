@@ -1309,10 +1309,9 @@ function ExploracionesRegisterPage({ sampleCategory }: { sampleCategory: SampleC
     status: sampleStatusFilter === "all" ? undefined : sampleStatusFilter,
     search: search.trim() && !/^\d+$/.test(search.trim()) ? search : undefined
   });
-  const registeredInteriorSamples = useInteriorSamplesQuery({
+  const dispatchableInteriorSamples = useInteriorSamplesQuery({
     interiorLaborId: sampleForm.interiorLaborId || undefined,
-    category: sampleCategory,
-    status: "REGISTERED"
+    category: sampleCategory
   });
   const remoteSurfaceAreas = useSurfaceAreasQuery(sampleCategory);
   const remoteSurfaceHierarchy = useSurfaceHierarchyQuery(sampleCategory);
@@ -1328,10 +1327,9 @@ function ExploracionesRegisterPage({ sampleCategory }: { sampleCategory: SampleC
     status: sampleStatusFilter === "all" ? undefined : sampleStatusFilter,
     search: search.trim() && !/^\d+$/.test(search.trim()) ? search : undefined
   });
-  const registeredSurfaceSamples = useSurfaceSamplesQuery({
+  const dispatchableSurfaceSamples = useSurfaceSamplesQuery({
     surfaceLaborId: sampleForm.surfaceLaborId || undefined,
-    category: sampleCategory,
-    status: "REGISTERED"
+    category: sampleCategory
   });
   const remoteInteriorDispatches = useInteriorDispatchesQuery({
     interiorLaboratoryId: registerType === "interior" ? dispatchForm.laboratoryId || undefined : undefined
@@ -3211,10 +3209,10 @@ function ExploracionesRegisterPage({ sampleCategory }: { sampleCategory: SampleC
     });
   const isEditing = Boolean(editTarget);
   const isEditingRemote = editTarget?.source === "remote";
-  const registeredSamplesForDispatch =
+  const samplesForDispatch =
     registerType === "interior"
-      ? registeredInteriorSamples.data ?? []
-      : registeredSurfaceSamples.data ?? [];
+      ? dispatchableInteriorSamples.data ?? []
+      : dispatchableSurfaceSamples.data ?? [];
   const activeDispatches =
     registerType === "interior"
       ? remoteInteriorDispatches.data ?? []
@@ -3633,7 +3631,7 @@ function ExploracionesRegisterPage({ sampleCategory }: { sampleCategory: SampleC
           registerType={registerType}
           form={dispatchForm}
           items={dispatchItems}
-          samples={registeredSamplesForDispatch}
+          samples={samplesForDispatch}
           elements={elements}
           laboratories={activeLaboratories}
           dispatches={activeDispatches}
@@ -5343,7 +5341,7 @@ function DispatchPanel({
               Lote / Nota de remisión
             </h2>
             <p className="mt-1 text-sm text-[var(--color-on-surface-variant)]">
-              Agrupa muestras registradas, elige laboratorio y solicita los elementos a analizar.
+              Agrupa muestras registradas o ya despachadas, elige laboratorio y solicita los elementos a analizar.
             </p>
           </div>
           <button type="button" className="rounded-lg p-2 text-[var(--color-on-surface-variant)] hover:bg-[var(--color-surface-container-high)]" onClick={onClose} aria-label="Cerrar">
@@ -5421,7 +5419,7 @@ function DispatchPanel({
                   })}
                   {samples.length === 0 ? (
                     <p className="text-sm text-[var(--color-on-surface-variant)]">
-                      No hay muestras registradas disponibles para despachar en este filtro.
+                      No hay muestras disponibles para despachar en este filtro.
                     </p>
                   ) : null}
                   {samples.length > 0 && visibleSamples.length === 0 ? (
