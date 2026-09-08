@@ -115,8 +115,6 @@ const mapMarkerIcon = L.icon({
 
 const DEFAULT_PROJECT_MAP_LAT = Number(import.meta.env.VITE_PROJECT_MAP_LAT ?? -21.734012998021456);
 const DEFAULT_PROJECT_MAP_LNG = Number(import.meta.env.VITE_PROJECT_MAP_LNG ?? -66.4585126387057);
-const EXPLORACIONES_INTRO_VIDEO_URL =
-  import.meta.env.VITE_EXPLORACIONES_INTRO_VIDEO_URL ?? dataRoomMediaUrl("intro-video");
 const DRILLHOLES_MEDIA_SCHEME = {
   default: [
     "GENERAL_1PLATA.jpg",
@@ -127,12 +125,6 @@ const DRILLHOLES_MEDIA_SCHEME = {
   byProjectId: {} as Record<number, string[]>,
   byZoneId: {} as Record<number, string[]>
 } as const;
-const DRILLHOLES_MEDIA_BY_NAME: Record<string, string> = {
-  "1MODELO.gif": dataRoomMediaUrl("model-1"),
-  "2MODELO_.gif": dataRoomMediaUrl("model-2"),
-  "GENERAL_1PLATA.jpg": drillMediaFallback01,
-  "GENERAL_2COBRE.jpg": drillMediaFallback02
-};
 
 function isGifMedia(src?: string) {
   const cleanSrc = src?.toLowerCase().split("?")[0] ?? "";
@@ -234,7 +226,7 @@ function DeferredMediaImage({
 }
 
 export function ExploracionesDataRoomPage() {
-  const { user } = useAuth();
+  const { user, token } = useAuth();
   const { showError, showSuccess } = useToast();
   const navigate = useNavigate();
   const location = useLocation();
@@ -303,9 +295,20 @@ export function ExploracionesDataRoomPage() {
   const availableProjects = projectsQuery.data?.data ?? [];
   const preferredDrillProject =
     availableProjects.find((project) => project.id === 1) ?? availableProjects[0];
+  const introVideoUrl =
+    import.meta.env.VITE_EXPLORACIONES_INTRO_VIDEO_URL ?? dataRoomMediaUrl("intro-video");
+  const drillholesMediaByName = useMemo<Record<string, string>>(
+    () => ({
+      "1MODELO.gif": dataRoomMediaUrl("model-1"),
+      "2MODELO_.gif": dataRoomMediaUrl("model-2"),
+      "GENERAL_1PLATA.jpg": drillMediaFallback01,
+      "GENERAL_2COBRE.jpg": drillMediaFallback02
+    }),
+    [token]
+  );
   const drillholesMedia = useMemo(() => {
     const resolve = (names: readonly string[]) =>
-      names.map((n) => DRILLHOLES_MEDIA_BY_NAME[n]).filter((src): src is string => Boolean(src));
+      names.map((n) => drillholesMediaByName[n]).filter((src): src is string => Boolean(src));
     if (zoneId && DRILLHOLES_MEDIA_SCHEME.byZoneId[zoneId]?.length) {
       const list = resolve(DRILLHOLES_MEDIA_SCHEME.byZoneId[zoneId]);
       if (list.length) return list;
@@ -316,7 +319,7 @@ export function ExploracionesDataRoomPage() {
     }
     const fallback = resolve(DRILLHOLES_MEDIA_SCHEME.default);
     return fallback.length ? fallback : [dataRoomMediaUrl("model-1")];
-  }, [projectId, zoneId]);
+  }, [drillholesMediaByName, projectId, token, zoneId]);
   const topInterceptByDrillHole = useMemo(() => {
     const map = new Map<number, any>();
     (significantInterceptsByZoneQuery.data?.data ?? []).forEach((intercept) => {
@@ -474,13 +477,13 @@ export function ExploracionesDataRoomPage() {
               className="mt-3 w-full overflow-hidden rounded-lg border border-[var(--color-border-soft)] bg-black"
             >
               <video
-                key={EXPLORACIONES_INTRO_VIDEO_URL}
+                key={introVideoUrl}
                 className="h-[160px] w-full object-cover opacity-90"
                 muted
                 playsInline
                 preload="none"
               >
-                <source src={EXPLORACIONES_INTRO_VIDEO_URL} type="video/mp4" />
+                <source src={introVideoUrl} type="video/mp4" />
               </video>
             </button>
           </article>
@@ -545,14 +548,14 @@ export function ExploracionesDataRoomPage() {
             Close
           </button>
           <video
-            key={`${EXPLORACIONES_INTRO_VIDEO_URL}-fullscreen`}
+            key={`${introVideoUrl}-fullscreen`}
             className="max-h-[90vh] w-auto max-w-[92vw] rounded-xl border border-white/20 bg-black"
             controls
             autoPlay
             playsInline
             preload="none"
           >
-            <source src={EXPLORACIONES_INTRO_VIDEO_URL} type="video/mp4" />
+            <source src={introVideoUrl} type="video/mp4" />
           </video>
         </div>
       ) : null}

@@ -258,7 +258,7 @@ function DeferredMediaImage({
 }
 
 export function ExploracionesSurfaceDataRoomPage() {
-  const { user } = useAuth();
+  const { user, token } = useAuth();
   const canManage = user?.role === "ADMIN" || user?.role === "GEOLOGOADMIN" || user?.role === "SUPERINTENDENTE";
   const canView = canManage || user?.role === "VISITANTE" || user?.role === "GEOLOGO";
   const { areaId, levelId, laborId, sampleId } = useParams();
@@ -456,7 +456,7 @@ export function ExploracionesSurfaceDataRoomPage() {
       if (selected.length) return selected;
     }
     return allImages;
-  }, [areaId, levelId, laborId]);
+  }, [areaId, laborId, levelId, token]);
   const markMediaLoaded = (src: string) => {
     setLoadedMedia((current) => {
       if (current.has(src)) return current;
