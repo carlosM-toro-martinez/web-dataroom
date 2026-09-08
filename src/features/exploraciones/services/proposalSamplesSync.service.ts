@@ -124,6 +124,8 @@ const localIdPrefixes = [
   "interior-objective-",
   "interior-laboratory-",
   "surface-area-",
+  "surface-level-",
+  "surface-labor-",
   "surface-objective-",
   "surface-laboratory-"
 ];

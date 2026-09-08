@@ -14,6 +14,9 @@ interface AutocompleteSelectProps {
   disabled?: boolean;
   className?: string;
   maxVisibleOptions?: number;
+  allowCustomValue?: boolean;
+  customValue?: string;
+  onCustomValueChange?: (nextValue: string) => void;
 }
 
 export function AutocompleteSelect({
@@ -23,7 +26,10 @@ export function AutocompleteSelect({
   placeholder = "Buscar...",
   disabled = false,
   className = "",
-  maxVisibleOptions = 20
+  maxVisibleOptions = 20,
+  allowCustomValue = false,
+  customValue = "",
+  onCustomValueChange
 }: AutocompleteSelectProps) {
   const selectedOption = useMemo(
     () => options.find((option) => option.id === value),
@@ -33,8 +39,8 @@ export function AutocompleteSelect({
   const [open, setOpen] = useState(false);
 
   useEffect(() => {
-    setQuery(selectedOption?.label ?? "");
-  }, [selectedOption?.label]);
+    setQuery(selectedOption?.label ?? (allowCustomValue ? customValue : ""));
+  }, [allowCustomValue, customValue, selectedOption?.label]);
 
   const filteredOptions = useMemo(() => {
     const normalized = query.trim().toLowerCase();
@@ -46,17 +52,55 @@ export function AutocompleteSelect({
       .slice(0, maxVisibleOptions);
   }, [maxVisibleOptions, options, query]);
 
+  function commitExactMatchOrClear() {
+    const normalized = query.trim().toLowerCase();
+    if (!normalized) {
+      onChange("");
+      setQuery("");
+      return;
+    }
+
+    const exactMatch = options.find((option) => {
+      const label = option.label.trim().toLowerCase();
+      const name = option.label.replace(/\s+\([^)]*\)\s*$/, "").trim().toLowerCase();
+      const abbreviation = option.label.match(/\(([^)]*)\)\s*$/)?.[1]?.trim().toLowerCase();
+      return label === normalized || name === normalized || abbreviation === normalized;
+    });
+
+    if (exactMatch) {
+      onChange(exactMatch.id);
+      onCustomValueChange?.("");
+      setQuery(exactMatch.label);
+      return;
+    }
+
+    if (allowCustomValue) {
+      onChange("");
+      onCustomValueChange?.(query.trim());
+      setQuery(query.trim());
+      return;
+    }
+
+    if (!selectedOption) {
+      onChange("");
+      setQuery("");
+    }
+  }
+
   return (
     <div className="relative">
       <input
         value={query}
         onChange={(event) => {
-          setQuery(event.target.value);
+          const nextValue = event.target.value;
+          setQuery(nextValue);
           onChange("");
+          if (allowCustomValue) onCustomValueChange?.(nextValue);
           setOpen(true);
         }}
         onFocus={() => setOpen(true)}
         onBlur={() => {
+          commitExactMatchOrClear();
           window.setTimeout(() => setOpen(false), 180);
         }}
         placeholder={placeholder}
@@ -79,6 +123,7 @@ export function AutocompleteSelect({
                 }}
                 onClick={() => {
                   onChange(option.id);
+                  onCustomValueChange?.("");
                   setQuery(option.label);
                   setOpen(false);
                 }}

@@ -175,10 +175,12 @@ interface SampleForm {
   interiorAreaId: string;
   interiorLevelId: string;
   interiorLaborId: string;
+  interiorLaborText: string;
   interiorObjectiveId: string;
   surfaceAreaId: string;
   surfaceLevelId: string;
   surfaceLaborId: string;
+  surfaceLaborText: string;
   surfaceObjectiveId: string;
   priority: SamplePriority | "";
   sampleNameSuffix: string;
@@ -395,10 +397,12 @@ function initialSampleForm(): SampleForm {
     interiorAreaId: "",
     interiorLevelId: "",
     interiorLaborId: "",
+    interiorLaborText: "",
     interiorObjectiveId: "",
     surfaceAreaId: "",
     surfaceLevelId: "",
     surfaceLaborId: "",
+    surfaceLaborText: "",
     surfaceObjectiveId: "",
     priority: "NORMAL",
     sampleNameSuffix: "",
@@ -1721,14 +1725,18 @@ function ExploracionesRegisterPage({ sampleCategory }: { sampleCategory: SampleC
   const interiorNamePrefix = [
     normalizeNameToken(selectedInteriorArea?.abbreviation ?? selectedInteriorArea?.name),
     normalizeNameToken(selectedInteriorLevelOption?.abbreviation ?? selectedInteriorLevelOption?.name),
-    normalizeNameToken(selectedInteriorLaborOption?.abbreviation ?? selectedInteriorLaborOption?.name)
+    normalizeNameToken(
+      selectedInteriorLaborOption?.abbreviation ?? selectedInteriorLaborOption?.name ?? sampleForm.interiorLaborText
+    )
   ]
     .filter(Boolean)
     .join("-");
   const surfaceNamePrefix = [
     normalizeNameToken(selectedSurfaceAreaOption?.abbreviation ?? selectedSurfaceAreaOption?.name),
     normalizeNameToken(selectedSurfaceLevelOption?.abbreviation ?? selectedSurfaceLevelOption?.name),
-    normalizeNameToken(selectedSurfaceLaborOption?.abbreviation ?? selectedSurfaceLaborOption?.name)
+    normalizeNameToken(
+      selectedSurfaceLaborOption?.abbreviation ?? selectedSurfaceLaborOption?.name ?? sampleForm.surfaceLaborText
+    )
   ]
     .filter(Boolean)
     .join("-");
@@ -2105,19 +2113,29 @@ function ExploracionesRegisterPage({ sampleCategory }: { sampleCategory: SampleC
   function setSampleField(field: keyof SampleForm, value: string) {
     setSampleForm((current) => {
       if (field === "interiorAreaId") {
-        return { ...current, interiorAreaId: value, interiorLevelId: "", interiorLaborId: "" };
+        return { ...current, interiorAreaId: value, interiorLevelId: "", interiorLaborId: "", interiorLaborText: "" };
       }
       if (field === "interiorLevelId") {
-        return { ...current, interiorLevelId: value, interiorLaborId: "" };
+        return { ...current, interiorLevelId: value, interiorLaborId: "", interiorLaborText: "" };
+      }
+      if (field === "interiorLaborId") {
+        return { ...current, interiorLaborId: value, interiorLaborText: value ? "" : current.interiorLaborText };
       }
       if (field === "surfaceAreaId") {
-        return { ...current, surfaceAreaId: value, surfaceLevelId: "", surfaceLaborId: "" };
+        return { ...current, surfaceAreaId: value, surfaceLevelId: "", surfaceLaborId: "", surfaceLaborText: "" };
       }
       if (field === "surfaceLevelId") {
-        return { ...current, surfaceLevelId: value, surfaceLaborId: "" };
+        return { ...current, surfaceLevelId: value, surfaceLaborId: "", surfaceLaborText: "" };
+      }
+      if (field === "surfaceLaborId") {
+        return { ...current, surfaceLaborId: value, surfaceLaborText: value ? "" : current.surfaceLaborText };
       }
       return { ...current, [field]: value };
     });
+  }
+
+  function setLaborText(field: "interiorLaborText" | "surfaceLaborText", value: string) {
+    setSampleForm((current) => ({ ...current, [field]: value }));
   }
 
   function getInteriorPrefixFromIds(areaId?: string, levelId?: string, laborId?: string) {
@@ -2623,13 +2641,23 @@ function ExploracionesRegisterPage({ sampleCategory }: { sampleCategory: SampleC
   }
 
   function validateInteriorLocationSelection() {
-    if (
-      !sampleForm.interiorAreaId ||
-      !sampleForm.interiorLevelId ||
-      !sampleForm.interiorLaborId ||
-      !sampleForm.interiorObjectiveId.trim()
-    ) {
-      showError("Completa area, nivel, labor y objetivo para Interior Mina.");
+    if (!sampleForm.interiorAreaId) {
+      showError("Selecciona o crea un area para Interior Mina.");
+      return false;
+    }
+
+    if (!sampleForm.interiorLevelId) {
+      showError("Selecciona o crea un nivel para Interior Mina.");
+      return false;
+    }
+
+    if (!sampleForm.interiorLaborId && !sampleForm.interiorLaborText.trim()) {
+      showError("Selecciona o crea una labor para Interior Mina.");
+      return false;
+    }
+
+    if (!sampleForm.interiorObjectiveId.trim()) {
+      showError("Escribe el objetivo para Interior Mina.");
       return false;
     }
 
@@ -2644,9 +2672,12 @@ function ExploracionesRegisterPage({ sampleCategory }: { sampleCategory: SampleC
       return false;
     }
 
-    if (!selectedInteriorLaborOption || !selectedInteriorLevelIds.has(selectedInteriorLaborOption.interiorLevelId ?? "")) {
+    if (
+      sampleForm.interiorLaborId &&
+      (!selectedInteriorLaborOption || !selectedInteriorLevelIds.has(selectedInteriorLaborOption.interiorLevelId ?? ""))
+    ) {
       showError("La labor no corresponde al nivel seleccionado. Vuelve a seleccionar labor.");
-      setSampleForm((current) => ({ ...current, interiorLaborId: "" }));
+      setSampleForm((current) => ({ ...current, interiorLaborId: "", interiorLaborText: "" }));
       return false;
     }
 
@@ -2654,8 +2685,23 @@ function ExploracionesRegisterPage({ sampleCategory }: { sampleCategory: SampleC
   }
 
   function validateSurfaceLocationSelection() {
-    if (!sampleForm.surfaceAreaId || !sampleForm.surfaceLevelId || !sampleForm.surfaceLaborId || !sampleForm.surfaceObjectiveId.trim()) {
-      showError("Completa area, nivel, labor y objetivo para Superficie.");
+    if (!sampleForm.surfaceAreaId) {
+      showError("Selecciona o crea un area para Superficie.");
+      return false;
+    }
+
+    if (!sampleForm.surfaceLevelId) {
+      showError("Selecciona o crea un nivel para Superficie.");
+      return false;
+    }
+
+    if (!sampleForm.surfaceLaborId && !sampleForm.surfaceLaborText.trim()) {
+      showError("Selecciona o crea una labor para Superficie.");
+      return false;
+    }
+
+    if (!sampleForm.surfaceObjectiveId.trim()) {
+      showError("Escribe el objetivo para Superficie.");
       return false;
     }
 
@@ -2670,9 +2716,12 @@ function ExploracionesRegisterPage({ sampleCategory }: { sampleCategory: SampleC
       return false;
     }
 
-    if (!selectedSurfaceLaborOption || !selectedSurfaceLevelIds.has(selectedSurfaceLaborOption.surfaceLevelId ?? "")) {
+    if (
+      sampleForm.surfaceLaborId &&
+      (!selectedSurfaceLaborOption || !selectedSurfaceLevelIds.has(selectedSurfaceLaborOption.surfaceLevelId ?? ""))
+    ) {
       showError("La labor no corresponde al nivel seleccionado. Vuelve a seleccionar labor.");
-      setSampleForm((current) => ({ ...current, surfaceLaborId: "" }));
+      setSampleForm((current) => ({ ...current, surfaceLaborId: "", surfaceLaborText: "" }));
       return false;
     }
 
@@ -2697,6 +2746,39 @@ function ExploracionesRegisterPage({ sampleCategory }: { sampleCategory: SampleC
         module,
         entity: "objective",
         name
+      }
+    });
+    return localId;
+  }
+
+  async function resolveLaborId(module: RegisterType, laborId: string, laborText: string, parentLevelId: string) {
+    if (laborId) return laborId;
+
+    const name = laborText.trim().toUpperCase();
+    if (!name) throw new Error("La labor es obligatoria.");
+
+    const labors = module === "interior" ? interiorLabors : surfaceLabors;
+    const existing = findCatalogByText(labors, name);
+    if (existing) return existing.id;
+
+    const abbreviation = normalizeNameToken(name) || name;
+    const localId = `${module}-labor-${newId()}`;
+    await queueCatalog.mutateAsync({
+      module,
+      entity: "labor",
+      payload:
+        module === "interior"
+          ? { interiorLevelId: parentLevelId, name, abbreviation }
+          : { surfaceLevelId: parentLevelId, name, abbreviation },
+      catalog: {
+        localId,
+        module,
+        entity: "labor",
+        name,
+        abbreviation,
+        category: sampleCategory,
+        parentLocalId: parentLevelId,
+        parentRemoteId: parentLevelId
       }
     });
     return localId;
@@ -2740,19 +2822,31 @@ function ExploracionesRegisterPage({ sampleCategory }: { sampleCategory: SampleC
       if (registerType === "interior") {
         if (!validateInteriorLocationSelection()) return;
         const labAssignments = buildInteriorLabAssignmentsPayload();
+        const interiorLaborId = await resolveLaborId(
+          "interior",
+          sampleForm.interiorLaborId,
+          sampleForm.interiorLaborText,
+          sampleForm.interiorLevelId
+        );
         const interiorObjectiveId = await resolveObjectiveId("interior", sampleForm.interiorObjectiveId);
         payload = {
           ...common,
-          interiorLaborId: sampleForm.interiorLaborId,
+          interiorLaborId,
           interiorObjectiveId,
           labAssignments
         };
       } else {
         if (!validateSurfaceLocationSelection()) return;
+        const surfaceLaborId = await resolveLaborId(
+          "surface",
+          sampleForm.surfaceLaborId,
+          sampleForm.surfaceLaborText,
+          sampleForm.surfaceLevelId
+        );
         const surfaceObjectiveId = await resolveObjectiveId("surface", sampleForm.surfaceObjectiveId);
         payload = {
           ...common,
-          surfaceLaborId: sampleForm.surfaceLaborId,
+          surfaceLaborId,
           surfaceObjectiveId,
           labAssignments: buildSurfaceLabAssignmentsPayload()
         };
@@ -3388,14 +3482,32 @@ function ExploracionesRegisterPage({ sampleCategory }: { sampleCategory: SampleC
             <div className="exploraciones-main-grid grid gap-3 md:grid-cols-2 xl:grid-cols-4">
               <FormSelect label="Área" value={sampleForm.interiorAreaId} options={areaOptions} onChange={(value) => setSampleField("interiorAreaId", value)} disabled={isEditingRemote} />
               <FormSelect label="Nivel" value={sampleForm.interiorLevelId} options={levelOptions} onChange={(value) => setSampleField("interiorLevelId", value)} disabled={!sampleForm.interiorAreaId || isEditingRemote} />
-              <FormSelect label="Labor" value={sampleForm.interiorLaborId} options={laborOptions} onChange={(value) => setSampleField("interiorLaborId", value)} disabled={!sampleForm.interiorLevelId || isEditingRemote} />
+              <FormSelect
+                label="Labor"
+                value={sampleForm.interiorLaborId}
+                options={laborOptions}
+                onChange={(value) => setSampleField("interiorLaborId", value)}
+                disabled={!sampleForm.interiorLevelId || isEditingRemote}
+                allowCustomValue
+                customValue={sampleForm.interiorLaborText}
+                onCustomValueChange={(value) => setLaborText("interiorLaborText", value.toUpperCase())}
+              />
               <TextField label="Objetivo" value={sampleForm.interiorObjectiveId} onChange={(value) => setSampleField("interiorObjectiveId", value.toUpperCase())} placeholder="Escribe el objetivo" />
             </div>
           ) : (
             <div className="exploraciones-main-grid grid gap-3 md:grid-cols-2 xl:grid-cols-4">
               <FormSelect label="Área" value={sampleForm.surfaceAreaId} options={areaOptions} onChange={(value) => setSampleField("surfaceAreaId", value)} disabled={isEditingRemote} />
               <FormSelect label="Nivel" value={sampleForm.surfaceLevelId} options={levelOptions} onChange={(value) => setSampleField("surfaceLevelId", value)} disabled={!sampleForm.surfaceAreaId || isEditingRemote} />
-              <FormSelect label="Labor" value={sampleForm.surfaceLaborId} options={laborOptions} onChange={(value) => setSampleField("surfaceLaborId", value)} disabled={!sampleForm.surfaceLevelId || isEditingRemote} />
+              <FormSelect
+                label="Labor"
+                value={sampleForm.surfaceLaborId}
+                options={laborOptions}
+                onChange={(value) => setSampleField("surfaceLaborId", value)}
+                disabled={!sampleForm.surfaceLevelId || isEditingRemote}
+                allowCustomValue
+                customValue={sampleForm.surfaceLaborText}
+                onCustomValueChange={(value) => setLaborText("surfaceLaborText", value.toUpperCase())}
+              />
               <TextField label="Objetivo" value={sampleForm.surfaceObjectiveId} onChange={(value) => setSampleField("surfaceObjectiveId", value.toUpperCase())} placeholder="Escribe el objetivo" />
             </div>
           )}
@@ -3751,13 +3863,19 @@ function FormSelect({
   value,
   options,
   onChange,
-  disabled
+  disabled,
+  allowCustomValue = false,
+  customValue = "",
+  onCustomValueChange
 }: {
   label: string;
   value: string;
   options: Array<{ id: string; label: string; searchText?: string }>;
   onChange: (value: string) => void;
   disabled?: boolean;
+  allowCustomValue?: boolean;
+  customValue?: string;
+  onCustomValueChange?: (value: string) => void;
 }) {
   return (
     <div>
@@ -3769,6 +3887,9 @@ function FormSelect({
         disabled={disabled}
         placeholder={`Seleccionar ${label.toLowerCase()}`}
         className={fieldClass}
+        allowCustomValue={allowCustomValue}
+        customValue={customValue}
+        onCustomValueChange={onCustomValueChange}
       />
     </div>
   );

@@ -136,7 +136,12 @@ const DRILLHOLES_MEDIA_BY_NAME: Record<string, string> = {
 
 function isGifMedia(src?: string) {
   const cleanSrc = src?.toLowerCase().split("?")[0] ?? "";
-  return cleanSrc.endsWith(".gif") || cleanSrc.endsWith("/model-1") || cleanSrc.endsWith("/model-2");
+  return cleanSrc.endsWith(".gif");
+}
+
+function isVideoMedia(src?: string) {
+  const cleanSrc = src?.toLowerCase().split("?")[0] ?? "";
+  return cleanSrc.endsWith(".mp4") || cleanSrc.endsWith(".webm") || cleanSrc.endsWith("/model-1") || cleanSrc.endsWith("/model-2");
 }
 
 function DeferredMediaImage({
@@ -160,6 +165,34 @@ function DeferredMediaImage({
   onMouseDown?: MouseEventHandler<HTMLImageElement>;
   style?: CSSProperties;
 }) {
+  if (isVideoMedia(src)) {
+    return (
+      <div className={`relative overflow-hidden bg-black ${className ?? ""}`}>
+        <video
+          src={src}
+          draggable={draggable}
+          onMouseDown={onMouseDown as any}
+          onLoadedData={onLoad}
+          muted
+          loop
+          autoPlay
+          playsInline
+          preload="metadata"
+          className={`${imageClassName ?? className ?? ""} ${loaded ? "opacity-100" : "opacity-0"} transition-opacity duration-300`}
+          style={style}
+        />
+        {!loaded ? (
+          <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-black text-white">
+            <span className="h-8 w-8 animate-spin rounded-full border-2 border-white/25 border-t-white" />
+            <span className="text-xs font-semibold uppercase tracking-[0.18em] text-white/70">
+              Loading model
+            </span>
+          </div>
+        ) : null}
+      </div>
+    );
+  }
+
   if (isGifMedia(src)) {
     return (
       <div className={`relative overflow-hidden bg-black ${className ?? ""}`}>
