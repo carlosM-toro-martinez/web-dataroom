@@ -6,20 +6,32 @@ import {
 
 interface AuthenticatedMediaVideoProps {
   src: string;
-  loaded: boolean;
-  onLoad: () => void;
+  loaded?: boolean;
+  onLoad?: () => void;
+  autoPlay?: boolean;
+  controls?: boolean;
   draggable?: boolean;
+  loop?: boolean;
+  muted?: boolean;
   onMouseDown?: MouseEventHandler<HTMLVideoElement>;
+  playsInline?: boolean;
+  preload?: "auto" | "metadata" | "none";
   className?: string;
   style?: CSSProperties;
 }
 
 export function AuthenticatedMediaVideo({
   src,
-  loaded,
+  loaded = false,
   onLoad,
+  autoPlay = true,
+  controls = false,
   draggable,
+  loop = true,
+  muted = true,
   onMouseDown,
+  playsInline = true,
+  preload = "metadata",
   className,
   style
 }: AuthenticatedMediaVideoProps) {
@@ -75,11 +87,12 @@ export function AuthenticatedMediaVideo({
         draggable={draggable}
         onMouseDown={onMouseDown}
         onLoadedData={onLoad}
-        muted
-        loop
-        autoPlay
-        playsInline
-        preload="metadata"
+        muted={muted}
+        loop={loop}
+        autoPlay={autoPlay}
+        controls={controls}
+        playsInline={playsInline}
+        preload={preload}
         className={className}
         style={style}
       />

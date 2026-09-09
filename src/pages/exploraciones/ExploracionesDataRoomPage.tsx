@@ -473,15 +473,16 @@ export function ExploracionesDataRoomPage() {
               onClick={() => setShowIntroVideo(true)}
               className="mt-3 w-full overflow-hidden rounded-lg border border-[var(--color-border-soft)] bg-black"
             >
-              <video
+              <AuthenticatedMediaVideo
                 key={introVideoUrl}
+                src={introVideoUrl}
                 className="h-[160px] w-full object-cover opacity-90"
                 muted
+                autoPlay={false}
+                loop={false}
                 playsInline
                 preload="none"
-              >
-                <source src={introVideoUrl} type="video/mp4" />
-              </video>
+              />
             </button>
           </article>
           <button
@@ -544,16 +545,17 @@ export function ExploracionesDataRoomPage() {
           >
             Close
           </button>
-          <video
+          <AuthenticatedMediaVideo
             key={`${introVideoUrl}-fullscreen`}
+            src={introVideoUrl}
             className="max-h-[90vh] w-auto max-w-[92vw] rounded-xl border border-white/20 bg-black"
             controls
             autoPlay
+            loop={false}
+            muted={false}
             playsInline
             preload="none"
-          >
-            <source src={introVideoUrl} type="video/mp4" />
-          </video>
+          />
         </div>
       ) : null}
 
