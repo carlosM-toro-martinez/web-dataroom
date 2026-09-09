@@ -39,6 +39,7 @@ import imgMosaLuz1Plata from "@/assets/images/MOSA_NIVEL_LUZ_1PLATA.jpg";
 import imgMosaLuz2Cobre from "@/assets/images/MOSA_NIVEL_LUZ_2COBRE.jpg";
 import { useAuth } from "@/features/auth/context/AuthContext";
 import { InternalHeader } from "@/shared/ui/InternalHeader";
+import { AuthenticatedMediaVideo } from "@/features/exploraciones/components/AuthenticatedMediaVideo";
 import { dataRoomMediaUrl } from "@/features/exploraciones/lib/dataRoomMedia";
 import {
   useCreateMiningAreaMutation,
@@ -192,16 +193,12 @@ function DeferredMediaImage({
   if (isVideoMedia(src)) {
     return (
       <div className={`relative overflow-hidden bg-black ${className ?? ""}`}>
-        <video
+        <AuthenticatedMediaVideo
           src={src}
           draggable={draggable}
           onMouseDown={onMouseDown as any}
-          onLoadedData={onLoad}
-          muted
-          loop
-          autoPlay
-          playsInline
-          preload="metadata"
+          loaded={loaded}
+          onLoad={onLoad}
           className={`${imageClassName ?? className ?? ""} ${loaded ? "opacity-100" : "opacity-0"} transition-opacity duration-300`}
           style={style}
         />
