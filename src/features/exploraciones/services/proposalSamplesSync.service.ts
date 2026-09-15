@@ -27,6 +27,7 @@ import {
   markProposalSampleSyncError,
   type OfflineProposalAction,
   type OfflineProposalCatalog,
+  type ProposalEntity,
   type ProposalPayload
 } from "@/features/exploraciones/db/exploracionesDb";
 import type {
@@ -171,6 +172,48 @@ function findUnresolvedLocalId(payload: unknown): string | undefined {
   }
 
   return undefined;
+}
+
+function collectLocalIds(payload: unknown, localIds = new Set<string>()) {
+  if (!payload || typeof payload !== "object") return localIds;
+  if (Array.isArray(payload)) {
+    payload.forEach((item) => collectLocalIds(item, localIds));
+    return localIds;
+  }
+
+  for (const [key, value] of Object.entries(payload as Record<string, unknown>)) {
+    if (key.endsWith("Id") && typeof value === "string" && isLocalOnlyId(value)) localIds.add(value);
+    collectLocalIds(value, localIds);
+  }
+
+  return localIds;
+}
+
+const entitySyncRank: Record<ProposalEntity, number> = {
+  element: 0,
+  area: 1,
+  level: 2,
+  labor: 3,
+  objective: 4,
+  laboratory: 4,
+  sample: 5
+};
+
+function orderActionsForSync(actions: OfflineProposalAction[]) {
+  return [...actions].sort((left, right) => {
+    const rankDiff = entitySyncRank[left.entity] - entitySyncRank[right.entity];
+    if (rankDiff !== 0) return rankDiff;
+    return (left.id ?? 0) - (right.id ?? 0);
+  });
+}
+
+function shouldSyncAction(
+  action: OfflineProposalAction,
+  retryFailed: boolean,
+  requiredLocalIds: Set<string>
+) {
+  if (retryFailed || !action.syncError) return true;
+  return action.entity !== "sample" && requiredLocalIds.has(action.localId);
 }
 
 const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -529,8 +572,15 @@ export async function syncPendingProposalSamples(
   options: SyncProposalSamplesOptions = {}
 ): Promise<SyncProposalSamplesResult> {
   await markSeedProposalCatalogActionsAsSynced();
-  const pending = (await getPendingProposalActions(500)).filter(
-    (action) => options.retryFailed || !action.syncError
+  const allPending = await getPendingProposalActions(500);
+  const requiredLocalIds = allPending.reduce((ids, action) => {
+    if (action.entity === "sample" && (options.retryFailed || !action.syncError)) {
+      collectLocalIds(action.payload, ids);
+    }
+    return ids;
+  }, new Set<string>());
+  const pending = orderActionsForSync(
+    allPending.filter((action) => shouldSyncAction(action, Boolean(options.retryFailed), requiredLocalIds))
   );
   const catalogs = await getProposalCatalogs();
   const idMap = new Map<string, string>();

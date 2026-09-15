@@ -308,6 +308,26 @@ const PRIORITY_WEIGHT: Record<SamplePriority, number> = {
   LOW: 1
 };
 
+const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const KNOWN_ELEMENT_KEYS = new Map(
+  Object.entries({
+    ag: "ag",
+    plata: "ag",
+    au: "au",
+    oro: "au",
+    cu: "cu",
+    cobre: "cu",
+    pb: "pb",
+    plomo: "pb",
+    zn: "zn",
+    zinc: "zn",
+    sb: "sb",
+    antimonio: "sb",
+    bi: "bi",
+    bismuto: "bi"
+  })
+);
+
 const INTERIOR_DEFAULT_AREAS = [
   { localId: "seed-interior-area-mosa", name: "MOSA", abbreviation: "MS" },
   { localId: "seed-interior-area-central", name: "CENTRAL", abbreviation: "CEN" },
@@ -504,6 +524,43 @@ function elementOptions(items: ElementCatalogItem[]) {
     });
   });
   return Array.from(unique.values());
+}
+
+function isUuid(value: string) {
+  return uuidPattern.test(value);
+}
+
+function elementCanonicalKey(item: Pick<ElementCatalogItem, "name" | "symbol">) {
+  const symbol = normalizeCatalogText(item.symbol);
+  const name = normalizeCatalogText(item.name);
+  return KNOWN_ELEMENT_KEYS.get(symbol) ?? KNOWN_ELEMENT_KEYS.get(name) ?? symbol ?? name;
+}
+
+function dispatchableElements(items: ElementCatalogItem[]) {
+  const unique = new Map<string, ElementCatalogItem>();
+  items.forEach((item) => {
+    if (!isUuid(item.id)) return;
+    const key = elementCanonicalKey(item);
+    if (!key || unique.has(key)) return;
+    unique.set(key, item);
+  });
+  return Array.from(unique.values());
+}
+
+function resolveDispatchElementIds(
+  elementIds: string[],
+  allElements: ElementCatalogItem[],
+  syncedElements: ElementCatalogItem[]
+) {
+  const syncedByKey = new Map(syncedElements.map((item) => [elementCanonicalKey(item), item.id]));
+  const allById = new Map(allElements.map((item) => [item.id, item]));
+  const resolved = elementIds.map((id) => {
+    if (isUuid(id)) return id;
+    const localElement = allById.get(id);
+    const syncedId = localElement ? syncedByKey.get(elementCanonicalKey(localElement)) : undefined;
+    return syncedId ?? id;
+  });
+  return Array.from(new Set(resolved));
 }
 
 function localCatalogId(item: OfflineProposalCatalog) {
@@ -1520,6 +1577,7 @@ function ExploracionesRegisterPage({ sampleCategory }: { sampleCategory: SampleC
       .filter((item) => item.module === "shared" && item.entity === "element")
       .map(localElementToItem)
   );
+  const dispatchElements = useMemo(() => dispatchableElements(elements), [elements]);
   const interiorAreas = mergeById(
     mergeById(remoteInteriorAreas.data ?? [], hierarchyInteriorAreas),
     localCatalogs.filter((item) => isVisibleStructureCatalog(item, sampleCategory)).filter((item) => item.module === "interior" && item.entity === "area").map(localCatalogToItem)
@@ -3015,9 +3073,18 @@ function ExploracionesRegisterPage({ sampleCategory }: { sampleCategory: SampleC
         showError("Selecciona al menos una muestra para el lote.");
         return;
       }
-      const emptyElements = dispatchItems.find((item) => item.elementIds.length === 0);
+      const normalizedItems = dispatchItems.map((item) => ({
+        ...item,
+        elementIds: resolveDispatchElementIds(item.elementIds, elements, dispatchElements)
+      }));
+      const emptyElements = normalizedItems.find((item) => item.elementIds.length === 0);
       if (emptyElements) {
         showError("Cada muestra del lote debe tener al menos un elemento solicitado.");
+        return;
+      }
+      const localElement = normalizedItems.find((item) => item.elementIds.some((elementId) => !isUuid(elementId)));
+      if (localElement) {
+        showError("Hay elementos del lote que aun son locales. Sincroniza catalogos y vuelve a crear el lote.");
         return;
       }
       const sentAt = toIso(dispatchForm.sentAt) ?? new Date().toISOString();
@@ -3026,7 +3093,7 @@ function ExploracionesRegisterPage({ sampleCategory }: { sampleCategory: SampleC
         projectName: dispatchForm.projectName.trim() || undefined,
         sentAt,
         notes: dispatchForm.notes.trim() || undefined,
-        items: dispatchItems.map((item) => ({
+        items: normalizedItems.map((item) => ({
           sampleId: item.sampleId,
           elementIds: item.elementIds,
           notes: item.notes.trim() || undefined
@@ -3744,7 +3811,7 @@ function ExploracionesRegisterPage({ sampleCategory }: { sampleCategory: SampleC
           form={dispatchForm}
           items={dispatchItems}
           samples={samplesForDispatch}
-          elements={elements}
+          elements={dispatchElements}
           laboratories={activeLaboratories}
           dispatches={activeDispatches}
           isSaving={isDispatchSaving}
