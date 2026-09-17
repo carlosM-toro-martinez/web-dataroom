@@ -96,7 +96,7 @@ import {
   getSurfaceObjectives
 } from "@/features/exploraciones/api/proposalSamplesApi";
 import type { OfflineProposalCatalog, OfflineProposalSample } from "@/features/exploraciones/db/exploracionesDb";
-import { cacheProposalCatalogs, pruneMissingProposalCatalogs } from "@/features/exploraciones/db/exploracionesDb";
+import { cacheProposalCatalogs, deleteSeedLaboratoryCatalogs, pruneMissingProposalCatalogs } from "@/features/exploraciones/db/exploracionesDb";
 
 const pageShell =
   "exploraciones-page mx-auto w-full max-w-7xl space-y-6 px-4 pb-8 sm:px-6 lg:px-8";
@@ -373,14 +373,6 @@ const DEFAULT_ELEMENTS = [
   { name: "Zinc", symbol: "Zn", defaultUnit: "%" },
   { name: "Antimonio", symbol: "Sb", defaultUnit: "%" },
   { name: "Bismuto", symbol: "Bi", defaultUnit: "%" }
-] as const;
-
-const DEFAULT_LABORATORIES = [
-  { name: "LIPEÑA (LIPEÑA)", abbreviation: "LIP" },
-  { name: "CHILCOBIJA (CHILCOBIJA)", abbreviation: "CHI" },
-  { name: "POTOSI (CONDE ORTEGA)", abbreviation: "POT" },
-  { name: "SPECTRO LAB", abbreviation: "SPL" },
-  { name: "CASTRO", abbreviation: "CAS" }
 ] as const;
 
 const SURFACE_DEFAULT_AREAS = [
@@ -1520,30 +1512,10 @@ function ExploracionesRegisterPage({ sampleCategory }: { sampleCategory: SampleC
           }
         });
       }
-
-      for (const module of ["interior", "surface"] as const) {
-        for (const lab of DEFAULT_LABORATORIES) {
-          const localId = `seed-${module}-laboratory-${lab.abbreviation.toLowerCase()}`;
-          if (hasLocalSeed(localId)) continue;
-          await queueCatalog.mutateAsync({
-            module,
-            entity: "laboratory",
-            payload: { name: lab.name, abbreviation: lab.abbreviation },
-            queueAction: false,
-            catalog: {
-              localId,
-              module,
-              entity: "laboratory",
-              name: lab.name,
-              abbreviation: lab.abbreviation,
-              synced: true
-            }
-          });
-        }
-      }
     }
 
     void seedDefaults();
+    void deleteSeedLaboratoryCatalogs().then(() => offlineCatalogs.refetch());
   }, [defaultsSeeded, offlineCatalogs.data]);
 
   const selectedInteriorArea = [
@@ -3798,7 +3770,15 @@ function ExploracionesRegisterPage({ sampleCategory }: { sampleCategory: SampleC
               Crea lotes, imprime notas y registra resultados desde una pantalla emergente.
             </p>
           </div>
-          <button type="button" className={`${primaryButton} w-full sm:w-auto`} onClick={() => setShowDispatchModal(true)}>
+          <button
+            type="button"
+            className={`${primaryButton} w-full sm:w-auto`}
+            onClick={() => {
+              void remoteInteriorLaboratories.refetch();
+              void remoteSurfaceLaboratories.refetch();
+              setShowDispatchModal(true);
+            }}
+          >
             <Send size={15} />
             Abrir lotes
           </button>

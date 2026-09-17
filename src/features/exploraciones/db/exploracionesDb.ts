@@ -354,6 +354,16 @@ export async function pruneMissingProposalCatalogs(
   );
 }
 
+export async function deleteSeedLaboratoryCatalogs() {
+  const stale = await exploracionesDb.proposalCatalogs
+    .filter((item) => item.entity === "laboratory" && item.localId.startsWith("seed-"))
+    .toArray();
+  if (stale.length === 0) return;
+  await exploracionesDb.proposalCatalogs.bulkDelete(
+    stale.map((item) => item.id).filter((id): id is number => id !== undefined)
+  );
+}
+
 export async function saveProposalSample(item: Omit<OfflineProposalSample, "id" | "createdAt" | "updatedAt">) {
   const now = new Date().toISOString();
   const id = await exploracionesDb.proposalSamples.add({
