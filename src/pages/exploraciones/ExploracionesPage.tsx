@@ -1594,6 +1594,12 @@ function ExploracionesRegisterPage({ sampleCategory }: { sampleCategory: SampleC
     localCatalogs
       .filter((item) => isVisibleStructureCatalog(item, sampleCategory))
       .filter((item) => item.module === "interior" && item.entity === "level")
+      // Only alias levels of the selected area, otherwise same-named levels of other areas leak their labors.
+      .filter(
+        (item) =>
+          selectedInteriorAreaIds.has(item.parentRemoteId ?? "") ||
+          selectedInteriorAreaIds.has(item.parentLocalId ?? "")
+      )
       .filter(
         (item) =>
           normalizeCatalogText(item.name) === selectedName ||
@@ -1700,6 +1706,13 @@ function ExploracionesRegisterPage({ sampleCategory }: { sampleCategory: SampleC
     localCatalogs
       .filter((item) => isVisibleStructureCatalog(item, sampleCategory))
       .filter((item) => item.module === "surface" && item.entity === "level")
+      // Only alias levels of the selected area: every area has a "SUPERFICIE (SUP)" level,
+      // so matching by name alone leaked labors from other areas into the labor list.
+      .filter(
+        (item) =>
+          selectedSurfaceAreaIds.has(item.parentRemoteId ?? "") ||
+          selectedSurfaceAreaIds.has(item.parentLocalId ?? "")
+      )
       .filter(
         (item) =>
           normalizeCatalogText(item.name) === selectedName ||
