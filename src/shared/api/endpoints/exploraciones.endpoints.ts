@@ -101,6 +101,7 @@ export const exploracionesEndpoints = {
   surfaceProposalResultById: (id: string) => `/api/surface-sample/results/${id}`,
   surfaceProposalDispatches: "/api/surface-sample/dispatches",
   surfaceProposalDispatchById: (id: string) => `/api/surface-sample/dispatches/${id}`,
+  dispatchBatches: "/api/dispatch-batches",
   sampleCodeDuplicates: "/api/sample-codes/duplicates",
   sampleCodeRepair: "/api/sample-codes/repair",
   sampleCodeRevert: "/api/sample-codes/revert",

@@ -9,6 +9,7 @@ import {
   createInteriorSampleResult,
   createInteriorSampleWithResults,
   createSurfaceDispatch,
+  createDispatchBatch,
   createSharedElement,
   createSurfaceArea,
   createSurfaceLabor,
@@ -75,6 +76,7 @@ import {
 } from "@/features/exploraciones/services/proposalSamplesSync.service";
 import type {
   InteriorSampleWithResultsPayload,
+  CreateDispatchBatchPayload,
   CreateDispatchPayload,
   CreateSampleResultPayload,
   DispatchStatus,
@@ -613,6 +615,11 @@ export function useUpdateSurfaceDispatchMutation() {
       updateSurfaceDispatch(id, payload),
     onSuccess: invalidate
   });
+}
+
+export function useCreateDispatchBatchMutation() {
+  const invalidate = useInvalidateProposalSamples();
+  return useMutation({ mutationFn: (payload: CreateDispatchBatchPayload) => createDispatchBatch(payload), onSuccess: invalidate });
 }
 
 export function useDeleteInteriorDispatchMutation() {

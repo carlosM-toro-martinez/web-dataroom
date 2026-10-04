@@ -185,6 +185,7 @@ export const dispatchItemSchema = z
 export const sampleDispatchSchema = z
   .object({
     id: z.string(),
+    folio: z.number().optional(),
     interiorLaboratoryId: z.string().nullable().optional(),
     surfaceLaboratoryId: z.string().nullable().optional(),
     projectName: optionalText,
@@ -332,6 +333,16 @@ export interface CreateDispatchPayload {
   sentAt: string;
   notes?: string;
   items: DispatchItemPayload[];
+}
+
+export interface CreateDispatchBatchPayload {
+  laboratoryModule: "interior" | "surface";
+  laboratoryId: string;
+  projectName?: string;
+  sentAt: string;
+  notes?: string;
+  interiorItems: DispatchItemPayload[];
+  surfaceItems: DispatchItemPayload[];
 }
 
 export interface UpdateDispatchPayload {

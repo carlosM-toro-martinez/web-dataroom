@@ -35,6 +35,7 @@ import {
   useCreateInteriorDispatchMutation,
   useCreateInteriorSampleResultMutation,
   useCreateSurfaceDispatchMutation,
+  useCreateDispatchBatchMutation,
   useCreateSurfaceSampleResultMutation,
   useDeleteInteriorDispatchMutation,
   useDeleteInteriorSampleMutation,
@@ -84,12 +85,14 @@ import type {
 } from "@/features/exploraciones/model/proposalSamples.schema";
 import {
   getInteriorAreas,
+  getInteriorDispatches,
   getInteriorLabors,
   getInteriorLaboratories,
   getInteriorLevels,
   getInteriorObjectives,
   getSharedElements,
   getSurfaceAreas,
+  getSurfaceDispatches,
   getSurfaceLabors,
   getSurfaceLaboratories,
   getSurfaceLevels,
@@ -202,6 +205,7 @@ interface DispatchForm {
 
 interface DispatchDraftItem {
   sampleId: string;
+  module: RegisterType;
   elementIds: string[];
   notes: string;
 }
@@ -1326,6 +1330,7 @@ function ExploracionesRegisterPage({ sampleCategory }: { sampleCategory: SampleC
   const [dispatchForm, setDispatchForm] = useState<DispatchForm>(() => initialDispatchForm());
   const [dispatchItems, setDispatchItems] = useState<DispatchDraftItem[]>([]);
   const [showDispatchModal, setShowDispatchModal] = useState(false);
+  const [dispatchMixed, setDispatchMixed] = useState(false);
   const [dispatchSampleSearch, setDispatchSampleSearch] = useState("");
   const [dispatchResultTarget, setDispatchResultTarget] = useState<DispatchResultTarget | null>(null);
   const [catalogExpanded, setCatalogExpanded] = useState(false);
@@ -1400,6 +1405,7 @@ function ExploracionesRegisterPage({ sampleCategory }: { sampleCategory: SampleC
   const updateSurfaceSample = useUpdateSurfaceSampleWithResultsMutation();
   const createInteriorDispatch = useCreateInteriorDispatchMutation();
   const createSurfaceDispatch = useCreateSurfaceDispatchMutation();
+  const createDispatchBatch = useCreateDispatchBatchMutation();
   const deleteInteriorDispatch = useDeleteInteriorDispatchMutation();
   const deleteSurfaceDispatch = useDeleteSurfaceDispatchMutation();
   const deleteInteriorSample = useDeleteInteriorSampleMutation();
@@ -3018,12 +3024,18 @@ function ExploracionesRegisterPage({ sampleCategory }: { sampleCategory: SampleC
     setDispatchForm((current) => ({ ...current, [field]: value }));
   }
 
-  function toggleDispatchSample(sampleId: string) {
+  function toggleDispatchSample(sampleId: string, module: RegisterType = registerType) {
     setDispatchItems((current) =>
       current.some((item) => item.sampleId === sampleId)
         ? current.filter((item) => item.sampleId !== sampleId)
-        : [...current, { sampleId, elementIds: [], notes: "" }]
+        : [...current, { sampleId, module, elementIds: [], notes: "" }]
     );
+  }
+
+  function setDispatchMixedMode(enabled: boolean) {
+    setDispatchMixed(enabled);
+    // Al desactivar el lote mixto se quitan las muestras del otro módulo, que dejarían de verse.
+    if (!enabled) setDispatchItems((current) => current.filter((item) => item.module === registerType));
   }
 
   function toggleDispatchElement(sampleId: string, elementId: string) {
@@ -3073,26 +3085,52 @@ function ExploracionesRegisterPage({ sampleCategory }: { sampleCategory: SampleC
         return;
       }
       const sentAt = toIso(dispatchForm.sentAt) ?? new Date().toISOString();
-      const payload = {
-        laboratoryId: dispatchForm.laboratoryId,
+      const toPayloadItems = (module: RegisterType) =>
+        normalizedItems
+          .filter((item) => item.module === module)
+          .map((item) => ({
+            sampleId: item.sampleId,
+            elementIds: item.elementIds,
+            notes: item.notes.trim() || undefined
+          }));
+      const interiorItems = toPayloadItems("interior");
+      const surfaceItems = toPayloadItems("surface");
+      const common = {
         projectName: dispatchForm.projectName.trim() || undefined,
         sentAt,
-        notes: dispatchForm.notes.trim() || undefined,
-        items: normalizedItems.map((item) => ({
-          sampleId: item.sampleId,
-          elementIds: item.elementIds,
-          notes: item.notes.trim() || undefined
-        }))
+        notes: dispatchForm.notes.trim() || undefined
       };
 
-      if (registerType === "interior") {
-        await createInteriorDispatch.mutateAsync(payload);
+      if (interiorItems.length > 0 && surfaceItems.length > 0) {
+        const batch = await createDispatchBatch.mutateAsync({
+          ...common,
+          laboratoryModule: registerType,
+          laboratoryId: dispatchForm.laboratoryId,
+          interiorItems,
+          surfaceItems
+        });
+        showSuccess(
+          `Lote mixto ${formatDispatchFolio(batch.folio)} enviado: ${interiorItems.length} de Interior Mina y ${surfaceItems.length} de Superficie.`
+        );
       } else {
-        await createSurfaceDispatch.mutateAsync(payload);
+        const module: RegisterType = interiorItems.length > 0 ? "interior" : "surface";
+        const laboratoryId =
+          module === registerType ? dispatchForm.laboratoryId : findCounterpartLaboratoryId(dispatchForm.laboratoryId, module);
+        if (!laboratoryId) {
+          showError("El laboratorio elegido no existe en el otro módulo. Crea el lote desde ese módulo.");
+          return;
+        }
+        const payload = { ...common, laboratoryId, items: module === "interior" ? interiorItems : surfaceItems };
+        if (module === "interior") {
+          await createInteriorDispatch.mutateAsync(payload);
+        } else {
+          await createSurfaceDispatch.mutateAsync(payload);
+        }
+        showSuccess("Lote enviado al laboratorio. Las muestras pasan a despachadas.");
       }
-      showSuccess("Lote enviado al laboratorio. Las muestras pasan a despachadas.");
       setDispatchForm(initialDispatchForm());
       setDispatchItems([]);
+      setDispatchMixed(false);
       setSampleStatusFilter("DISPATCHED");
     } catch (error) {
       showError(error instanceof Error ? error.message : "No se pudo crear el lote.");
@@ -3105,10 +3143,24 @@ function ExploracionesRegisterPage({ sampleCategory }: { sampleCategory: SampleC
         showError("No se puede eliminar un lote completado.");
         return;
       }
+      const sibling = await fetchSiblingDispatch(dispatch, registerType);
+      if (sibling) {
+        if (sibling.status === "COMPLETED") {
+          showError("No se puede eliminar: el otro tramo de este lote mixto ya está completado.");
+          return;
+        }
+        const otherLabel = registerType === "interior" ? "Superficie" : "Interior Mina";
+        const confirmed = window.confirm(
+          `El lote ${formatDispatchFolio(dispatch.folio)} es mixto. También se eliminarán sus ${sibling.items.length} muestra(s) de ${otherLabel}. ¿Continuar?`
+        );
+        if (!confirmed) return;
+      }
       if (registerType === "interior") {
         await deleteInteriorDispatch.mutateAsync(dispatch.id);
+        if (sibling) await deleteSurfaceDispatch.mutateAsync(sibling.id);
       } else {
         await deleteSurfaceDispatch.mutateAsync(dispatch.id);
+        if (sibling) await deleteInteriorDispatch.mutateAsync(sibling.id);
       }
       showSuccess("Lote eliminado. El servidor ajustó el estado de las muestras según sus resultados.");
     } catch (error) {
@@ -3146,7 +3198,28 @@ function ExploracionesRegisterPage({ sampleCategory }: { sampleCategory: SampleC
     }
   }
 
-  function printDispatchRemission(dispatch: SampleDispatch) {
+  // Un lote mixto son dos registros (uno por módulo) que comparten el mismo folio.
+  async function fetchSiblingDispatch(dispatch: SampleDispatch, module: RegisterType) {
+    if (dispatch.folio === undefined) return undefined;
+    const others = module === "interior" ? remoteSurfaceDispatches.data ?? [] : remoteInteriorDispatches.data ?? [];
+    const cached = others.find((item) => item.folio === dispatch.folio);
+    if (cached) return cached;
+    const fetched =
+      module === "interior"
+        ? await getSurfaceDispatches({ folio: dispatch.folio, page: 1, limit: 1 })
+        : await getInteriorDispatches({ folio: dispatch.folio, page: 1, limit: 1 });
+    return fetched[0];
+  }
+
+  function findCounterpartLaboratoryId(laboratoryId: string, module: RegisterType) {
+    const selected = activeLaboratories.find((item) => item.id === laboratoryId);
+    if (!selected) return undefined;
+    const target = module === "interior" ? interiorLaboratories : surfaceLaboratories;
+    const name = normalizeCatalogText(selected.name);
+    return target.find((item) => isUuid(item.id) && normalizeCatalogText(item.name) === name)?.id;
+  }
+
+  async function printDispatchRemission(dispatch: SampleDispatch) {
     const printWindow = window.open("", "_blank", "width=920,height=1100");
     if (!printWindow) {
       showError("El navegador bloqueó la ventana de impresión.");
@@ -3154,7 +3227,15 @@ function ExploracionesRegisterPage({ sampleCategory }: { sampleCategory: SampleC
     }
     printWindow.document.write("<p style=\"font-family:Arial,sans-serif;padding:24px\">Preparando nota de remisión...</p>");
     printWindow.document.close();
-    writeDispatchRemissionDocument(printWindow, dispatch);
+    let sibling: SampleDispatch | undefined;
+    try {
+      sibling = await fetchSiblingDispatch(dispatch, registerType);
+    } catch {
+      showError("No se pudo cargar el otro tramo del lote mixto. Se imprime solo este módulo.");
+    }
+    const interiorItems = registerType === "interior" ? dispatch.items : sibling?.items ?? [];
+    const surfaceItems = registerType === "interior" ? sibling?.items ?? [] : dispatch.items;
+    writeDispatchRemissionDocument(printWindow, dispatch, [...interiorItems, ...surfaceItems]);
   }
 
   function printDispatchVouchers(dispatch: SampleDispatch) {
@@ -3359,10 +3440,23 @@ function ExploracionesRegisterPage({ sampleCategory }: { sampleCategory: SampleC
     registerType === "interior"
       ? dispatchableInteriorSamples.data ?? []
       : dispatchableSurfaceSamples.data ?? [];
+  const otherSamplesForDispatch =
+    registerType === "interior"
+      ? dispatchableSurfaceSamples.data ?? []
+      : dispatchableInteriorSamples.data ?? [];
   const activeDispatches =
     registerType === "interior"
       ? remoteInteriorDispatches.data ?? []
       : remoteSurfaceDispatches.data ?? [];
+  const otherDispatches =
+    registerType === "interior"
+      ? remoteSurfaceDispatches.data ?? []
+      : remoteInteriorDispatches.data ?? [];
+  const mixedDispatchFolios = new Set(
+    activeDispatches
+      .filter((dispatch) => dispatch.folio !== undefined && otherDispatches.some((other) => other.folio === dispatch.folio))
+      .map((dispatch) => dispatch.folio as number)
+  );
   const isSaving =
     queueSample.isPending ||
     updateQueuedSample.isPending ||
@@ -3373,6 +3467,7 @@ function ExploracionesRegisterPage({ sampleCategory }: { sampleCategory: SampleC
   const isDispatchSaving =
     createInteriorDispatch.isPending ||
     createSurfaceDispatch.isPending ||
+    createDispatchBatch.isPending ||
     deleteInteriorDispatch.isPending ||
     deleteSurfaceDispatch.isPending ||
     createInteriorResult.isPending ||
@@ -3407,6 +3502,8 @@ function ExploracionesRegisterPage({ sampleCategory }: { sampleCategory: SampleC
             onClick={() => {
               setRegisterType("interior");
               resetSampleForm();
+              setDispatchItems([]);
+              setDispatchMixed(false);
             }}
             icon={Layers3}
           >
@@ -3417,6 +3514,8 @@ function ExploracionesRegisterPage({ sampleCategory }: { sampleCategory: SampleC
             onClick={() => {
               setRegisterType("surface");
               resetSampleForm();
+              setDispatchItems([]);
+              setDispatchMixed(false);
             }}
             icon={MapPinned}
           >
@@ -3804,6 +3903,10 @@ function ExploracionesRegisterPage({ sampleCategory }: { sampleCategory: SampleC
           form={dispatchForm}
           items={dispatchItems}
           samples={samplesForDispatch}
+          otherSamples={otherSamplesForDispatch}
+          mixed={dispatchMixed}
+          onMixedChange={setDispatchMixedMode}
+          mixedFolios={mixedDispatchFolios}
           elements={dispatchElements}
           laboratories={activeLaboratories}
           dispatches={activeDispatches}
@@ -3826,6 +3929,7 @@ function ExploracionesRegisterPage({ sampleCategory }: { sampleCategory: SampleC
       <SamplesTable
         rows={sampleRows}
         dispatches={activeDispatches}
+        mixedFolios={mixedDispatchFolios}
         registerType={registerType}
         sampleCategory={sampleCategory}
         search={search}
@@ -4588,10 +4692,20 @@ function dispatchItemAssays(item: NonNullable<SampleDispatch["items"]>[number]) 
     .join("-");
 }
 
-function writeDispatchRemissionDocument(printWindow: Window, dispatch: SampleDispatch) {
+function formatDispatchFolio(folio?: number) {
+  return folio === undefined ? "Folio -" : `Folio N° ${String(folio).padStart(4, "0")}`;
+}
+
+// items: para un lote mixto incluye las muestras de ambos módulos (mismo folio).
+function writeDispatchRemissionDocument(
+  printWindow: Window,
+  dispatch: SampleDispatch,
+  items: SampleDispatch["items"] = dispatch.items
+) {
   const projectName = (dispatch.projectName || "LA LIPEÑA").toUpperCase();
   const laboratory = dispatch.laboratory?.name ?? "________________";
-  const rows = dispatch.items.length > 0 ? dispatch.items : [];
+  const folioLabel = dispatch.folio === undefined ? "" : `N° ${String(dispatch.folio).padStart(4, "0")}`;
+  const rows = items.length > 0 ? items : [];
   const tableRows = rows
     .map((item, index) => {
       const assays = dispatchItemAssays(item);
@@ -4642,6 +4756,9 @@ function writeDispatchRemissionDocument(printWindow: Window, dispatch: SampleDis
     .helmet-logo:after { content: "MARTE"; display: block; border-top: 2px solid #8d8d8d; border-bottom: 2px solid #8d8d8d; margin: 0 auto; width: 62px; font-size: 10px; }
     .gray { background: #c6c6c6; }
     .title-band { display: inline-flex; align-items: center; gap: 5px; margin: 10px 0 14px 32px; padding: 5px 8px; font-weight: 800; font-size: 12px; }
+    .title-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+    .folio { margin: 10px 4px 14px 0; padding: 4px 10px; border: 2px solid #000; font-weight: 800; font-size: 13px; white-space: nowrap; }
+    .folio small { font-size: 10px; font-weight: 700; margin-right: 4px; }
     .meta { margin-left: 32px; line-height: 1.6; }
     .meta b { font-weight: 800; }
     .meta span { background: #d0d0d0; padding: 2px 4px; }
@@ -4682,7 +4799,10 @@ function writeDispatchRemissionDocument(printWindow: Window, dispatch: SampleDis
       <div class="helmet-logo"></div>
     </header>
 
-    <div class="title-band gray">⛰️ NOTA DE REMISIÓN DE MUESTRAS GEOLÓGICAS</div>
+    <div class="title-row">
+      <div class="title-band gray">⛰️ NOTA DE REMISIÓN DE MUESTRAS GEOLÓGICAS</div>
+      ${folioLabel ? `<div class="folio"><small>FOLIO</small>${escapeHtml(folioLabel)}</div>` : ""}
+    </div>
 
     <div class="meta">
       <div><b>EMPRESA / INSTITUCIÓN REMITENTE:</b> <span>EMPRESA MINERA MARTE S.R.L.</span></div>
@@ -4878,6 +4998,7 @@ function OfflineGeoMap({ geoPoint }: { geoPoint: GeoPoint }) {
 function SamplesTable({
   rows,
   dispatches,
+  mixedFolios,
   registerType,
   sampleCategory,
   search,
@@ -4899,6 +5020,7 @@ function SamplesTable({
 }: {
   rows: SampleTableRow[];
   dispatches: SampleDispatch[];
+  mixedFolios?: Set<number>;
   registerType: RegisterType;
   sampleCategory: SampleCategory;
   search: string;
@@ -5178,7 +5300,15 @@ function SamplesTable({
                 <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
                   <div>
                     <div className="flex flex-wrap items-center gap-2">
-                      <h3 className="text-sm font-extrabold">{group.title}</h3>
+                      <h3 className="text-sm font-extrabold">
+                        {group.folio !== undefined ? `${formatDispatchFolio(group.folio)} · ` : ""}
+                        {group.title}
+                      </h3>
+                      {group.folio !== undefined && mixedFolios?.has(group.folio) ? (
+                        <span className="rounded bg-[var(--color-primary)]/15 px-1.5 py-0.5 text-[10px] font-bold uppercase text-[var(--color-primary)]">
+                          Lote mixto
+                        </span>
+                      ) : null}
                       <span className={dispatchStatusBadgeClass(group.status)}>
                         {DISPATCH_STATUS_LABELS[group.status]}
                       </span>
@@ -5418,6 +5548,7 @@ function buildDispatchGroups(rows: SampleTableRow[], dispatches: SampleDispatch[
 
       return {
         id: dispatch.id,
+        folio: dispatch.folio,
         title: dispatch.projectName || "Lote sin proyecto",
         laboratory: dispatch.laboratory?.name ?? "Laboratorio",
         sentAt: dispatch.sentAt,
@@ -5439,6 +5570,7 @@ function buildDispatchGroups(rows: SampleTableRow[], dispatches: SampleDispatch[
   if (unbatchedRows.length > 0) {
     groups.push({
       id: "unbatched",
+      folio: undefined,
       title: "Sin lote",
       laboratory: "Muestras registradas sin despacho",
       sentAt: "",
@@ -5465,6 +5597,10 @@ function DispatchPanel({
   form,
   items,
   samples,
+  otherSamples,
+  mixed,
+  onMixedChange,
+  mixedFolios,
   elements,
   laboratories,
   dispatches,
@@ -5486,6 +5622,10 @@ function DispatchPanel({
   form: DispatchForm;
   items: DispatchDraftItem[];
   samples: Array<InteriorSample | SurfaceSample>;
+  otherSamples: Array<InteriorSample | SurfaceSample>;
+  mixed: boolean;
+  onMixedChange: (enabled: boolean) => void;
+  mixedFolios: Set<number>;
   elements: ElementCatalogItem[];
   laboratories: CatalogItem[];
   dispatches: SampleDispatch[];
@@ -5493,7 +5633,7 @@ function DispatchPanel({
   sampleSearch: string;
   onSampleSearchChange: (value: string) => void;
   onFormChange: (field: keyof DispatchForm, value: string) => void;
-  onToggleSample: (sampleId: string) => void;
+  onToggleSample: (sampleId: string, module: RegisterType) => void;
   onToggleElement: (sampleId: string, elementId: string) => void;
   onItemNotesChange: (sampleId: string, notes: string) => void;
   onSubmit: (event: FormEvent<HTMLFormElement>) => void;
@@ -5505,12 +5645,19 @@ function DispatchPanel({
 }) {
   const selectedBySample = new Map(items.map((item) => [item.sampleId, item]));
   const labOptions = labelOptions(laboratories);
+  const otherModule: RegisterType = registerType === "interior" ? "surface" : "interior";
+  const moduleTag = (module: RegisterType) => (module === "interior" ? "Interior Mina" : "Superficie");
+  const sampleEntries = [
+    ...samples.map((sample) => ({ sample, module: registerType })),
+    ...(mixed ? otherSamples.map((sample) => ({ sample, module: otherModule })) : [])
+  ];
   const normalizedSampleSearch = normalizeCatalogText(sampleSearch);
-  const visibleSamples = normalizedSampleSearch
-    ? samples.filter((sample) =>
+  const visibleEntries = normalizedSampleSearch
+    ? sampleEntries.filter(({ sample }) =>
         normalizeCatalogText(`${sample.code ?? ""} ${sample.name ?? ""}`).includes(normalizedSampleSearch)
       )
-    : samples;
+    : sampleEntries;
+  const selectedCount = (module: RegisterType) => items.filter((item) => item.module === module).length;
 
   return (
     <div className="exploraciones-modal fixed inset-0 z-[100] flex items-end justify-center bg-black/55 p-0 sm:items-center sm:p-4">
@@ -5538,6 +5685,15 @@ function DispatchPanel({
                 <p className="mt-1 text-xs text-[var(--color-on-surface-variant)]">
                   Selecciona el laboratorio y las muestras que irán juntas.
                 </p>
+                <label className="mt-2 inline-flex cursor-pointer items-center gap-2 text-xs font-semibold">
+                  <input type="checkbox" checked={mixed} onChange={(event) => onMixedChange(event.target.checked)} />
+                  Lote mixto: incluir también muestras de {moduleTag(otherModule)}
+                </label>
+                {mixed ? (
+                  <p className="mt-1 text-xs text-[var(--color-on-surface-variant)]">
+                    Seleccionadas: {selectedCount("interior")} de Interior Mina · {selectedCount("surface")} de Superficie. Se imprimen en una sola nota con el mismo folio.
+                  </p>
+                ) : null}
               </div>
               <button type="submit" className={`${primaryButton} w-full sm:w-auto`} disabled={isSaving}>
                 <Send size={15} />
@@ -5559,7 +5715,7 @@ function DispatchPanel({
                     Muestras registradas
                   </h3>
                   <span className="text-xs text-[var(--color-on-surface-variant)]">
-                    {visibleSamples.length} de {samples.length}
+                    {visibleEntries.length} de {sampleEntries.length}
                   </span>
                 </div>
                 <div className="relative mt-3">
@@ -5572,11 +5728,11 @@ function DispatchPanel({
                   />
                 </div>
                 <div className="mt-3 max-h-[42vh] space-y-2 overflow-y-auto pr-1 sm:max-h-72">
-                  {visibleSamples.map((sample) => {
+                  {visibleEntries.map(({ sample, module }) => {
                     const selected = selectedBySample.has(sample.id);
                     return (
                       <label
-                        key={sample.id}
+                        key={`${module}-${sample.id}`}
                         className={`flex cursor-pointer items-start gap-2 rounded-lg border px-3 py-2 text-sm ${
                           selected
                             ? "border-[var(--color-primary)] bg-[var(--color-primary)]/10"
@@ -5586,11 +5742,18 @@ function DispatchPanel({
                         <input
                           type="checkbox"
                           checked={selected}
-                          onChange={() => onToggleSample(sample.id)}
+                          onChange={() => onToggleSample(sample.id, module)}
                           className="mt-1"
                         />
                         <span className="min-w-0">
-                          <span className="block truncate font-bold">{sample.code}</span>
+                          <span className="block truncate font-bold">
+                            {sample.code}
+                            {mixed ? (
+                              <span className="ml-2 rounded bg-[var(--color-surface-container-highest)] px-1.5 py-0.5 text-[10px] font-bold uppercase text-[var(--color-on-surface-variant)]">
+                                {moduleTag(module)}
+                              </span>
+                            ) : null}
+                          </span>
                           <span className="block break-words text-xs text-[var(--color-on-surface-variant)]">
                             {sample.name ?? "-"} · {SAMPLE_STATUS_LABELS[sample.status ?? "REGISTERED"]}
                           </span>
@@ -5598,12 +5761,12 @@ function DispatchPanel({
                       </label>
                     );
                   })}
-                  {samples.length === 0 ? (
+                  {sampleEntries.length === 0 ? (
                     <p className="text-sm text-[var(--color-on-surface-variant)]">
                       No hay muestras disponibles para despachar en este filtro.
                     </p>
                   ) : null}
-                  {samples.length > 0 && visibleSamples.length === 0 ? (
+                  {sampleEntries.length > 0 && visibleEntries.length === 0 ? (
                     <p className="text-sm text-[var(--color-on-surface-variant)]">
                       No hay muestras que coincidan con la búsqueda.
                     </p>
@@ -5617,12 +5780,19 @@ function DispatchPanel({
                 </h3>
                 <div className="mt-3 max-h-[42vh] space-y-3 overflow-y-auto pr-1 sm:max-h-72">
                   {items.map((item) => {
-                    const sample = samples.find((candidate) => candidate.id === item.sampleId);
+                    const sample = sampleEntries.find((candidate) => candidate.sample.id === item.sampleId)?.sample;
                     return (
                       <div key={item.sampleId} className="rounded-lg border border-[var(--color-border-soft)] p-3">
                         <div className="flex flex-wrap items-center justify-between gap-2">
-                          <p className="text-sm font-bold">{sample?.code ?? item.sampleId}</p>
-                          <button type="button" className={secondaryButton} onClick={() => onToggleSample(item.sampleId)}>
+                          <p className="text-sm font-bold">
+                            {sample?.code ?? item.sampleId}
+                            {mixed ? (
+                              <span className="ml-2 text-[10px] font-bold uppercase text-[var(--color-on-surface-variant)]">
+                                {moduleTag(item.module)}
+                              </span>
+                            ) : null}
+                          </p>
+                          <button type="button" className={secondaryButton} onClick={() => onToggleSample(item.sampleId, item.module)}>
                             <Trash2 size={13} />
                             Quitar
                           </button>
@@ -5666,7 +5836,13 @@ function DispatchPanel({
                   <div className="flex flex-wrap items-start justify-between gap-3">
                     <div>
                       <p className="text-sm font-bold">
+                        {dispatch.folio !== undefined ? `${formatDispatchFolio(dispatch.folio)} · ` : ""}
                         {dispatch.projectName || "Sin proyecto"} · {dispatch.laboratory?.name ?? "Laboratorio"}
+                        {dispatch.folio !== undefined && mixedFolios.has(dispatch.folio) ? (
+                          <span className="ml-2 rounded bg-[var(--color-primary)]/15 px-1.5 py-0.5 text-[10px] font-bold uppercase text-[var(--color-primary)]">
+                            Lote mixto
+                          </span>
+                        ) : null}
                       </p>
                       <p className="mt-1 text-xs text-[var(--color-on-surface-variant)]">
                         Enviado: {formatDate(dispatch.sentAt)} · {DISPATCH_STATUS_LABELS[dispatch.status ?? "PENDING"]}

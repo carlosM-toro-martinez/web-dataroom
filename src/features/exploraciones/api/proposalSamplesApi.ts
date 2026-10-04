@@ -15,6 +15,7 @@ import {
   surfaceLaborSchema,
   surfaceLevelSchema,
   surfaceSampleSchema,
+  type CreateDispatchBatchPayload,
   type CreateDispatchPayload,
   type CreateSampleResultPayload,
   type InteriorSampleWithResultsPayload,
@@ -273,6 +274,7 @@ export async function createInteriorSampleResult(payload: CreateSampleResultPayl
 
 export async function getInteriorDispatches(params?: {
   interiorLaboratoryId?: string;
+  folio?: number;
   status?: "PENDING" | "COMPLETED";
   page?: number;
   limit?: number;
@@ -515,6 +517,7 @@ export async function createSurfaceSampleResult(payload: CreateSampleResultPaylo
 
 export async function getSurfaceDispatches(params?: {
   surfaceLaboratoryId?: string;
+  folio?: number;
   status?: "PENDING" | "COMPLETED";
   page?: number;
   limit?: number;
@@ -550,4 +553,25 @@ export async function updateSurfaceDispatch(
 
 export async function deleteSurfaceDispatch(id: string) {
   await httpClient.delete(apiEndpoints.exploraciones.surfaceProposalDispatchById(id));
+}
+
+// Lote mixto: una nota de remisión (mismo folio) con muestras de Interior Mina y Superficie.
+export async function createDispatchBatch(payload: CreateDispatchBatchPayload) {
+  const mapItems = (items: CreateDispatchBatchPayload["interiorItems"], key: "interiorSampleId" | "surfaceSampleId") =>
+    items.map((item) => ({ [key]: item.sampleId, elementIds: item.elementIds, notes: item.notes }));
+  const response = await httpClient.post(apiEndpoints.exploraciones.dispatchBatches, {
+    laboratoryModule: payload.laboratoryModule,
+    laboratoryId: payload.laboratoryId,
+    projectName: payload.projectName,
+    sentAt: payload.sentAt,
+    notes: payload.notes,
+    interiorItems: mapItems(payload.interiorItems, "interiorSampleId"),
+    surfaceItems: mapItems(payload.surfaceItems, "surfaceSampleId")
+  });
+  const data = unwrapData(response.data) as { folio: number; interior: unknown; surface: unknown };
+  return {
+    folio: data.folio,
+    interior: sampleDispatchSchema.parse(data.interior),
+    surface: sampleDispatchSchema.parse(data.surface)
+  };
 }
