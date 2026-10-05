@@ -21,6 +21,7 @@ import { ExploracionesSurfaceDataRoomPage } from "@/pages/exploraciones/Explorac
 import { ExploracionesFormsPage } from "@/pages/exploraciones/ExploracionesFormsPage";
 import { ExploracionesAjustesPage } from "@/pages/exploraciones/ExploracionesAjustesPage";
 import { SondajesPage } from "@/pages/sondajes/SondajesPage";
+import { SondajesHolePage } from "@/pages/sondajes/SondajesHolePage";
 import { ProtectedRoute } from "@/app/router/guards/ProtectedRoute";
 import { PublicOnlyRoute } from "@/app/router/guards/PublicOnlyRoute";
 import { AdminRoute } from "@/app/router/guards/AdminRoute";
@@ -72,6 +73,7 @@ export function DataRoomRouter() {
 
           <Route element={<SondajesRoute />}>
             <Route path="/sondajes" element={<SondajesPage />} />
+            <Route path="/sondajes/pozos/:holeId" element={<SondajesHolePage />} />
           </Route>
 
           <Route element={<AdminRoute />}>

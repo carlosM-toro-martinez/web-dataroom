@@ -38,6 +38,7 @@ export const drillingCampaignSchema = z
     id: z.string(),
     name: z.string(),
     code: z.string(),
+    area: optionalText,
     category: drillingCategorySchema,
     status: drillingCampaignStatusSchema,
     objective: optionalText,
@@ -58,10 +59,25 @@ export const drillingHoleSchema = z
     locationType: drillingLocationTypeSchema,
     sector: optionalText,
     target: optionalText,
+    rigId: optionalText,
+    contractorId: optionalText,
+    plannedEast: optionalNumber,
+    plannedNorth: optionalNumber,
+    plannedElevation: optionalNumber,
+    plannedAzimuth: optionalNumber,
+    plannedDip: optionalNumber,
     plannedDepth: optionalNumber,
+    east: optionalNumber,
+    north: optionalNumber,
+    elevation: optionalNumber,
+    azimuth: optionalNumber,
+    dip: optionalNumber,
     finalDepth: optionalNumber,
     startedAt: optionalText,
     finishedAt: optionalText,
+    notes: optionalText,
+    createdAt: optionalText,
+    updatedAt: optionalText,
     drilledMeters: optionalNumber,
     currentDepth: optionalNumber
   })
@@ -78,7 +94,37 @@ export const drillingShiftReportSchema = z
     metersDrilled: z.number(),
     drillingHours: optionalNumber,
     standbyHours: optionalNumber,
-    observations: optionalText
+    diameter: optionalText,
+    operator: optionalText,
+    observations: optionalText,
+    reportNumber: optionalText,
+    coreRecovery: optionalNumber,
+    waterReturn: optionalText,
+    rockType: optionalText,
+    rigName: optionalText,
+    coreBoxNumber: optionalText,
+    drillingMethod: z.enum(["DIAMOND", "REVERSE_AIR"]).nullable().optional(),
+    rcDiameter: optionalText,
+    casing: optionalText,
+    crownNumber: optionalText,
+    reamerNumber: optionalText,
+    shoeNumber: optionalText,
+    firstHelper: optionalText,
+    secondHelper: optionalText,
+    driver: optionalText,
+    supervisor: optionalText,
+    drillingChief: optionalText,
+    activities: z.array(z.record(z.string(), z.unknown())).nullable().optional(),
+    consumables: z.record(z.string(), z.unknown()).nullable().optional(),
+    additives: z.record(z.string(), z.unknown()).nullable().optional(),
+    timeDetail: z.record(z.string(), z.unknown()).nullable().optional(),
+    incidents: z.array(z.record(z.string(), z.unknown())).nullable().optional(),
+    reviewStatus: z.enum(["PENDING", "REVIEWED"]).optional(),
+    reviewedBy: optionalText,
+    reviewedAt: optionalText,
+    reviewNotes: optionalText,
+    createdAt: optionalText,
+    updatedAt: optionalText
   })
   .passthrough();
 
@@ -120,9 +166,16 @@ export type DrillingSample = z.infer<typeof drillingSampleSchema>;
 export type DrillingDispatch = z.infer<typeof drillingDispatchSchema>;
 export type DrillingSummary = z.infer<typeof drillingSummarySchema>;
 
-export const DRILLING_HOLE_STATUS_LABELS: Record<z.infer<typeof drillingHoleStatusSchema>, string> = {
-  PLANNED: "Planificado",
-  DRILLING: "En perforación",
+export type DrillingHoleStatus = z.infer<typeof drillingHoleStatusSchema>;
+export type DrillingHoleType = z.infer<typeof drillingHoleTypeSchema>;
+export type DrillingCategory = z.infer<typeof drillingCategorySchema>;
+
+export const DRILLING_HOLE_STATUSES = drillingHoleStatusSchema.options;
+
+// Mismos términos que el programa de perforación en Excel ("Proyectado", "Proceso").
+export const DRILLING_HOLE_STATUS_LABELS: Record<DrillingHoleStatus, string> = {
+  PLANNED: "Proyectado",
+  DRILLING: "En proceso",
   PAUSED: "Pausado",
   COMPLETED: "Terminado",
   ABANDONED: "Abandonado"

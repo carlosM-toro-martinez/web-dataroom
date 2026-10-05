@@ -7,6 +7,7 @@ const PRIVATE_PREFIXES = [
   "/dashboard",
   "/exploraciones",
   "/exploraciones-data-room",
+  "/sondajes",
   "/solicitudes-data-room",
   "/trabajadores",
   "/usuarios",

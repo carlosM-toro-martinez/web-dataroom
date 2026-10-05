@@ -67,6 +67,15 @@ export async function createDrillingCampaign(payload: Record<string, unknown>) {
   return parseOne(response.data, (value) => drillingCampaignSchema.parse(value));
 }
 
+export async function updateDrillingCampaign(id: string, payload: Record<string, unknown>) {
+  const response = await httpClient.patch(endpoints.campaignById(id), payload);
+  return parseOne(response.data, (value) => drillingCampaignSchema.parse(value));
+}
+
+export async function deleteDrillingCampaign(id: string) {
+  await httpClient.delete(endpoints.campaignById(id));
+}
+
 export async function getDrillingHoles(params?: ListParams) {
   const response = await httpClient.get(endpoints.holes, { params: cleanParams(params) });
   return parseList(response.data, (value) => drillingHoleSchema.parse(value));
@@ -87,6 +96,15 @@ export async function updateDrillingHole(id: string, payload: Record<string, unk
   return parseOne(response.data, (value) => drillingHoleSchema.parse(value));
 }
 
+export async function deleteDrillingHole(id: string) {
+  await httpClient.delete(endpoints.holeById(id));
+}
+
+export async function importDrillingHoles(payload: { campaignId: string; holes: Array<Record<string, unknown>> }) {
+  const response = await httpClient.post(endpoints.holesImport, payload);
+  return unwrapData(response.data) as { created: number };
+}
+
 // ─── Registros del pozo ──────────────────────────────────────────────────────
 export async function getDrillingShiftReports(holeId: string) {
   const response = await httpClient.get(endpoints.holeShiftReports(holeId));
@@ -96,6 +114,15 @@ export async function getDrillingShiftReports(holeId: string) {
 export async function createDrillingShiftReport(holeId: string, payload: Record<string, unknown>) {
   const response = await httpClient.post(endpoints.holeShiftReports(holeId), payload);
   return parseOne(response.data, (value) => drillingShiftReportSchema.parse(value));
+}
+
+export async function updateDrillingShiftReport(id: string, payload: Record<string, unknown>) {
+  const response = await httpClient.patch(endpoints.shiftReportById(id), payload);
+  return parseOne(response.data, (value) => drillingShiftReportSchema.parse(value));
+}
+
+export async function deleteDrillingShiftReport(id: string) {
+  await httpClient.delete(endpoints.shiftReportById(id));
 }
 
 export async function getDrillingHoleSamples(holeId: string) {

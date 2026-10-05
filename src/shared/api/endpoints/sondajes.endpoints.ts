@@ -11,6 +11,7 @@ export const sondajesEndpoints = {
   campaignById: (id: string) => `/api/drilling/campaigns/${id}`,
   holes: "/api/drilling/holes",
   holeById: (id: string) => `/api/drilling/holes/${id}`,
+  holesImport: "/api/drilling/holes/import",
   holeShiftReports: (holeId: string) => `/api/drilling/holes/${holeId}/shift-reports`,
   shiftReportById: (id: string) => `/api/drilling/shift-reports/${id}`,
   holeSurveys: (holeId: string) => `/api/drilling/holes/${holeId}/surveys`,
