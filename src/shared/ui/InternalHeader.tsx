@@ -1,5 +1,5 @@
 import { Link, useLocation, useNavigate } from "react-router-dom";
-import { ArrowLeft, ClipboardList, Database, LayoutDashboard, MapPinned, MoonStar, Settings, Sun, Users } from "lucide-react";
+import { ArrowLeft, ClipboardList, Database, Drill, LayoutDashboard, MapPinned, MoonStar, Settings, Sun, Users } from "lucide-react";
 import { useAuth } from "@/features/auth/context/AuthContext";
 import { useTheme } from "@/shared/theme/ThemeProvider";
 import { UserRouteMenu } from "@/shared/ui/UserRouteMenu";
@@ -10,16 +10,23 @@ type MainRoute = {
   to: string;
   icon: typeof LayoutDashboard;
   roles?: AuthRole[];
+  hiddenFor?: AuthRole[];
 };
 
 const MAIN_ROUTES: MainRoute[] = [
   { label: "Inicio", to: "/dashboard", icon: LayoutDashboard, roles: ["ADMIN", "SUPERINTENDENTE"] },
-  { label: "Data Room", to: "/exploraciones-data-room", icon: Database },
+  { label: "Data Room", to: "/exploraciones-data-room", icon: Database, hiddenFor: ["SONDAJES"] },
   {
     label: "Exploraciones",
     to: "/exploraciones",
     icon: MapPinned,
     roles: ["ADMIN", "SUPERINTENDENTE", "GEOLOGO"]
+  },
+  {
+    label: "Sondajes",
+    to: "/sondajes",
+    icon: Drill,
+    hiddenFor: ["VISITANTE"]
   },
   {
     label: "Ajustes",
@@ -57,6 +64,7 @@ export function InternalHeader({
   const location = useLocation();
   const navigate = useNavigate();
   const routes = MAIN_ROUTES.filter((route) => {
+    if (user?.role && route.hiddenFor?.includes(user.role)) return false;
     if (!route.roles?.length) return true;
     return user?.role ? route.roles.includes(user.role) : false;
   });

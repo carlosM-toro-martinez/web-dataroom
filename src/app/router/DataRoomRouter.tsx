@@ -20,10 +20,12 @@ import { ExploracionesDataRoomPage } from "@/pages/exploraciones/ExploracionesDa
 import { ExploracionesSurfaceDataRoomPage } from "@/pages/exploraciones/ExploracionesSurfaceDataRoomPage";
 import { ExploracionesFormsPage } from "@/pages/exploraciones/ExploracionesFormsPage";
 import { ExploracionesAjustesPage } from "@/pages/exploraciones/ExploracionesAjustesPage";
+import { SondajesPage } from "@/pages/sondajes/SondajesPage";
 import { ProtectedRoute } from "@/app/router/guards/ProtectedRoute";
 import { PublicOnlyRoute } from "@/app/router/guards/PublicOnlyRoute";
 import { AdminRoute } from "@/app/router/guards/AdminRoute";
 import { ExploracionesAdminRoute } from "@/app/router/guards/ExploracionesAdminRoute";
+import { SondajesRoute } from "@/app/router/guards/SondajesRoute";
 import { SeoManager } from "@/shared/seo/SeoManager";
 
 export function DataRoomRouter() {
@@ -66,6 +68,10 @@ export function DataRoomRouter() {
             <Route path="/exploraciones/elementos" element={<ExploracionesElementosPage />} />
             <Route path="/exploraciones/jerarquia" element={<ExploracionesHierarchyPage />} />
             <Route path="/exploraciones/reportes" element={<ExploracionesReportesPage />} />
+          </Route>
+
+          <Route element={<SondajesRoute />}>
+            <Route path="/sondajes" element={<SondajesPage />} />
           </Route>
 
           <Route element={<AdminRoute />}>

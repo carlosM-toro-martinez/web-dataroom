@@ -25,6 +25,7 @@ const roleOptions: AuthRole[] = [
   "VISITANTE",
   "GEOLOGOADMIN",
   "GEOLOGO",
+  "SONDAJES",
   "ADMINISTRADOR"
 ];
 

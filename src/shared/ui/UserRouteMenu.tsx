@@ -3,6 +3,7 @@ import { Link, useLocation, useNavigate } from "react-router-dom";
 import {
   ChevronDown,
   ClipboardList,
+  Drill,
   FolderKanban,
   LayoutDashboard,
   LogOut,
@@ -19,16 +20,23 @@ type RouteItem = {
   to: string;
   icon: typeof FolderKanban;
   roles?: AuthRole[];
+  hiddenFor?: AuthRole[];
 };
 
 const SYSTEM_ROUTES: RouteItem[] = [
   { label: "Inicio", to: "/dashboard", icon: LayoutDashboard, roles: ["ADMIN", "SUPERINTENDENTE"] },
-  { label: "Data Room", to: "/exploraciones-data-room", icon: FolderKanban },
+  { label: "Data Room", to: "/exploraciones-data-room", icon: FolderKanban, hiddenFor: ["SONDAJES"] },
   {
     label: "Exploraciones",
     to: "/exploraciones",
     icon: MapPinned,
     roles: ["ADMIN", "SUPERINTENDENTE", "GEOLOGO"]
+  },
+  {
+    label: "Sondajes",
+    to: "/sondajes",
+    icon: Drill,
+    hiddenFor: ["VISITANTE"]
   },
   {
     label: "Trabajadores",
@@ -68,7 +76,8 @@ export function UserRouteMenu({
   const routes = useMemo(
     () =>
       SYSTEM_ROUTES.filter((route) => {
-        if (!route.roles?.length) return true;
+        if (user?.role && route.hiddenFor?.includes(user.role)) return false;
+    if (!route.roles?.length) return true;
         return user?.role ? route.roles.includes(user.role) : false;
       }),
     [user?.role]

@@ -10,6 +10,7 @@ export const roleSchema = z.enum([
   "LABORATORISTA",
   "RECEPCIONISTA",
   "SOLICITANTE",
+  "SONDAJES",
   "SUPERINTENDENTE",
   "TOPOGRAFO",
   "TRABAJADOR",

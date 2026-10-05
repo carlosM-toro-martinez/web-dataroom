@@ -1,5 +1,5 @@
 import { Link, Navigate } from "react-router-dom";
-import { ClipboardList, Database, FileSpreadsheet, MapPinned, Users } from "lucide-react";
+import { ClipboardList, Database, Drill, FileSpreadsheet, MapPinned, Users } from "lucide-react";
 import { useAuth } from "@/features/auth/context/AuthContext";
 import { InternalHeader } from "@/shared/ui/InternalHeader";
 
@@ -39,6 +39,21 @@ export function DashboardPage() {
             <h2 className="text-lg font-bold">Exploraciones</h2>
             <p className="mt-2 text-sm text-[var(--color-on-surface-variant)]">
               Registra muestras, sincroniza datos y revisa resultados.
+            </p>
+          </Link>
+        ) : null}
+
+        {user?.role !== "VISITANTE" ? (
+          <Link to="/sondajes" className={cardClassName}>
+            <Drill size={22} className="mb-4 text-[var(--color-primary)]" />
+            <h2 className="flex items-center gap-2 text-lg font-bold">
+              Sondajes
+              <span className="rounded-full border border-[var(--color-primary)] px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-[var(--color-primary)]">
+                Próximamente
+              </span>
+            </h2>
+            <p className="mt-2 text-sm text-[var(--color-on-surface-variant)]">
+              Seguimiento de perforaciones: avance, testigos, logueo y muestras.
             </p>
           </Link>
         ) : null}
