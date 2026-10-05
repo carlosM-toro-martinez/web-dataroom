@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import {
   Boxes,
@@ -13,6 +13,7 @@ import {
   FolderKanban,
   FolderPlus,
   Layers,
+  MoreVertical,
   Pencil,
   Plus,
   Ruler,
@@ -674,25 +675,71 @@ function RowActions({
   onEdit: () => void;
   onDelete: () => void;
 }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  // Cerrar al hacer clic fuera o con Escape
+  useEffect(() => {
+    if (!open) return;
+    function handleClick(event: MouseEvent) {
+      if (ref.current && !ref.current.contains(event.target as Node)) setOpen(false);
+    }
+    function handleKey(event: KeyboardEvent) {
+      if (event.key === "Escape") setOpen(false);
+    }
+    document.addEventListener("mousedown", handleClick);
+    document.addEventListener("keydown", handleKey);
+    return () => {
+      document.removeEventListener("mousedown", handleClick);
+      document.removeEventListener("keydown", handleKey);
+    };
+  }, [open]);
+
+  const item = (icon: React.ReactNode, label: string, onClick: () => void, danger = false) => (
+    <button
+      type="button"
+      className={`flex w-full items-center gap-2.5 px-3 py-2 text-left text-sm transition hover:bg-[var(--color-surface-container-high)] ${
+        danger ? "text-rose-500 hover:text-rose-600" : "text-[var(--color-on-surface)] hover:text-[var(--color-primary)]"
+      }`}
+      onClick={() => { onClick(); setOpen(false); }}
+    >
+      {icon}
+      {label}
+    </button>
+  );
+
   return (
-    <div className="flex items-center justify-end gap-1">
-      <Link
-        to={`/sondajes/pozos/${holeId}`}
-        className="mr-1 inline-flex items-center gap-1.5 rounded-lg border border-[var(--color-border-soft)] px-2.5 py-1.5 text-xs font-semibold transition hover:border-[var(--color-primary)] hover:text-[var(--color-primary)]"
-        title="Partes diarios"
+    <div ref={ref} className="relative flex justify-end">
+      <button
+        type="button"
+        className={iconButton}
+        title="Acciones"
+        aria-haspopup="menu"
+        aria-expanded={open}
+        onClick={() => setOpen((v) => !v)}
       >
-        <ClipboardList size={14} />
-        Partes
-      </Link>
-      <button type="button" className={iconButton} title="Ver" onClick={onView}>
-        <Eye size={16} />
+        <MoreVertical size={16} />
       </button>
-      <button type="button" className={iconButton} title="Editar" onClick={onEdit}>
-        <Pencil size={16} />
-      </button>
-      <button type="button" className={`${iconButton} hover:text-rose-600`} title="Eliminar" onClick={onDelete}>
-        <Trash2 size={16} />
-      </button>
+
+      {open ? (
+        <div
+          role="menu"
+          className="absolute right-0 top-full z-50 mt-1 w-48 overflow-hidden rounded-xl border border-[var(--color-border-soft)] bg-[var(--color-surface-container)] py-1 shadow-xl"
+        >
+          <Link
+            to={`/sondajes/pozos/${holeId}`}
+            className="flex items-center gap-2.5 px-3 py-2 text-sm transition hover:bg-[var(--color-surface-container-high)] hover:text-[var(--color-primary)]"
+            onClick={() => setOpen(false)}
+          >
+            <ClipboardList size={15} />
+            Partes diarios
+          </Link>
+          {item(<Eye size={15} />, "Ver detalle", onView)}
+          {item(<Pencil size={15} />, "Editar pozo", onEdit)}
+          <div className="my-1 border-t border-[var(--color-border-soft)]" />
+          {item(<Trash2 size={15} />, "Eliminar pozo", onDelete, true)}
+        </div>
+      ) : null}
     </div>
   );
 }
