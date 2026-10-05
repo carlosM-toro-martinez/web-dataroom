@@ -274,6 +274,21 @@ export function useInteriorLaboratoriesQuery() {
   });
 }
 
+// El backend pagina las muestras; se recorren todas las páginas para que listas,
+// lotes y exportaciones no se corten en las primeras SAMPLE_PAGE_SIZE.
+const SAMPLE_PAGE_SIZE = 500;
+const SAMPLE_MAX_PAGES = 100;
+
+async function fetchAllSamplePages<T>(fetchPage: (page: number, limit: number) => Promise<T[]>) {
+  const all: T[] = [];
+  for (let page = 1; page <= SAMPLE_MAX_PAGES; page++) {
+    const rows = await fetchPage(page, SAMPLE_PAGE_SIZE);
+    all.push(...rows);
+    if (rows.length < SAMPLE_PAGE_SIZE) break;
+  }
+  return all;
+}
+
 export function useInteriorSamplesQuery(params: {
   interiorLaborId?: string;
   createdById?: number;
@@ -284,7 +299,7 @@ export function useInteriorSamplesQuery(params: {
 }) {
   return useQuery({
     queryKey: [...base, "interior", "samples", params],
-    queryFn: () => getInteriorSamples({ ...params, page: 1, limit: 200 })
+    queryFn: () => fetchAllSamplePages((page, limit) => getInteriorSamples({ ...params, page, limit }))
   });
 }
 
@@ -348,7 +363,7 @@ export function useSurfaceSamplesQuery(params: {
 }) {
   return useQuery({
     queryKey: [...base, "surface", "samples", params],
-    queryFn: () => getSurfaceSamples({ ...params, page: 1, limit: 200 })
+    queryFn: () => fetchAllSamplePages((page, limit) => getSurfaceSamples({ ...params, page, limit }))
   });
 }
 
