@@ -204,7 +204,12 @@ export function useSavePersonnelMutation() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: savePersonnel,
-    onSuccess: () => qc.invalidateQueries({ queryKey: [...base, "personnel"] })
+    onSuccess: (_, person) => {
+      // Actualiza el cache inmediatamente (sin esperar refetch de IndexedDB).
+      qc.setQueryData<DrillingPersonnelLocal[]>([...base, "personnel"], (old = []) =>
+        [...old.filter((p) => p.id !== person.id), person].sort((a, b) => a.name.localeCompare(b.name, "es"))
+      );
+    }
   });
 }
 
@@ -212,7 +217,11 @@ export function useDeletePersonnelMutation() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (id: string) => deletePersonnel(id),
-    onSuccess: () => qc.invalidateQueries({ queryKey: [...base, "personnel"] })
+    onSuccess: (_, id) => {
+      qc.setQueryData<DrillingPersonnelLocal[]>([...base, "personnel"], (old = []) =>
+        old.filter((p) => p.id !== id)
+      );
+    }
   });
 }
 
