@@ -19,6 +19,7 @@ import {
   Ruler,
   Search,
   Trash2,
+  Users,
   X
 } from "lucide-react";
 import { InternalHeader } from "@/shared/ui/InternalHeader";
@@ -45,6 +46,7 @@ import { HoleFormModal } from "@/features/sondajes/components/HoleFormModal";
 import { HoleDetailModal } from "@/features/sondajes/components/HoleDetailModal";
 import { ProgramFormModal } from "@/features/sondajes/components/ProgramFormModal";
 import { ImportProgramModal, type ImportRequest } from "@/features/sondajes/components/ImportProgramModal";
+import { PersonnelModal } from "@/features/sondajes/components/PersonnelModal";
 import { SyncBar } from "@/features/sondajes/components/SyncBar";
 import { useShiftReportsSync } from "@/features/sondajes/hooks/useShiftReportsSync";
 import {
@@ -117,6 +119,7 @@ export function SondajesPage() {
   const [programForm, setProgramForm] = useState<{ open: boolean; campaign: DrillingCampaign | null }>({ open: false, campaign: null });
   const [detailHoleId, setDetailHoleId] = useState<string | null>(null);
   const [importOpen, setImportOpen] = useState(false);
+  const [personnelOpen, setPersonnelOpen] = useState(false);
   const [confirm, setConfirm] = useState<ConfirmState>(null);
   const [statusSavingId, setStatusSavingId] = useState<string | null>(null);
 
@@ -260,6 +263,10 @@ export function SondajesPage() {
       />
 
       <div className="flex flex-wrap items-center justify-end gap-2">
+        <button type="button" className={secondaryButton} onClick={() => setPersonnelOpen(true)}>
+          <Users size={16} />
+          Personal
+        </button>
         <button type="button" className={secondaryButton} onClick={() => setImportOpen(true)}>
           <FileSpreadsheet size={16} />
           Importar Excel
@@ -512,6 +519,7 @@ export function SondajesPage() {
         onClose={() => setImportOpen(false)}
         onImport={runImport}
       />
+      <PersonnelModal open={personnelOpen} onClose={() => setPersonnelOpen(false)} />
       <HoleDetailModal
         hole={detailHole}
         campaign={detailHole ? campaignById.get(detailHole.campaignId) : undefined}

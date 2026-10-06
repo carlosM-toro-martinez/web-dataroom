@@ -23,6 +23,7 @@ import {
   useDrillingCampaignsQuery,
   useDrillingHolesQuery,
   useHoleShiftReportsQuery,
+  usePersonnelQuery,
   useQueueShiftReportMutation
 } from "@/features/sondajes/hooks/useSondajes";
 import { useShiftReportsSync } from "@/features/sondajes/hooks/useShiftReportsSync";
@@ -69,6 +70,7 @@ export function SondajesHolePage() {
   const holesQuery = useDrillingHolesQuery();
   const campaignsQuery = useDrillingCampaignsQuery();
   const reportsQuery = useHoleShiftReportsQuery(holeId);
+  const { data: personnel = [] } = usePersonnelQuery();
   const sync = useShiftReportsSync();
   const queueReport = useQueueShiftReportMutation();
   const deleteReport = useDeleteShiftReportMutation();
@@ -313,6 +315,7 @@ export function SondajesHolePage() {
         campaign={campaign}
         reports={reports}
         suggestedFrom={totals.currentDepth}
+        personnel={personnel}
         saving={isSaving}
         onClose={() => setForm({ open: false, report: null })}
         onSubmit={saveReport}

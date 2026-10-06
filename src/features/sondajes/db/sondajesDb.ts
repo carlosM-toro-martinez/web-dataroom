@@ -82,11 +82,24 @@ export interface QueuedShiftReport {
   updatedAt: string;
 }
 
+// ─── Personal de perforación ─────────────────────────────────────────────────
+export type PersonnelRole = "operator" | "firstHelper" | "secondHelper" | "driver" | "supervisor" | "drillingChief";
+export type PersonnelShift = "DAY" | "NIGHT" | "BOTH";
+
+export interface DrillingPersonnelLocal {
+  id: string;
+  name: string;
+  role: PersonnelRole;
+  shift: PersonnelShift;
+  active: boolean;
+}
+
 class SondajesDb extends Dexie {
   campaigns!: EntityTable<CachedCampaign, "id">;
   holes!: EntityTable<CachedHole, "id">;
   shiftReports!: EntityTable<CachedShiftReport, "id">;
   shiftReportQueue!: EntityTable<QueuedShiftReport, "localId">;
+  personnel!: EntityTable<DrillingPersonnelLocal, "id">;
 
   constructor() {
     super("marteSondajesDb");
@@ -95,6 +108,9 @@ class SondajesDb extends Dexie {
       holes: "id, campaignId",
       shiftReports: "id, holeId",
       shiftReportQueue: "localId, holeId, remoteId, createdAt"
+    });
+    this.version(2).stores({
+      personnel: "id, role, shift"
     });
   }
 }
@@ -217,4 +233,17 @@ export async function markQueuedShiftReportError(localId: string, message: strin
 
 export async function removeCachedShiftReport(id: string) {
   await sondajesDb.shiftReports.delete(id);
+}
+
+// ─── CRUD Personal ───────────────────────────────────────────────────────────
+export async function getAllPersonnel(): Promise<DrillingPersonnelLocal[]> {
+  return sondajesDb.personnel.orderBy("name").toArray();
+}
+
+export async function savePersonnel(person: DrillingPersonnelLocal): Promise<void> {
+  await sondajesDb.personnel.put(person);
+}
+
+export async function deletePersonnel(id: string): Promise<void> {
+  await sondajesDb.personnel.delete(id);
 }

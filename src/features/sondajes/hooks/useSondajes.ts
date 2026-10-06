@@ -21,13 +21,17 @@ import {
   getCachedHoles,
   getCachedShiftReports,
   getShiftReportQueue,
+  getAllPersonnel,
+  savePersonnel,
+  deletePersonnel,
   queueNewShiftReport,
   queueShiftReportEdit,
   removeCachedShiftReport,
   replaceCachedCampaigns,
   replaceCachedHoles,
   replaceCachedShiftReports,
-  type ShiftReportPayload
+  type ShiftReportPayload,
+  type DrillingPersonnelLocal
 } from "@/features/sondajes/db/sondajesDb";
 import { isConnectivityIssue, syncPendingShiftReports } from "@/features/sondajes/services/shiftReportsSync";
 
@@ -186,3 +190,30 @@ export function useImportDrillingHolesMutation() {
   return useMutation({ mutationFn: importDrillingHoles, onSuccess: invalidate });
 }
 
+
+// ─── Personal de perforación (IndexedDB local) ────────────────────────────────
+export function usePersonnelQuery() {
+  return useQuery({
+    queryKey: [...base, "personnel"],
+    queryFn: getAllPersonnel,
+    ...offlineQueryOptions
+  });
+}
+
+export function useSavePersonnelMutation() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: savePersonnel,
+    onSuccess: () => qc.invalidateQueries({ queryKey: [...base, "personnel"] })
+  });
+}
+
+export function useDeletePersonnelMutation() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => deletePersonnel(id),
+    onSuccess: () => qc.invalidateQueries({ queryKey: [...base, "personnel"] })
+  });
+}
+
+export type { DrillingPersonnelLocal };

@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState, type FormEvent, type ReactNode } from "react";
 import { AlertTriangle, ClipboardList, Info, Plus, Save, Sparkles, Trash2 } from "lucide-react";
 import type { DrillingCampaign, DrillingHole } from "@/features/sondajes/model/sondajes.schema";
-import { newLocalId, type ShiftActivity, type ShiftIncident, type ShiftReportPayload } from "@/features/sondajes/db/sondajesDb";
+import { newLocalId, type DrillingPersonnelLocal, type PersonnelRole, type ShiftActivity, type ShiftIncident, type ShiftReportPayload } from "@/features/sondajes/db/sondajesDb";
 import { REPORTE_DIARIO } from "@/features/sondajes/config/reporteDiarioFormato";
 import {
   isoToReportDate,
@@ -147,6 +147,42 @@ function buildInitial(
 
 const TIME_PATTERN = /^([01]?\d|2[0-3]):[0-5]\d$/;
 
+// Mapa de rol → campo del formulario
+const ROLE_TO_FIELD: Record<PersonnelRole, TextKey> = {
+  operator: "operator",
+  firstHelper: "firstHelper",
+  secondHelper: "secondHelper",
+  driver: "driver",
+  supervisor: "supervisor",
+  drillingChief: "drillingChief"
+};
+
+const PERSONNEL_TEXT_KEYS: TextKey[] = ["operator", "firstHelper", "secondHelper", "driver", "supervisor", "drillingChief"];
+
+// Rellena los campos de personal vacíos (o marcados como auto) con los datos de la BD local.
+function applyPersonnel(
+  text: Record<TextKey, string>,
+  autoSet: Set<string>,
+  shift: "DAY" | "NIGHT",
+  personnel: DrillingPersonnelLocal[],
+  forceOverwrite = false
+): { text: Record<TextKey, string>; newAuto: Set<string> } {
+  const newText = { ...text };
+  const newAuto = new Set(autoSet);
+  for (const role of Object.keys(ROLE_TO_FIELD) as PersonnelRole[]) {
+    const field = ROLE_TO_FIELD[role];
+    const isEmpty = !newText[field]?.trim();
+    const wasAuto = newAuto.has(field);
+    if (!isEmpty && !wasAuto && !forceOverwrite) continue;
+    const matches = personnel.filter((p) => p.active && p.role === role && (p.shift === shift || p.shift === "BOTH"));
+    if (matches.length === 1) {
+      newText[field] = matches[0].name;
+      newAuto.add(field);
+    }
+  }
+  return { text: newText, newAuto };
+}
+
 export function ShiftReportFormModal({
   open,
   report,
@@ -154,6 +190,7 @@ export function ShiftReportFormModal({
   campaign,
   reports,
   suggestedFrom,
+  personnel = [],
   saving,
   onClose,
   onSubmit
@@ -164,6 +201,7 @@ export function ShiftReportFormModal({
   campaign?: DrillingCampaign;
   reports: ShiftReportView[];
   suggestedFrom: number;
+  personnel?: DrillingPersonnelLocal[];
   saving: boolean;
   onClose: () => void;
   onSubmit: (payload: ShiftReportPayload) => Promise<void>;
@@ -177,6 +215,12 @@ export function ShiftReportFormModal({
   useEffect(() => {
     if (!open) return;
     const initial = buildInitial(report, { hole, reports, suggestedFrom });
+    // Si es un parte nuevo, rellena personal vacío desde la BD local.
+    if (!report && personnel.length > 0) {
+      const applied = applyPersonnel(initial.state.text, initial.auto, initial.state.shift, personnel);
+      initial.state.text = applied.text;
+      initial.auto = applied.newAuto;
+    }
     setForm(initial.state);
     setAuto(initial.auto);
     setErrors({});
@@ -194,6 +238,21 @@ export function ShiftReportFormModal({
       return next;
     });
   };
+
+  // Al cambiar de turno, rellena personal vacío (o auto) desde la BD local.
+  function setShift(shift: "DAY" | "NIGHT") {
+    setForm((current) => {
+      if (personnel.length === 0) return { ...current, shift };
+      const applied = applyPersonnel(current.text, auto, shift, personnel);
+      setAuto(applied.newAuto);
+      return { ...current, shift, text: applied.text };
+    });
+    setAuto((current) => {
+      const next = new Set(current);
+      next.delete("drillingMethod");
+      return next;
+    });
+  }
 
   const from = toNumberOrNull(form.text.fromDepth);
   const to = toNumberOrNull(form.text.toDepth);
@@ -414,7 +473,7 @@ export function ShiftReportFormModal({
                   <button
                     key={value}
                     type="button"
-                    onClick={() => setForm((current) => ({ ...current, shift: value }))}
+                    onClick={() => setShift(value)}
                     className={`rounded-xl border px-3 py-2.5 text-sm font-bold transition ${
                       form.shift === value
                         ? "border-[var(--color-primary)] bg-[var(--color-primary)] text-[var(--color-on-primary)]"
@@ -452,8 +511,8 @@ export function ShiftReportFormModal({
             </div>
             <div className="grid gap-3 sm:grid-cols-2">
               <Field label="Retorno de agua">{textInput("waterReturn", { placeholder: "Ej. 100%" })}</Field>
-              <Field label="Roca atravesada">{textInput("rockType")}</Field>
-              <Field label={label("Máquina de perforación", "rigName")}>{textInput("rigName")}</Field>
+              <Field label="Roca atravesada">{textInput("rockType", { placeholder: "Ej. Andesita" })}</Field>
+              <Field label={label("Máquina de perforación", "rigName")}>{textInput("rigName", { placeholder: "Ej. LF-90 #2" })}</Field>
               <Field label="Nº caja de core">{textInput("coreBoxNumber", { placeholder: "Ej. 31 - 34" })}</Field>
             </div>
           </div>
@@ -473,24 +532,16 @@ export function ShiftReportFormModal({
                 <p className="mb-1.5 flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wider text-[var(--color-on-surface-variant)]">
                   Perforación {auto.has("drillingMethod") ? <AutoTag /> : null}
                 </p>
-                <div className="grid grid-cols-2 gap-2">
-                  {(["DIAMOND", "REVERSE_AIR"] as const).map((value) => (
-                    <Choice
-                      key={value}
-                      active={form.drillingMethod === value}
-                      onClick={() => {
-                        setForm((current) => ({ ...current, drillingMethod: current.drillingMethod === value ? "" : value }));
-                        setAuto((current) => {
-                          const next = new Set(current);
-                          next.delete("drillingMethod");
-                          return next;
-                        });
-                      }}
-                    >
-                      {F.perforacion[value]}
-                    </Choice>
-                  ))}
-                </div>
+                {/* Solo se muestra DIAMANTINA; REVERSE_AIR queda en el modelo para pozos RC ya guardados. */}
+                <Choice
+                  active={form.drillingMethod === "DIAMOND"}
+                  onClick={() => {
+                    setForm((current) => ({ ...current, drillingMethod: current.drillingMethod === "DIAMOND" ? "" : "DIAMOND" }));
+                    setAuto((current) => { const next = new Set(current); next.delete("drillingMethod"); return next; });
+                  }}
+                >
+                  {F.perforacion["DIAMOND"]}
+                </Choice>
               </div>
               <div>
                 <p className="mb-1.5 flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wider text-[var(--color-on-surface-variant)]">
@@ -505,25 +556,46 @@ export function ShiftReportFormModal({
                 </div>
               </div>
               <div className="grid grid-cols-2 gap-3">
-                <Field label={label("RC", "rcDiameter")}>{textInput("rcDiameter")}</Field>
-                <Field label={label("Casing", "casing")}>{textInput("casing")}</Field>
+                <Field label={label("RC", "rcDiameter")}>{textInput("rcDiameter", { placeholder: "Ej. 4½\"" })}</Field>
+                <Field label={label("Casing", "casing")}>{textInput("casing", { placeholder: "Ej. HW 6 m" })}</Field>
               </div>
             </div>
             <div className="grid content-start gap-3 sm:grid-cols-3 lg:grid-cols-1">
-              <Field label={label("Corona Nro.", "crownNumber")}>{textInput("crownNumber")}</Field>
-              <Field label={label("Escareador Nro.", "reamerNumber")}>{textInput("reamerNumber")}</Field>
-              <Field label={label("Zapata Nro.", "shoeNumber")}>{textInput("shoeNumber")}</Field>
+              <Field label={label("Corona Nro.", "crownNumber")}>{textInput("crownNumber", { placeholder: "Ej. C-4471" })}</Field>
+              <Field label={label("Escareador Nro.", "reamerNumber")}>{textInput("reamerNumber", { placeholder: "Ej. R-102" })}</Field>
+              <Field label={label("Zapata Nro.", "shoeNumber")}>{textInput("shoeNumber", { placeholder: "Ej. Z-203" })}</Field>
             </div>
           </div>
         </Sheet>
 
+        {/* Datalists para autocomplete de personal */}
+        {PERSONNEL_TEXT_KEYS.map((field) => {
+          const role = (Object.keys(ROLE_TO_FIELD) as PersonnelRole[]).find((r) => ROLE_TO_FIELD[r] === field);
+          if (!role) return null;
+          const names = personnel.filter((p) => p.active && p.role === role).map((p) => p.name);
+          if (!names.length) return null;
+          return (
+            <datalist key={field} id={`dl-${field}`}>
+              {names.map((name) => <option key={name} value={name} />)}
+            </datalist>
+          );
+        })}
+
         {/* Personal */}
         <Sheet>
           <div className="grid gap-3 p-4 sm:grid-cols-2 lg:grid-cols-4">
-            <Field label={label("Perforista", "operator")}>{textInput("operator")}</Field>
-            <Field label={label("Ayte. primera", "firstHelper")}>{textInput("firstHelper")}</Field>
-            <Field label={label("Ayte. segunda", "secondHelper")}>{textInput("secondHelper")}</Field>
-            <Field label={label("Chofer", "driver")}>{textInput("driver")}</Field>
+            <Field label={label("Perforista", "operator")}>
+              <input className={fieldClass} list="dl-operator" placeholder="Nombre del perforista" value={form.text.operator} onChange={(e) => setText("operator")(e.target.value)} />
+            </Field>
+            <Field label={label("Ayte. primera", "firstHelper")}>
+              <input className={fieldClass} list="dl-firstHelper" placeholder="Nombre del ayudante" value={form.text.firstHelper} onChange={(e) => setText("firstHelper")(e.target.value)} />
+            </Field>
+            <Field label={label("Ayte. segunda", "secondHelper")}>
+              <input className={fieldClass} list="dl-secondHelper" placeholder="Nombre del ayudante" value={form.text.secondHelper} onChange={(e) => setText("secondHelper")(e.target.value)} />
+            </Field>
+            <Field label={label("Chofer", "driver")}>
+              <input className={fieldClass} list="dl-driver" placeholder="Nombre del chofer" value={form.text.driver} onChange={(e) => setText("driver")(e.target.value)} />
+            </Field>
           </div>
         </Sheet>
 
@@ -554,7 +626,7 @@ export function ShiftReportFormModal({
                 {(
                   [
                     ["from", "07:00"],
-                    ["to", "12:00"],
+                    ["to", "18:30"],
                     ["depthFrom", "De"],
                     ["depthTo", "A"]
                   ] as const
@@ -562,7 +634,8 @@ export function ShiftReportFormModal({
                   <input
                     key={key}
                     className={`${fieldClass} px-2 font-mono text-xs tabular-nums ${errors[`act.${index}.${key}`] ? "border-rose-500" : ""}`}
-                    inputMode={key.startsWith("depth") ? "decimal" : "numeric"}
+                    // Horas: teclado de texto completo. Profundidades: teclado numérico.
+                    inputMode={key.startsWith("depth") ? "decimal" : "text"}
                     value={row[key]}
                     placeholder={placeholder}
                     title={errors[`act.${index}.${key}`]}
@@ -641,13 +714,18 @@ export function ShiftReportFormModal({
             <Field label="Observaciones">
               <textarea
                 className={`${fieldClass} min-h-[96px] resize-y`}
+                placeholder="Ej. Inicio del pozo sin novedad. Buen retorno de agua."
                 value={form.text.observations}
                 onChange={(event) => setText("observations")(event.target.value)}
               />
             </Field>
             <div className="grid gap-3 sm:grid-cols-3">
-              <Field label={label(F.firmas[0], "supervisor")}>{textInput("supervisor", { placeholder: "Nombre" })}</Field>
-              <Field label={label(F.firmas[1], "drillingChief")}>{textInput("drillingChief", { placeholder: "Nombre" })}</Field>
+              <Field label={label(F.firmas[0], "supervisor")}>
+                <input className={fieldClass} list="dl-supervisor" placeholder="Nombre del supervisor" value={form.text.supervisor} onChange={(e) => setText("supervisor")(e.target.value)} />
+              </Field>
+              <Field label={label(F.firmas[1], "drillingChief")}>
+                <input className={fieldClass} list="dl-drillingChief" placeholder="Nombre del jefe" value={form.text.drillingChief} onChange={(e) => setText("drillingChief")(e.target.value)} />
+              </Field>
               <ReadOnly label={F.firmas[2]} value={form.text.operator || "— (el perforista)"} />
             </div>
           </div>
