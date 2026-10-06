@@ -67,13 +67,7 @@ const CARRY_OVER: TextKey[] = [
   "casing",
   "crownNumber",
   "reamerNumber",
-  "shoeNumber",
-  "operator",
-  "firstHelper",
-  "secondHelper",
-  "driver",
-  "supervisor",
-  "drillingChief"
+  "shoeNumber"
 ];
 
 function buildInitial(
