@@ -160,7 +160,7 @@ export function PersonnelModal({ open, onClose }: { open: boolean; onClose: () =
       <Modal
         open={Boolean(editing)}
         onClose={() => setEditing(null)}
-        size="sm"
+        size="md"
         icon={<Users size={20} />}
         title={editing?.id ? "Editar persona" : "Agregar persona"}
         footer={
@@ -238,7 +238,7 @@ export function PersonnelModal({ open, onClose }: { open: boolean; onClose: () =
       <Modal
         open={Boolean(confirmDeleteId)}
         onClose={() => setConfirmDeleteId(null)}
-        size="sm"
+        size="md"
         icon={<Trash2 size={20} />}
         title="Eliminar persona"
         footer={
