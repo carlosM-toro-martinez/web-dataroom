@@ -135,6 +135,40 @@ export async function createDrillingSample(holeId: string, payload: Record<strin
   return parseOne(response.data, (value) => drillingSampleSchema.parse(value));
 }
 
+// ─── Personal de perforación ─────────────────────────────────────────────────
+export type DrillingPersonnelPayload = {
+  name: string;
+  role: string;
+  shift: string;
+  active?: boolean;
+};
+
+export type DrillingPersonnelItem = DrillingPersonnelPayload & { id: string; active: boolean };
+
+function parsePersonnel(value: unknown): DrillingPersonnelItem {
+  const v = value as Record<string, unknown>;
+  return { id: String(v.id), name: String(v.name), role: String(v.role), shift: String(v.shift), active: Boolean(v.active !== false) };
+}
+
+export async function getDrillingPersonnel(): Promise<DrillingPersonnelItem[]> {
+  const response = await httpClient.get(endpoints.personnel, { params: { limit: 500 } });
+  return parseList(response.data, parsePersonnel);
+}
+
+export async function createDrillingPersonnel(payload: DrillingPersonnelPayload): Promise<DrillingPersonnelItem> {
+  const response = await httpClient.post(endpoints.personnel, payload);
+  return parsePersonnel(unwrapData(response.data));
+}
+
+export async function updateDrillingPersonnel(id: string, payload: Partial<DrillingPersonnelPayload>): Promise<DrillingPersonnelItem> {
+  const response = await httpClient.patch(endpoints.personnelById(id), payload);
+  return parsePersonnel(unwrapData(response.data));
+}
+
+export async function deleteDrillingPersonnel(id: string): Promise<void> {
+  await httpClient.delete(endpoints.personnelById(id));
+}
+
 // ─── Lotes ───────────────────────────────────────────────────────────────────
 export async function getDrillingDispatches(params?: ListParams) {
   const response = await httpClient.get(endpoints.dispatches, { params: cleanParams(params) });

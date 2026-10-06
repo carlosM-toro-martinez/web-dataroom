@@ -1,7 +1,6 @@
 import { useState } from "react";
 import { Pencil, Plus, Trash2, Users } from "lucide-react";
 import { usePersonnelQuery, useDeletePersonnelMutation, useSavePersonnelMutation, type DrillingPersonnelLocal } from "@/features/sondajes/hooks/useSondajes";
-import { newLocalId } from "@/features/sondajes/db/sondajesDb";
 import type { PersonnelRole, PersonnelShift } from "@/features/sondajes/db/sondajesDb";
 import { Modal, dangerButton, fieldClass, primaryButton, secondaryButton } from "@/features/sondajes/components/ui";
 
@@ -51,7 +50,7 @@ export function PersonnelModal({ open, onClose }: { open: boolean; onClose: () =
   async function save() {
     if (!editing || !editing.form.name.trim()) return;
     await saveMutation.mutateAsync({
-      id: editing.id ?? newLocalId(),
+      id: editing.id,
       name: editing.form.name.trim(),
       role: editing.form.role,
       shift: editing.form.shift,

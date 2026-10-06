@@ -28,5 +28,7 @@ export const sondajesEndpoints = {
   sampleResults: (sampleId: string) => `/api/drilling/samples/${sampleId}/results`,
   resultById: (id: string) => `/api/drilling/results/${id}`,
   dispatches: "/api/drilling/dispatches",
-  dispatchById: (id: string) => `/api/drilling/dispatches/${id}`
+  dispatchById: (id: string) => `/api/drilling/dispatches/${id}`,
+  personnel: "/api/drilling/personnel",
+  personnelById: (id: string) => `/api/drilling/personnel/${id}`
 } as const;

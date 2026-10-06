@@ -235,15 +235,14 @@ export async function removeCachedShiftReport(id: string) {
   await sondajesDb.shiftReports.delete(id);
 }
 
-// ─── CRUD Personal ───────────────────────────────────────────────────────────
-export async function getAllPersonnel(): Promise<DrillingPersonnelLocal[]> {
+// ─── Caché offline del personal (se llena desde el servidor) ─────────────────
+export async function getCachedPersonnel(): Promise<DrillingPersonnelLocal[]> {
   return sondajesDb.personnel.orderBy("name").toArray();
 }
 
-export async function savePersonnel(person: DrillingPersonnelLocal): Promise<void> {
-  await sondajesDb.personnel.put(person);
-}
-
-export async function deletePersonnel(id: string): Promise<void> {
-  await sondajesDb.personnel.delete(id);
+export async function replaceCachedPersonnel(items: DrillingPersonnelLocal[]): Promise<void> {
+  await sondajesDb.transaction("rw", sondajesDb.personnel, async () => {
+    await sondajesDb.personnel.clear();
+    await sondajesDb.personnel.bulkPut(items);
+  });
 }

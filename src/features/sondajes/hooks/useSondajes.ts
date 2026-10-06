@@ -20,10 +20,9 @@ import {
   getCachedCampaigns,
   getCachedHoles,
   getCachedShiftReports,
+  getCachedPersonnel,
+  replaceCachedPersonnel,
   getShiftReportQueue,
-  getAllPersonnel,
-  savePersonnel,
-  deletePersonnel,
   queueNewShiftReport,
   queueShiftReportEdit,
   removeCachedShiftReport,
@@ -33,6 +32,12 @@ import {
   type ShiftReportPayload,
   type DrillingPersonnelLocal
 } from "@/features/sondajes/db/sondajesDb";
+import {
+  createDrillingPersonnel,
+  updateDrillingPersonnel,
+  deleteDrillingPersonnel,
+  getDrillingPersonnel
+} from "@/features/sondajes/api/sondajesApi";
 import { isConnectivityIssue, syncPendingShiftReports } from "@/features/sondajes/services/shiftReportsSync";
 
 const base = ["sondajes"] as const;
@@ -191,11 +196,19 @@ export function useImportDrillingHolesMutation() {
 }
 
 
-// ─── Personal de perforación (IndexedDB local) ────────────────────────────────
+// ─── Personal de perforación (servidor + caché offline) ──────────────────────
 export function usePersonnelQuery() {
   return useQuery({
     queryKey: [...base, "personnel"],
-    queryFn: getAllPersonnel,
+    queryFn: () =>
+      withOfflineCache(
+        async () => {
+          const items = await getDrillingPersonnel();
+          return items as DrillingPersonnelLocal[];
+        },
+        replaceCachedPersonnel,
+        getCachedPersonnel
+      ),
     ...offlineQueryOptions
   });
 }
@@ -203,11 +216,16 @@ export function usePersonnelQuery() {
 export function useSavePersonnelMutation() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: savePersonnel,
-    onSuccess: (_, person) => {
-      // Actualiza el cache inmediatamente (sin esperar refetch de IndexedDB).
+    mutationFn: async (person: { id: string | null; name: string; role: string; shift: string; active: boolean }) => {
+      const payload = { name: person.name, role: person.role, shift: person.shift, active: person.active };
+      const saved = person.id
+        ? await updateDrillingPersonnel(person.id, payload)
+        : await createDrillingPersonnel(payload);
+      return saved as DrillingPersonnelLocal;
+    },
+    onSuccess: (saved) => {
       qc.setQueryData<DrillingPersonnelLocal[]>([...base, "personnel"], (old = []) =>
-        [...old.filter((p) => p.id !== person.id), person].sort((a, b) => a.name.localeCompare(b.name, "es"))
+        [...old.filter((p) => p.id !== saved.id), saved].sort((a, b) => a.name.localeCompare(b.name, "es"))
       );
     }
   });
@@ -216,7 +234,7 @@ export function useSavePersonnelMutation() {
 export function useDeletePersonnelMutation() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (id: string) => deletePersonnel(id),
+    mutationFn: (id: string) => deleteDrillingPersonnel(id),
     onSuccess: (_, id) => {
       qc.setQueryData<DrillingPersonnelLocal[]>([...base, "personnel"], (old = []) =>
         old.filter((p) => p.id !== id)
