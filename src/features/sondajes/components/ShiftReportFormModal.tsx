@@ -568,14 +568,16 @@ export function ShiftReportFormModal({
           </div>
         </Sheet>
 
-        {/* Datalists para autocomplete de personal */}
+        {/* Datalists para autocomplete de personal — filtrados por turno activo */}
         {PERSONNEL_TEXT_KEYS.map((field) => {
           const role = (Object.keys(ROLE_TO_FIELD) as PersonnelRole[]).find((r) => ROLE_TO_FIELD[r] === field);
           if (!role) return null;
-          const names = personnel.filter((p) => p.active && p.role === role).map((p) => p.name);
+          const names = personnel
+            .filter((p) => p.active && p.role === role && (p.shift === form.shift || p.shift === "BOTH"))
+            .map((p) => p.name);
           if (!names.length) return null;
           return (
-            <datalist key={field} id={`dl-${field}`}>
+            <datalist key={`${field}-${form.shift}`} id={`dl-${field}`}>
               {names.map((name) => <option key={name} value={name} />)}
             </datalist>
           );
@@ -623,21 +625,24 @@ export function ShiftReportFormModal({
                 key={index}
                 className="grid grid-cols-4 gap-2 rounded-xl border border-[var(--color-border-soft)] p-2 md:grid-cols-[86px_86px_96px_96px_1fr_0.6fr_36px] md:border-0 md:p-0"
               >
-                {(
-                  [
-                    ["from", "07:00"],
-                    ["to", "18:30"],
-                    ["depthFrom", "De"],
-                    ["depthTo", "A"]
-                  ] as const
-                ).map(([key, placeholder]) => (
+                {(["from", "to"] as const).map((key) => (
+                  <input
+                    key={key}
+                    type="time"
+                    className={`${fieldClass} px-2 font-mono text-xs tabular-nums ${errors[`act.${index}.${key}`] ? "border-rose-500" : ""}`}
+                    value={row[key]}
+                    title={errors[`act.${index}.${key}`]}
+                    data-error={errors[`act.${index}.${key}`] ? "true" : undefined}
+                    onChange={(event) => updateActivity(index, key, event.target.value)}
+                  />
+                ))}
+                {(["depthFrom", "depthTo"] as const).map((key) => (
                   <input
                     key={key}
                     className={`${fieldClass} px-2 font-mono text-xs tabular-nums ${errors[`act.${index}.${key}`] ? "border-rose-500" : ""}`}
-                    // Horas: teclado de texto completo. Profundidades: teclado numérico.
-                    inputMode={key.startsWith("depth") ? "decimal" : "text"}
+                    inputMode="decimal"
                     value={row[key]}
-                    placeholder={placeholder}
+                    placeholder={key === "depthFrom" ? "De" : "A"}
                     title={errors[`act.${index}.${key}`]}
                     data-error={errors[`act.${index}.${key}`] ? "true" : undefined}
                     onChange={(event) => updateActivity(index, key, event.target.value)}
