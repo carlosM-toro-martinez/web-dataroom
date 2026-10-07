@@ -12,7 +12,8 @@
     "optimize:large-images": "node scripts/optimize-large-images.mjs",
     "preview": "vite preview --port 4174",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "test:offline": "node e2e/offline.cjs"
   },
   "dependencies": {
     "@tanstack/react-query": "^5.90.2",
@@ -39,6 +40,7 @@
     "@vitejs/plugin-react": "^5.1.0",
     "astro": "^7.2.4",
     "autoprefixer": "^10.4.21",
+    "playwright": "^1.63.0",
     "postcss": "^8.5.6",
     "prettier": "^3.8.1",
     "sharp": "^0.35.4",
