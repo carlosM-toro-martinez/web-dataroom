@@ -1,5 +1,6 @@
-import { useState } from "react";
-import { Pencil, Plus, Trash2, Users } from "lucide-react";
+import { useRef, useState } from "react";
+import { Pencil, Plus, Trash2, Upload, Users } from "lucide-react";
+import { read, utils } from "xlsx";
 import { usePersonnelQuery, useDeletePersonnelMutation, useSavePersonnelMutation, type DrillingPersonnelLocal } from "@/features/sondajes/hooks/useSondajes";
 import type { PersonnelRole, PersonnelShift } from "@/features/sondajes/db/sondajesDb";
 import { Modal, dangerButton, fieldClass, primaryButton, secondaryButton } from "@/features/sondajes/components/ui";
@@ -31,6 +32,48 @@ const shiftDot: Record<PersonnelShift, string> = {
 type EditForm = { name: string; role: PersonnelRole; shift: PersonnelShift };
 const emptyForm = (): EditForm => ({ name: "", role: "operator", shift: "DAY" });
 
+const ROLE_MAP: Partial<Record<string, PersonnelRole>> = {
+  "OPERADOR": "operator",
+  "PRIMER AYUDANTE": "firstHelper",
+  "SEGUNDO AYUDANTE": "secondHelper",
+  "CONDUCTOR": "driver",
+  "SUPERVISOR": "supervisor",
+  "SUPERVISOR INT.": "supervisor",
+  "COORDINADOR": "supervisor",
+  "JEFE DE PERFORACIÓN": "drillingChief",
+  "JEFE DE PERFORACION": "drillingChief",
+};
+
+function parsePersonnelExcel(file: File): Promise<Array<{ name: string; role: PersonnelRole; shift: PersonnelShift }>> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      try {
+        const wb = read(new Uint8Array(e.target!.result as ArrayBuffer), { type: "array" });
+        const rows = utils.sheet_to_json<string[]>(wb.Sheets[wb.SheetNames[0]], { header: 1, defval: "" }) as string[][];
+        const result: Array<{ name: string; role: PersonnelRole; shift: PersonnelShift }> = [];
+        let currentShift: PersonnelShift = "BOTH";
+        for (const row of rows) {
+          const name = String(row[1] ?? "").trim();
+          const cargo = String(row[2] ?? "").trim().toUpperCase();
+          const turnoCell = String(row[3] ?? "").trim().toUpperCase();
+          if (turnoCell === "TURNO A") currentShift = "DAY";
+          else if (turnoCell === "TURNO B") currentShift = "NIGHT";
+          else if (turnoCell !== "") currentShift = "BOTH";
+          const role = ROLE_MAP[cargo];
+          if (!name || !role) continue;
+          result.push({ name, role, shift: currentShift });
+        }
+        resolve(result);
+      } catch (err) {
+        reject(err);
+      }
+    };
+    reader.onerror = reject;
+    reader.readAsArrayBuffer(file);
+  });
+}
+
 export function PersonnelModal({ open, onClose }: { open: boolean; onClose: () => void }) {
   const { data: personnel = [] } = usePersonnelQuery();
   const saveMutation = useSavePersonnelMutation();
@@ -38,6 +81,31 @@ export function PersonnelModal({ open, onClose }: { open: boolean; onClose: () =
 
   const [editing, setEditing] = useState<{ id: string | null; form: EditForm } | null>(null);
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+  const [importing, setImporting] = useState(false);
+  const [importError, setImportError] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  async function handleImport(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    e.target.value = "";
+    setImporting(true);
+    setImportError(null);
+    try {
+      const records = await parsePersonnelExcel(file);
+      if (records.length === 0) {
+        setImportError("No se encontró personal válido. Verificá que las columnas sean: número, nombre, cargo, turno.");
+        return;
+      }
+      for (const record of records) {
+        await saveMutation.mutateAsync({ id: null, ...record, active: true });
+      }
+    } catch {
+      setImportError("Error al leer el archivo. Asegurate de que sea un Excel válido (.xlsx o .xls).");
+    } finally {
+      setImporting(false);
+    }
+  }
 
   function openNew() {
     setEditing({ id: null, form: emptyForm() });
@@ -81,17 +149,29 @@ export function PersonnelModal({ open, onClose }: { open: boolean; onClose: () =
         title="Personal de perforación"
         subtitle="Al crear un parte, los campos de personal se llenan automáticamente según el turno."
         footer={
-          <div className="flex w-full items-center justify-between gap-2">
-            <button type="button" className={secondaryButton} onClick={openNew}>
-              <Plus size={15} />
-              Agregar persona
-            </button>
+          <div className="flex w-full flex-wrap items-center justify-between gap-2">
+            <div className="flex flex-wrap gap-2">
+              <input ref={fileInputRef} type="file" accept=".xlsx,.xls" className="hidden" onChange={handleImport} />
+              <button type="button" className={secondaryButton} disabled={importing} onClick={() => fileInputRef.current?.click()}>
+                <Upload size={15} />
+                {importing ? "Importando..." : "Importar Excel"}
+              </button>
+              <button type="button" className={secondaryButton} onClick={openNew}>
+                <Plus size={15} />
+                Agregar persona
+              </button>
+            </div>
             <button type="button" className={secondaryButton} onClick={onClose}>
               Cerrar
             </button>
           </div>
         }
       >
+        {importError ? (
+          <div className="mx-4 mt-3 rounded-xl bg-rose-500/10 px-3 py-2 text-sm text-rose-600">
+            {importError}
+          </div>
+        ) : null}
         {sorted.length === 0 ? (
           <div className="flex flex-col items-center gap-3 py-10 text-center">
             <Users size={36} className="text-[var(--color-on-surface-variant)]" />
