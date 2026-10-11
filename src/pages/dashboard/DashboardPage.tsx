@@ -21,7 +21,7 @@ export function DashboardPage() {
       <InternalHeader
         eyebrow="Panel interno"
         title={`Bienvenido, ${user?.nombre ?? "usuario"}`}
-        description="Acceso principal para administrar Data Room, exploraciones y usuarios del sistema."
+        description="Acceso principal para administrar Data Room, muestras y usuarios del sistema."
       />
 
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
@@ -36,7 +36,7 @@ export function DashboardPage() {
         {canManageExploraciones ? (
           <Link to="/exploraciones" className={cardClassName}>
             <MapPinned size={22} className="mb-4 text-[var(--color-primary)]" />
-            <h2 className="text-lg font-bold">Exploraciones</h2>
+            <h2 className="text-lg font-bold">Registro de muestras</h2>
             <p className="mt-2 text-sm text-[var(--color-on-surface-variant)]">
               Registra muestras, sincroniza datos y revisa resultados.
             </p>

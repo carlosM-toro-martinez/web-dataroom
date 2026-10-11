@@ -53,7 +53,7 @@ export function ExploracionesElementosPage() {
   return (
     <section className="space-y-6 text-[var(--color-on-surface)]">
       <InternalHeader
-        eyebrow="Exploraciones"
+        eyebrow="Muestras"
         title="Elementos"
         description="Catálogo compartido para Interior Mina, Superficie y canales."
       />

@@ -17,7 +17,7 @@ const MAIN_ROUTES: MainRoute[] = [
   { label: "Inicio", to: "/dashboard", icon: LayoutDashboard, roles: ["ADMIN", "SUPERINTENDENTE"] },
   { label: "Data Room", to: "/exploraciones-data-room", icon: Database, hiddenFor: ["SONDAJES"] },
   {
-    label: "Exploraciones",
+    label: "Muestras",
     to: "/exploraciones",
     icon: MapPinned,
     roles: ["ADMIN", "SUPERINTENDENTE", "GEOLOGO"]

@@ -1250,7 +1250,7 @@ function ExploracionesCategoryLanding() {
   return (
     <div className={pageShell}>
       <InternalHeader
-        eyebrow="Exploraciones"
+        eyebrow="Muestras"
         title="Registro de muestras"
         description="Selecciona una categoría para continuar al registro de muestras."
       />
@@ -1268,7 +1268,7 @@ function ExploracionesCategoryLanding() {
               <div>
                 <h2 className="text-lg font-bold">Exploración</h2>
                 <p className="mt-1 text-sm text-[var(--color-on-surface-variant)]">
-                  Registrar muestras de categoría EXPLORATION.
+                  Registrar muestras de exploración.
                 </p>
               </div>
             </div>
@@ -1285,7 +1285,7 @@ function ExploracionesCategoryLanding() {
               <div>
                 <h2 className="text-lg font-bold">Producción</h2>
                 <p className="mt-1 text-sm text-[var(--color-on-surface-variant)]">
-                  Registrar muestras de categoría PRODUCTION.
+                  Registrar muestras de producción.
                 </p>
               </div>
             </div>
@@ -3476,7 +3476,7 @@ function ExploracionesRegisterPage({ sampleCategory }: { sampleCategory: SampleC
   return (
     <div className={pageShell}>
       <InternalHeader
-        eyebrow="Exploraciones"
+        eyebrow="Muestras"
         title="Registro de muestras"
         description="Captura offline para exploración y producción en Interior Mina o Superficie. Los registros se sincronizan al recuperar conexión."
       />

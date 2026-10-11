@@ -377,7 +377,7 @@ export function ExploracionesHierarchyPage() {
   return (
     <div className={pageShell}>
       <InternalHeader
-        eyebrow="Exploraciones"
+        eyebrow="Muestras"
         title="Estructura de codificaciones"
         description="Define cómo se arman las áreas, niveles y labores que luego formarán el código de cada muestra."
       />
