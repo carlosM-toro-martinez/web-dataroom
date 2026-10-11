@@ -2,7 +2,16 @@ import { FormEvent, useEffect, useMemo, useRef, useState, type InputHTMLAttribut
 import { createPortal } from "react-dom";
 import { Link } from "react-router-dom";
 import L from "leaflet";
-import * as XLSX from "xlsx";
+import {
+  DATE_FORMAT,
+  DATE_TIME_FORMAT,
+  downloadExcelReport,
+  preloadExcelReport,
+  toDisplayName,
+  toExcelDate,
+  type ReportCell,
+  type ReportColumn
+} from "@/shared/lib/excelReport";
 import {
   Beaker,
   ChevronDown,
@@ -242,12 +251,15 @@ type SampleTableRow = {
   sampledAt?: string | null;
   objectiveName: string;
   location: string;
+  place: SamplePlace;
   createdByName: string;
   results: any[];
   labAssignments: any[];
   source: "local" | "remote";
   raw: OfflineProposalSample | InteriorSample | SurfaceSample;
 };
+
+type SamplePlace = { area: string; level: string; labor: string };
 
 type GeoPoint = {
   latitude: number;
@@ -770,6 +782,16 @@ function normalizeCatalogText(value?: string | null) {
     .replace(/[\u0300-\u036f]/g, "");
 }
 
+function getLaborPlace(labor?: InteriorLabor | SurfaceLabor): SamplePlace {
+  const level = labor?.level;
+  const area = level?.area;
+  return {
+    area: area?.name ?? area?.abbreviation ?? "",
+    level: level?.name ?? level?.abbreviation ?? "",
+    labor: labor?.name ?? labor?.abbreviation ?? ""
+  };
+}
+
 function getLaborPath(labor?: InteriorLabor | SurfaceLabor) {
   const level = labor?.level;
   const area = level?.area;
@@ -816,64 +838,46 @@ function hasResults(results: unknown[]) {
   return results.length > 0;
 }
 
-function exportCell(value: unknown) {
-  if (value === null || value === undefined) return "";
-  if (typeof value === "number") return Number.isFinite(value) ? value : "";
-  if (typeof value === "boolean") return value ? "Sí" : "No";
-  return String(value);
+function resultNumber(value: unknown): ReportCell {
+  if (value === null || value === undefined || value === "") return null;
+  const numeric = typeof value === "number" ? value : Number(String(value).replace(",", "."));
+  return Number.isFinite(numeric) ? numeric : String(value);
 }
 
-function getSamplePayload(row: SampleTableRow) {
-  const raw = row.raw as any;
-  return row.source === "local" ? raw.payload ?? {} : raw;
+// The catalog has an element saved with symbol and name swapped ("Plata" / "Ag"): report it as the same element.
+function canonicalElement(element?: { symbol?: string | null; name?: string | null }) {
+  let symbol = (element?.symbol ?? "").trim();
+  let name = (element?.name ?? "").trim();
+  if (symbol.length > 3 && name.length > 0 && name.length <= 3) [symbol, name] = [name, symbol];
+  if (!symbol) symbol = name;
+  return {
+    symbol: symbol.charAt(0).toLocaleUpperCase("es") + symbol.slice(1).toLocaleLowerCase("es"),
+    name: toDisplayName(name)
+  };
 }
 
-function resultElementLabel(result: any) {
-  return result.element?.symbol ?? result.element?.name ?? result.elementId ?? "";
+function resultSymbol(result: any) {
+  return canonicalElement(result.element).symbol;
 }
 
-function resultLaboratoryLabel(result: any) {
-  return result.labAssignmentLabel ?? result.laboratory?.name ?? result.surfaceLaboratoryId ?? result.interiorLaboratoryId ?? "";
+function resultUnit(result: any) {
+  return (result.unit ?? result.element?.defaultUnit ?? "").trim();
 }
 
-function resultValueLabel(result: any) {
-  const value = result.value ?? "";
-  const unit = result.unit ? ` ${result.unit}` : "";
-  const qualifier = result.qualifier ? `${result.qualifier} ` : "";
-  return `${qualifier}${value}${unit}`.trim();
+function resultLaboratory(result: any) {
+  return toDisplayName(result.labAssignmentLabel ?? result.laboratory?.name ?? "");
 }
 
-function getLabAssignmentsText(row: SampleTableRow) {
-  return (row.labAssignments ?? [])
-    .map((assignment: any, index: number) => {
-      const slot = assignment.slot ?? `LAB ${index + 1}`;
-      const laboratory =
-        assignment.laboratory?.name ??
-        assignment.laboratory?.abbreviation ??
-        assignment.interiorLaboratoryId ??
-        assignment.surfaceLaboratoryId ??
-        "";
-      return [slot, laboratory].filter(Boolean).join(" - ");
-    })
-    .filter(Boolean)
-    .join(" | ");
-}
-
-function getResultsText(row: SampleTableRow) {
-  if (!hasResults(row.results)) return "";
+function resultsSummary(row: SampleTableRow) {
+  if (!hasResults(row.results)) return "Sin resultados";
   return row.results
-    .map((result: any) => {
-      const element = resultElementLabel(result);
-      const value = resultValueLabel(result);
-      const laboratory = resultLaboratoryLabel(result);
-      return [element, value, laboratory ? `(${laboratory})` : ""].filter(Boolean).join(" ");
-    })
-    .join(" | ");
+    .map((result: any) => [resultSymbol(result), result.value ?? "", resultUnit(result)].filter((part) => part !== "").join(" "))
+    .join(" · ");
 }
 
-function findDispatchForRow(row: SampleTableRow, dispatches: SampleDispatch[], registerType: RegisterType) {
+function findDispatchesForRow(row: SampleTableRow, dispatches: SampleDispatch[], registerType: RegisterType) {
   const rowCode = row.code.replace(" (offline)", "");
-  for (const dispatch of dispatches) {
+  return dispatches.flatMap((dispatch) => {
     const item = (dispatch.items ?? []).find((dispatchItem) => {
       const sampleId =
         registerType === "interior"
@@ -881,115 +885,253 @@ function findDispatchForRow(row: SampleTableRow, dispatches: SampleDispatch[], r
           : dispatchItem.surfaceSampleId ?? dispatchItem.sample?.id;
       return sampleId === row.id || dispatchItem.sample?.code === rowCode;
     });
-    if (item) return { dispatch, item };
+    return item ? [{ dispatch, item }] : [];
+  });
+}
+
+function requestedSymbols(items: Array<NonNullable<SampleDispatch["items"]>[number]>) {
+  const symbols = items.flatMap((item) =>
+    (item.requestedElements ?? []).map((requested) => canonicalElement(requested.element).symbol)
+  );
+  return [...new Set(symbols.filter(Boolean))].join(", ");
+}
+
+function uniqueJoin(values: Array<string | null | undefined>) {
+  return [...new Set(values.map((value) => value?.trim()).filter(Boolean))].join(", ");
+}
+
+function folioLabel(folio?: number) {
+  return folio === undefined ? "" : `N° ${String(folio).padStart(4, "0")}`;
+}
+
+function sampleCodeNumber(row: SampleTableRow) {
+  if (row.source === "local") return Number.MAX_SAFE_INTEGER;
+  const match = row.code.match(/\d+/);
+  return match ? Number(match[0]) : Number.MAX_SAFE_INTEGER - 1;
+}
+
+function sortByCode(rows: SampleTableRow[]) {
+  return [...rows].sort((left, right) => sampleCodeNumber(left) - sampleCodeNumber(right));
+}
+
+function placeCells(row: SampleTableRow): ReportCell[] {
+  return [toDisplayName(row.place.area), toDisplayName(row.place.level), toDisplayName(row.place.labor)];
+}
+
+function sampleStatusText(row: SampleTableRow) {
+  return row.source === "local" ? "Pendiente de sincronizar" : SAMPLE_STATUS_LABELS[row.status];
+}
+
+type ResultColumnSpec = { key: string; symbol: string; name: string; unit: string; lab: string };
+
+// One column per element and unit; split by laboratory only when a sample has the same element from more than one lab.
+function buildResultColumns(rows: SampleTableRow[]) {
+  const baseKey = (result: any) => `${resultSymbol(result)}|${resultUnit(result)}`;
+  const splitByLab = new Set<string>();
+  for (const row of rows) {
+    const seen = new Set<string>();
+    for (const result of row.results) {
+      const key = baseKey(result);
+      if (seen.has(key)) splitByLab.add(key);
+      seen.add(key);
+    }
   }
-  return undefined;
-}
-
-function requestedElementsText(item?: NonNullable<SampleDispatch["items"]>[number]) {
-  return (item?.requestedElements ?? [])
-    .map((requested) => requested.element?.symbol ?? requested.element?.name ?? requested.elementId)
-    .filter(Boolean)
-    .join(", ");
-}
-
-function sampleExportRow(row: SampleTableRow, dispatches: SampleDispatch[], registerType: RegisterType) {
-  const payload = getSamplePayload(row);
-  const dispatchMatch = findDispatchForRow(row, dispatches, registerType);
-  return {
-    "Módulo": registerType === "interior" ? "Interior Mina" : "Superficie",
-    "Categoría": CATEGORY_LABELS[row.category],
-    "Nombre": exportCell(row.name),
-    "Código": exportCell(row.code),
-    "Código / Talón": formatVoucherLabel(row),
-    "Talón numérico": exportCell(row.voucherNumber),
-    "Talón texto": exportCell(row.voucherCode),
-    "Estado": row.source === "local" ? "Pendiente local" : SAMPLE_STATUS_LABELS[row.status],
-    "Prioridad": PRIORITY_LABELS[row.priority],
-    "Ubicación": row.location,
-    "Objetivo": row.objectiveName,
-    "Registrado por": row.createdByName,
-    "Fecha de muestreo": formatDate(row.sampledAt),
-    "Fecha ISO": exportCell(row.sampledAt),
-    "Este": exportCell(payload.east),
-    "Norte": exportCell(payload.north),
-    "Elevación": exportCell(payload.elevation),
-    "Laboratorios": getLabAssignmentsText(row),
-    "Resultados": hasResults(row.results) ? "Con resultados" : "Sin resultados",
-    "Cantidad resultados": row.results.length,
-    "Detalle resultados": getResultsText(row),
-    "Lote / Proyecto": exportCell(dispatchMatch?.dispatch.projectName),
-    "Laboratorio de lote": exportCell(dispatchMatch?.dispatch.laboratory?.name),
-    "Fecha envío lote": dispatchMatch?.dispatch.sentAt ? formatDate(dispatchMatch.dispatch.sentAt) : "",
-    "Estado lote": dispatchMatch?.dispatch.status ? DISPATCH_STATUS_LABELS[dispatchMatch.dispatch.status ?? "PENDING"] : "",
-    "Ensayos solicitados": requestedElementsText(dispatchMatch?.item),
-    "Sincronización": row.source === "local" ? "Pendiente" : "Sincronizado",
-    "Error sincronización": getRowSyncError(row) ?? ""
+  const keyFor = (result: any) => {
+    const key = baseKey(result);
+    return splitByLab.has(key) ? `${key}|${resultLaboratory(result)}` : key;
   };
+
+  const columns = new Map<string, ResultColumnSpec>();
+  for (const row of rows) {
+    for (const result of row.results) {
+      if (!resultSymbol(result)) continue;
+      const key = keyFor(result);
+      if (columns.has(key)) continue;
+      columns.set(key, {
+        key,
+        symbol: resultSymbol(result),
+        name: canonicalElement(result.element).name,
+        unit: resultUnit(result),
+        lab: splitByLab.has(baseKey(result)) ? resultLaboratory(result) : ""
+      });
+    }
+  }
+  const specs = [...columns.values()].sort(
+    (left, right) => left.symbol.localeCompare(right.symbol) || left.unit.localeCompare(right.unit) || left.lab.localeCompare(right.lab)
+  );
+  return { specs, keyFor };
 }
 
-function resultExportRows(rows: SampleTableRow[]) {
-  return rows.flatMap((row) =>
-    row.results.map((result: any, index) => ({
-      "Código / Talón": formatVoucherLabel(row),
-      "Nombre muestra": exportCell(row.name),
-      "Categoría": CATEGORY_LABELS[row.category],
-      "Ubicación": row.location,
-      "Elemento": resultElementLabel(result),
-      "Valor": exportCell(result.value),
-      "Unidad": exportCell(result.unit),
-      "Calificador": exportCell(result.qualifier),
-      "Laboratorio": resultLaboratoryLabel(result),
-      "Comentarios": exportCell(result.comments),
-      "Orden resultado": index + 1
-    }))
+function resultColumnHeader(spec: ResultColumnSpec) {
+  const name = spec.name && spec.name.toLowerCase() !== spec.symbol.toLowerCase() ? `${spec.symbol} · ${spec.name}` : spec.symbol;
+  return [name, spec.unit ? `(${spec.unit})` : "(sin unidad)", spec.lab].filter(Boolean).join("\n");
+}
+
+async function exportSamplesToExcel(rows: SampleTableRow[], dispatches: SampleDispatch[], registerType: RegisterType, category: SampleCategory) {
+  const moduleLabel = registerType === "interior" ? "Interior Mina" : "Superficie";
+  const categoryLabel = CATEGORY_LABELS[category];
+  const now = new Date();
+  const generatedAt = new Intl.DateTimeFormat("es-BO", { timeZone: "America/La_Paz", day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit", hourCycle: "h23" }).format(now);
+  const sorted = sortByCode(rows);
+  const subtitle = (detail: string) => `Empresa Minera Marte S.R.L. · ${categoryLabel} · ${moduleLabel} · ${detail} · Generado el ${generatedAt}`;
+  const hasPending = sorted.some((row) => row.source === "local");
+
+  const { specs, keyFor } = buildResultColumns(sorted);
+  const sampleColumns: ReportColumn[] = [
+    { header: "N°", width: 6, align: "center" },
+    { header: "Código", width: 11 },
+    { header: "Nombre de muestra" },
+    { header: "Área" },
+    { header: "Nivel" },
+    { header: "Labor" },
+    { header: "Objetivo" },
+    { header: "Estado" },
+    { header: "Prioridad" },
+    { header: "Fecha de muestreo", numFmt: DATE_TIME_FORMAT, width: 17 },
+    { header: "Registrado por" },
+    { header: "Este", numFmt: "#,##0.00", width: 13 },
+    { header: "Norte", numFmt: "#,##0.00", width: 13 },
+    { header: "Elevación\n(m)", numFmt: "#,##0.00", width: 11 },
+    { header: "Lote\n(folio)" },
+    { header: "Laboratorio" },
+    { header: "Fecha de envío", numFmt: DATE_FORMAT, width: 13 },
+    { header: "Ensayos solicitados" },
+    ...specs.map((spec) => ({ header: resultColumnHeader(spec), highlight: true, width: 12, align: "right" as const })),
+    ...(hasPending ? [{ header: "Observaciones" }] : [])
+  ];
+
+  const sampleRows = sorted.map((row, index) => {
+    const payload = row.source === "local" ? ((row.raw as any).payload ?? {}) : (row.raw as any);
+    const matches = findDispatchesForRow(row, dispatches, registerType);
+    const firstSentAt = matches.map((match) => match.dispatch.sentAt).filter(Boolean).sort()[0];
+    const values = new Map<string, ReportCell>();
+    for (const result of row.results) values.set(keyFor(result), resultNumber(result.value));
+    return [
+      index + 1,
+      row.source === "local" ? "Pendiente" : row.code,
+      row.name ?? "",
+      ...placeCells(row),
+      row.objectiveName === "-" ? "" : toDisplayName(row.objectiveName),
+      sampleStatusText(row),
+      PRIORITY_LABELS[row.priority],
+      toExcelDate(row.sampledAt),
+      row.createdByName === "-" ? "" : row.createdByName,
+      resultNumber(payload.east),
+      resultNumber(payload.north),
+      resultNumber(payload.elevation),
+      matches.map((match) => folioLabel(match.dispatch.folio)).filter(Boolean).join(", "),
+      uniqueJoin((matches.length > 0 ? matches.map((match) => match.dispatch.laboratory?.name) : row.labAssignments.map((assignment: any) => assignment.laboratory?.name)).map((name) => toDisplayName(name))),
+      toExcelDate(firstSentAt, false),
+      requestedSymbols(matches.map((match) => match.item)),
+      ...specs.map((spec) => values.get(spec.key) ?? null),
+      ...(hasPending ? [getRowSyncError(row) ?? (row.source === "local" ? "Aún no se envía al servidor" : "")] : [])
+    ];
+  });
+
+  const resultRows = sorted.flatMap((row) =>
+    row.results
+      .filter((result: any) => resultSymbol(result))
+      .map((result: any) => [
+        row.source === "local" ? "Pendiente" : row.code,
+        row.name ?? "",
+        ...placeCells(row),
+        resultSymbol(result),
+        canonicalElement(result.element).name,
+        resultNumber(result.value),
+        resultUnit(result),
+        resultLaboratory(result),
+        result.comments ?? ""
+      ])
+  );
+
+  const lotSections = buildDispatchGroups(rows, dispatches, registerType).map((group) => {
+    const sent = group.sentAt ? toExcelDate(group.sentAt, false) : null;
+    const label =
+      group.id === "unbatched"
+        ? `Sin lote · ${group.rows.length} muestra(s) registradas sin despacho`
+        : [
+            folioLabel(group.folio) ? `Folio ${folioLabel(group.folio)}` : "",
+            toDisplayName(group.title),
+            toDisplayName(group.laboratory),
+            sent ? `Enviado el ${sent.toISOString().slice(0, 10).split("-").reverse().join("/")}` : "",
+            DISPATCH_STATUS_LABELS[group.status],
+            `${group.rows.length} muestra(s)`
+          ]
+            .filter(Boolean)
+            .join(" · ");
+    return {
+      label,
+      rows: sortByCode(group.rows).map((row, index) => [
+        index + 1,
+        row.source === "local" ? "Pendiente" : row.code,
+        row.name ?? "",
+        ...placeCells(row),
+        sampleStatusText(row),
+        PRIORITY_LABELS[row.priority],
+        requestedSymbols(findDispatchesForRow(row, dispatches, registerType)
+          .filter((match) => match.dispatch.id === group.id)
+          .map((match) => match.item)),
+        resultsSummary(row)
+      ])
+    };
+  });
+
+  await downloadExcelReport(
+    `muestras-${category === "EXPLORATION" ? "exploracion" : "produccion"}-${registerType === "interior" ? "interior-mina" : "superficie"}-${new Intl.DateTimeFormat("en-CA", { timeZone: "America/La_Paz" }).format(now)}.xlsx`,
+    [
+      {
+        name: "Muestras",
+        title: `Registro de muestras · ${categoryLabel} · ${moduleLabel}`,
+        subtitle: subtitle(`${sorted.length} muestra(s)`),
+        columns: sampleColumns,
+        rows: sampleRows,
+        freezeColumns: 3
+      },
+      {
+        name: "Resultados",
+        title: `Resultados de laboratorio · ${categoryLabel} · ${moduleLabel}`,
+        subtitle: subtitle(`${resultRows.length} resultado(s)`),
+        columns: [
+          { header: "Código", width: 11 },
+          { header: "Nombre de muestra" },
+          { header: "Área" },
+          { header: "Nivel" },
+          { header: "Labor" },
+          { header: "Símbolo", align: "center" },
+          { header: "Elemento" },
+          { header: "Valor", align: "right" },
+          { header: "Unidad", align: "center" },
+          { header: "Laboratorio" },
+          { header: "Comentarios" }
+        ],
+        rows: resultRows,
+        freezeColumns: 2,
+        emptyMessage: "Todavía no hay resultados de laboratorio cargados para estas muestras."
+      },
+      {
+        name: "Lotes",
+        title: `Muestras por lote de envío · ${categoryLabel} · ${moduleLabel}`,
+        subtitle: subtitle(`${lotSections.length} grupo(s)`),
+        columns: [
+          { header: "N°", width: 6, align: "center" },
+          { header: "Código", width: 11 },
+          { header: "Nombre de muestra" },
+          { header: "Área" },
+          { header: "Nivel" },
+          { header: "Labor" },
+          { header: "Estado" },
+          { header: "Prioridad" },
+          { header: "Ensayos solicitados" },
+          { header: "Resultados", width: 40 }
+        ],
+        sections: lotSections,
+        freezeColumns: 3,
+        emptyMessage: "No hay muestras en lotes para los filtros actuales."
+      }
+    ]
   );
 }
 
-function batchExportRows(rows: SampleTableRow[], dispatches: SampleDispatch[], registerType: RegisterType) {
-  return buildDispatchGroups(rows, dispatches, registerType).flatMap((group) =>
-    group.rows.map((row, index) => {
-      const dispatchMatch = findDispatchForRow(row, dispatches, registerType);
-      return {
-        "Lote / Proyecto": group.title,
-        "Laboratorio": group.laboratory,
-        "Fecha envío": group.sentAt ? formatDate(group.sentAt) : "",
-        "Estado lote": DISPATCH_STATUS_LABELS[group.status],
-        "Orden": index + 1,
-        "Código / Talón": formatVoucherLabel(row),
-        "Nombre": exportCell(row.name),
-        "Estado muestra": SAMPLE_STATUS_LABELS[row.status],
-        "Prioridad": PRIORITY_LABELS[row.priority],
-        "Ubicación": row.location,
-        "Objetivo": row.objectiveName,
-        "Resultados": hasResults(row.results) ? getResultsText(row) : "Sin resultados",
-        "Ensayos solicitados": requestedElementsText(dispatchMatch?.item)
-      };
-    })
-  );
-}
-
-function appendJsonSheet(workbook: XLSX.WorkBook, name: string, rows: Record<string, unknown>[]) {
-  const sheet = XLSX.utils.json_to_sheet(rows.length > 0 ? rows : [{ "Sin datos": "No hay registros para los filtros actuales" }]);
-  const headers = Object.keys(rows[0] ?? { "Sin datos": "" });
-  sheet["!cols"] = headers.map((header) => ({
-    wch: Math.min(Math.max(header.length + 4, 14), 42)
-  }));
-  XLSX.utils.book_append_sheet(workbook, sheet, name);
-}
-
-function exportSamplesToExcel(rows: SampleTableRow[], dispatches: SampleDispatch[], registerType: RegisterType, category: SampleCategory) {
-  const workbook = XLSX.utils.book_new();
-  const sampleRows = rows.map((row) => sampleExportRow(row, dispatches, registerType));
-  appendJsonSheet(workbook, "Muestras", sampleRows);
-  appendJsonSheet(workbook, "Resultados", resultExportRows(rows));
-  appendJsonSheet(workbook, "Lotes", batchExportRows(rows, dispatches, registerType));
-
-  const moduleLabel = registerType === "interior" ? "interior-mina" : "superficie";
-  const categoryLabel = category === "EXPLORATION" ? "exploracion" : "produccion";
-  const date = new Intl.DateTimeFormat("en-CA", { timeZone: "America/La_Paz" }).format(new Date());
-  XLSX.writeFile(workbook, `registros-recientes-${moduleLabel}-${categoryLabel}-${date}.xlsx`);
-}
 
 function stringifyDetail(value: unknown) {
   return JSON.stringify(value, null, 2);
@@ -1795,6 +1937,9 @@ function ExploracionesRegisterPage({ sampleCategory }: { sampleCategory: SampleC
 
   const sampleRows = useMemo<SampleTableRow[]>(() => {
     const elementById = new Map(elements.map((element) => [element.id, element]));
+    const laborById = new Map<string, InteriorLabor | SurfaceLabor>(
+      [...hierarchyInteriorLabors, ...hierarchySurfaceLabors].map((labor) => [labor.id, labor as InteriorLabor | SurfaceLabor])
+    );
     const localRows = localVisibleSamples.map((item) => ({
       id: item.localId,
       code: item.synced && item.code ? item.code : "Pendiente de sincronizar",
@@ -1807,6 +1952,11 @@ function ExploracionesRegisterPage({ sampleCategory }: { sampleCategory: SampleC
       sampledAt: item.payload.sampledAt,
       objectiveName: "-",
       location: item.module === "interior" ? "Interior Mina" : "Superficie",
+      place: getLaborPlace(
+        laborById.get(
+          String((item.payload as any).interiorLaborId ?? (item.payload as any).surfaceLaborId ?? "")
+        )
+      ),
       createdByName: user?.nombre ?? "Usuario actual",
       results: flattenAssignmentResults((item.payload as any).labAssignments, (item.payload as any).results).map((result) => ({
         ...result,
@@ -1832,6 +1982,7 @@ function ExploracionesRegisterPage({ sampleCategory }: { sampleCategory: SampleC
         sampledAt: sample.sampledAt,
         objectiveName: (isInterior ? interiorSample.objective?.name : surfaceSample.objective?.name) ?? "-",
         location: isInterior ? getLaborPath(interiorSample.labor) || "-" : getLaborPath(surfaceSample.labor) || "-",
+        place: getLaborPlace(isInterior ? interiorSample.labor : surfaceSample.labor),
         createdByName: sample.createdBy?.nombre ?? "-",
         results: flattenAssignmentResults((sample as any).labAssignments, sample.results),
         labAssignments: (sample as any).labAssignments ?? [],
@@ -1878,6 +2029,8 @@ function ExploracionesRegisterPage({ sampleCategory }: { sampleCategory: SampleC
       });
   }, [
     elements,
+    hierarchyInteriorLabors,
+    hierarchySurfaceLabors,
     localVisibleSamples,
     priorityFilter,
     registerType,
@@ -4464,6 +4617,7 @@ function dispatchItemToSampleRow(
     sampledAt: sample.sampledAt,
     objectiveName: sample.objective?.name ?? "-",
     location: getLaborPath(sample.labor) || sample.location || "-",
+    place: getLaborPlace(sample.labor),
     createdByName: sample.createdBy?.nombre ?? "-",
     results: sample.results ?? [],
     labAssignments: sample.labAssignments ?? [],
@@ -5044,8 +5198,25 @@ function SamplesTable({
   const [voucherConfirmRow, setVoucherConfirmRow] = useState<SampleTableRow | null>(null);
   const [openActionsId, setOpenActionsId] = useState<string | null>(null);
   const [viewMode, setViewMode] = useState<RecentRecordsView>("records");
+  const [exporting, setExporting] = useState(false);
+  const { showError } = useToast();
   const [page, setPage] = useState(1);
   const pageSize = 8;
+
+  useEffect(() => {
+    if (navigator.onLine) preloadExcelReport();
+  }, []);
+
+  const handleExport = async () => {
+    setExporting(true);
+    try {
+      await exportSamplesToExcel(rows, dispatches, registerType, sampleCategory);
+    } catch {
+      showError("No se pudo generar el Excel. Si estás sin conexión, abre esta página una vez con internet y vuelve a intentar.");
+    } finally {
+      setExporting(false);
+    }
+  };
   const totalPages = Math.max(1, Math.ceil(rows.length / pageSize));
   const currentPage = Math.min(page, totalPages);
   const paginatedRows = rows.slice((currentPage - 1) * pageSize, currentPage * pageSize);
@@ -5192,11 +5363,11 @@ function SamplesTable({
             <button
               type="button"
               className={`${secondaryButton} px-3 py-2`}
-              onClick={() => exportSamplesToExcel(rows, dispatches, registerType, sampleCategory)}
-              disabled={rows.length === 0}
+              onClick={() => void handleExport()}
+              disabled={rows.length === 0 || exporting}
             >
               <Download size={14} />
-              Exportar Excel
+              {exporting ? "Generando Excel..." : "Exportar Excel"}
             </button>
           </div>
         </div>
