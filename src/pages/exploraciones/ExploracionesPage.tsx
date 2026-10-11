@@ -3004,7 +3004,7 @@ function ExploracionesRegisterPage({ sampleCategory }: { sampleCategory: SampleC
       return;
     }
     const confirmed = window.confirm(
-      `¿Eliminar la muestra ${formatVoucherLabel(row)}? Los códigos posteriores se ajustarán.`
+      `¿Eliminar la muestra ${formatVoucherLabel(row)}? Su código no se volverá a usar y los demás códigos no cambian.`
     );
     if (!confirmed) return;
 
