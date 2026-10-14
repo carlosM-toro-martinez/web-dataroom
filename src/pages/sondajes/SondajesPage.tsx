@@ -49,6 +49,7 @@ import { HoleDetailModal } from "@/features/sondajes/components/HoleDetailModal"
 import { ProgramFormModal } from "@/features/sondajes/components/ProgramFormModal";
 import { ImportProgramModal, type ImportRequest } from "@/features/sondajes/components/ImportProgramModal";
 import { PersonnelModal } from "@/features/sondajes/components/PersonnelModal";
+import { ShiftReportsBackupModal } from "@/features/sondajes/components/ShiftReportsBackupModal";
 import { SyncBar } from "@/features/sondajes/components/SyncBar";
 import { useShiftReportsSync } from "@/features/sondajes/hooks/useShiftReportsSync";
 import { useGeologySync } from "@/features/sondajes/hooks/useGeology";
@@ -134,6 +135,7 @@ export function SondajesPage() {
   const [importOpen, setImportOpen] = useState(false);
   const [personnelOpen, setPersonnelOpen] = useState(false);
   const [geologyImportOpen, setGeologyImportOpen] = useState(false);
+  const [backupOpen, setBackupOpen] = useState(false);
   const [confirm, setConfirm] = useState<ConfirmState>(null);
   const [statusSavingId, setStatusSavingId] = useState<string | null>(null);
 
@@ -289,6 +291,12 @@ export function SondajesPage() {
             <Users size={16} />
             Personal
           </button>
+          ) : null}
+          {canDrilling ? (
+            <button type="button" className={secondaryButton} onClick={() => setBackupOpen(true)}>
+              <ClipboardList size={16} />
+              Respaldo de partes
+            </button>
           ) : null}
           {canCreate ? (
             <>
@@ -551,6 +559,15 @@ export function SondajesPage() {
         onImport={runImport}
       />
       {canDrilling ? <PersonnelModal open={personnelOpen} onClose={() => setPersonnelOpen(false)} /> : null}
+      {canDrilling ? (
+        <ShiftReportsBackupModal
+          open={backupOpen}
+          holes={allHoles}
+          canImport={canCreate}
+          onClose={() => setBackupOpen(false)}
+          onDone={showSuccess}
+        />
+      ) : null}
       {can("geologiaSondajes", "create") ? (
         <GeologyImportModal
           open={geologyImportOpen}
