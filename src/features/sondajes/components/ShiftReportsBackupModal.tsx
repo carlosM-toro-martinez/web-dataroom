@@ -130,7 +130,11 @@ export function ShiftReportsBackupModal({
     await queryClient.invalidateQueries({ queryKey: ["sondajes"] });
     const created = results.filter((item) => item.ok).length;
     const failed = results.length - created;
-    if (!failed) onDone(`${created} parte(s) cargados. ${counts.exists} ya existían y se omitieron.`);
+    // Todo bien: se cierra y se avisa. Si algo falló, queda abierta con el detalle.
+    if (!failed) {
+      onClose();
+      onDone(`${created} parte(s) cargados. ${counts.exists} ya existían y se omitieron.`);
+    }
   }
 
   const visibleRows = rows ?? [];
@@ -201,8 +205,15 @@ export function ShiftReportsBackupModal({
 
             {rows ? (
               <>
+                {outcomes && outcomes.some((item) => !item.ok) ? (
+                  <p className="rounded-xl bg-amber-500/10 px-3 py-2 text-xs font-semibold text-amber-700 dark:text-amber-300">
+                    {outcomes.filter((item) => item.ok).length} cargado(s) y {outcomes.filter((item) => !item.ok).length} con error: el motivo está en la tabla.
+                  </p>
+                ) : null}
                 <p className="flex flex-wrap gap-1.5 text-[11px] font-bold" data-testid="backup-summary">
-                  <span className={`rounded-md px-2 py-0.5 ${STATUS_STYLE.new.chip}`}>{counts.new} se cargan</span>
+                  <span className={`rounded-md px-2 py-0.5 ${STATUS_STYLE.new.chip}`}>
+                    {outcomes ? `${outcomes.filter((item) => item.ok).length} cargados` : `${counts.new} se cargan`}
+                  </span>
                   <span className={`rounded-md px-2 py-0.5 ${STATUS_STYLE.exists.chip}`}>{counts.exists} ya existen</span>
                   {counts.error ? <span className={`rounded-md px-2 py-0.5 ${STATUS_STYLE.error.chip}`}>{counts.error} con problemas</span> : null}
                   {counts.warnings ? <span className="rounded-md bg-amber-500/15 px-2 py-0.5 text-amber-700 dark:text-amber-300">{counts.warnings} a revisar</span> : null}
@@ -269,11 +280,6 @@ export function ShiftReportsBackupModal({
         ) : null}
 
         {failure ? <p className="rounded-2xl bg-rose-500/10 px-4 py-3 text-sm font-semibold text-rose-600">{failure}</p> : null}
-        {outcomes && outcomes.some((item) => !item.ok) ? (
-          <p className="rounded-2xl bg-amber-500/10 px-4 py-3 text-sm font-semibold text-amber-700 dark:text-amber-300">
-            {outcomes.filter((item) => item.ok).length} cargado(s), {outcomes.filter((item) => !item.ok).length} con error (detalle en la tabla).
-          </p>
-        ) : null}
       </div>
     </Modal>
   );
