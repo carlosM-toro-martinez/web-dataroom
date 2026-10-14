@@ -7,7 +7,9 @@ import {
   Check,
   ClipboardList,
   CloudUpload,
+  Drill,
   Eye,
+  Microscope,
   Pencil,
   Plus,
   Printer,
@@ -42,6 +44,7 @@ import { buildShiftReportHtml, printShiftReport } from "@/features/sondajes/lib/
 import { HoleStatusBadge } from "@/features/sondajes/components/HoleStatus";
 import { ShiftReportFormModal } from "@/features/sondajes/components/ShiftReportFormModal";
 import { SyncBar } from "@/features/sondajes/components/SyncBar";
+import { GeologyPanel } from "@/features/sondajes/components/geology/GeologyPanel";
 import {
   Field,
   Modal,
@@ -65,12 +68,16 @@ const shiftName = (shift: "DAY" | "NIGHT") => `Turno ${F.turnos[shift]}`;
 
 export function SondajesHolePage() {
   const { holeId = "" } = useParams();
-  const { user } = useAuth();
+  const { user, can } = useAuth();
   const { showError, showSuccess } = useToast();
+  // Perforación (partes de turno) y Geología (reporte geológico, logueo, fotos) son permisos separados.
+  const canDrilling = can("sondajes");
+  const canGeology = can("geologiaSondajes");
+  const [section, setSection] = useState<"drilling" | "geology">(canDrilling ? "drilling" : "geology");
   const holesQuery = useDrillingHolesQuery();
   const campaignsQuery = useDrillingCampaignsQuery();
-  const reportsQuery = useHoleShiftReportsQuery(holeId);
-  const { data: personnel = [] } = usePersonnelQuery();
+  const reportsQuery = useHoleShiftReportsQuery(holeId, canDrilling);
+  const { data: personnel = [] } = usePersonnelQuery(canDrilling);
   const sync = useShiftReportsSync();
   const queueReport = useQueueShiftReportMutation();
   const deleteReport = useDeleteShiftReportMutation();
@@ -188,26 +195,58 @@ export function SondajesHolePage() {
   }
 
   const isSaving = queueReport.isPending || sync.isSyncing;
+  const showGeology = section === "geology" && canGeology;
 
   return (
     <div className={pageShell}>
       <InternalHeader
         eyebrow={campaign ? `Sondajes · ${F.proyecto(campaign)}` : "Sondajes"}
         title={`Pozo ${hole.code}`}
-        description="Partes diarios de perforación"
+        description={showGeology ? "Reporte geológico diario" : "Partes diarios de perforación"}
       />
 
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <Link to="/sondajes" className={secondaryButton}>
+        <Link to="/sondajes" className={`${secondaryButton} shrink-0`}>
           <ArrowLeft size={15} />
           Programas
         </Link>
-        <button type="button" className={`${primaryButton} px-5 py-3 text-base`} onClick={() => setForm({ open: true, report: null })}>
-          <Plus size={18} />
-          Nuevo parte
-        </button>
+        {canDrilling && canGeology ? (
+          <div className="ml-auto inline-flex rounded-2xl border border-[var(--color-border-soft)] bg-[var(--color-surface-container-low)] p-1 shadow-sm">
+            {(
+              [
+                ["drilling", Drill, "Perforación"],
+                ["geology", Microscope, "Geología"]
+              ] as const
+            ).map(([value, Icon, text]) => (
+              <button
+                key={value}
+                type="button"
+                onClick={() => setSection(value)}
+                className={`inline-flex items-center gap-2 rounded-xl px-4 py-2 text-sm font-bold transition ${
+                  section === value ? "bg-[var(--color-primary)] text-[var(--color-on-primary)] shadow" : "text-[var(--color-on-surface-variant)] hover:text-[var(--color-on-surface)]"
+                }`}
+              >
+                <Icon size={16} />
+                {text}
+              </button>
+            ))}
+          </div>
+        ) : null}
       </div>
 
+      {!showGeology && can("sondajes", "create") ? (
+        <div className="flex justify-end">
+          <button type="button" className={`${primaryButton} px-5 py-3 text-base`} onClick={() => setForm({ open: true, report: null })}>
+            <Plus size={18} />
+            Nuevo parte
+          </button>
+        </div>
+      ) : null}
+
+      {showGeology ? (
+        <GeologyPanel hole={hole} campaign={campaign} />
+      ) : (
+        <>
       <SyncBar sync={sync} />
 
       {/* Resumen del pozo */}
@@ -279,10 +318,12 @@ export function SondajesHolePage() {
               <p className="max-w-sm text-xs text-[var(--color-on-surface-variant)]">
                 Registra el avance de cada turno. Funciona también sin internet: se envía solo cuando vuelve la conexión.
               </p>
-              <button type="button" className={primaryButton} onClick={() => setForm({ open: true, report: null })}>
-                <Plus size={16} />
-                Registrar primer parte
-              </button>
+              {can("sondajes", "create") ? (
+                <button type="button" className={primaryButton} onClick={() => setForm({ open: true, report: null })}>
+                  <Plus size={16} />
+                  Registrar primer parte
+                </button>
+              ) : null}
             </div>
           ) : (
             reports.map((report) => (
@@ -291,8 +332,8 @@ export function SondajesHolePage() {
                 report={report}
                 onView={() => setViewKey(report.key)}
                 onPrint={() => print(report)}
-                onEdit={() => setForm({ open: true, report })}
-                onDelete={() => setToDelete(report)}
+                onEdit={can("sondajes", "update") ? () => setForm({ open: true, report }) : undefined}
+                onDelete={can("sondajes", "delete") ? () => setToDelete(report) : undefined}
               />
             ))
           )}
@@ -300,6 +341,7 @@ export function SondajesHolePage() {
       ) : (
         <IncidentsPanel
           incidents={incidents}
+          canUpdate={can("sondajes", "update")}
           onResolve={setResolving}
           onReopen={(incident) =>
             updateIncident(incident, { status: "OPEN", resolution: null, resolvedBy: null, resolvedAt: null }, { ok: "Incidencia reabierta.", offline: "Incidencia reabierta en este dispositivo." })
@@ -321,11 +363,15 @@ export function SondajesHolePage() {
         onSubmit={saveReport}
       />
 
+        </>
+      )}
+
       {viewing ? (
         <ReportViewModal
           report={viewing}
           html={buildShiftReportHtml(viewToPayload(viewing), { hole, campaign })}
           saving={isSaving}
+          canUpdate={can("sondajes", "update")}
           onClose={() => setViewKey(null)}
           onPrint={() => print(viewing)}
           onEdit={() => {
@@ -430,8 +476,8 @@ function ReportCard({
   report: ShiftReportView;
   onView: () => void;
   onPrint: () => void;
-  onEdit: () => void;
-  onDelete: () => void;
+  onEdit?: () => void;
+  onDelete?: () => void;
 }) {
   const open = (report.incidents ?? []).filter((incident) => incident.status === "OPEN").length;
   return (
@@ -486,12 +532,16 @@ function ReportCard({
           <button type="button" className={iconButton} title="Imprimir / PDF" onClick={onPrint}>
             <Printer size={16} />
           </button>
-          <button type="button" className={iconButton} title="Editar" onClick={onEdit}>
-            <Pencil size={16} />
-          </button>
-          <button type="button" className={`${iconButton} hover:text-rose-600`} title={report.pendingCreate ? "Descartar" : "Eliminar"} onClick={onDelete}>
-            <Trash2 size={16} />
-          </button>
+          {onEdit ? (
+            <button type="button" className={iconButton} title="Editar" onClick={onEdit}>
+              <Pencil size={16} />
+            </button>
+          ) : null}
+          {onDelete ? (
+            <button type="button" className={`${iconButton} hover:text-rose-600`} title={report.pendingCreate ? "Descartar" : "Eliminar"} onClick={onDelete}>
+              <Trash2 size={16} />
+            </button>
+          ) : null}
         </div>
       </div>
     </article>
@@ -502,6 +552,7 @@ function ReportViewModal({
   report,
   html,
   saving,
+  canUpdate,
   onClose,
   onPrint,
   onEdit,
@@ -511,6 +562,7 @@ function ReportViewModal({
   report: ShiftReportView;
   html: string;
   saving: boolean;
+  canUpdate: boolean;
   onClose: () => void;
   onPrint: () => void;
   onEdit: () => void;
@@ -532,10 +584,12 @@ function ReportViewModal({
           <button type="button" className={secondaryButton} onClick={onClose}>
             Cerrar
           </button>
-          <button type="button" className={secondaryButton} onClick={onEdit}>
-            <Pencil size={15} />
-            Editar
-          </button>
+          {canUpdate ? (
+            <button type="button" className={secondaryButton} onClick={onEdit}>
+              <Pencil size={15} />
+              Editar
+            </button>
+          ) : null}
           <button type="button" className={primaryButton} onClick={onPrint}>
             <Printer size={15} />
             Imprimir / PDF
@@ -567,7 +621,7 @@ function ReportViewModal({
             <button
               type="button"
               className={`${reviewed ? secondaryButton : primaryButton} mt-3 w-full`}
-              disabled={saving}
+              disabled={saving || !canUpdate}
               onClick={() => onReview(!reviewed, notes)}
             >
               {reviewed ? <RotateCcw size={15} /> : <BadgeCheck size={15} />}
@@ -590,7 +644,7 @@ function ReportViewModal({
                     {incident.status === "RESOLVED" ? (
                       <p className="mt-1 font-semibold text-emerald-600">Resuelta{incident.resolution ? `: ${incident.resolution}` : ""}</p>
                     ) : (
-                      <button type="button" className={`${secondaryButton} mt-2 w-full py-1.5 text-xs`} onClick={() => onResolve(incident)} disabled={saving}>
+                      <button type="button" className={`${secondaryButton} mt-2 w-full py-1.5 text-xs`} onClick={() => onResolve(incident)} disabled={saving || !canUpdate}>
                         <Check size={13} />
                         Resolver
                       </button>
@@ -608,11 +662,13 @@ function ReportViewModal({
 
 function IncidentsPanel({
   incidents,
+  canUpdate,
   onResolve,
   onReopen,
   onOpenReport
 }: {
   incidents: IncidentView[];
+  canUpdate: boolean;
   onResolve: (incident: IncidentView) => void;
   onReopen: (incident: IncidentView) => void;
   onOpenReport: (incident: IncidentView) => void;
@@ -670,7 +726,7 @@ function IncidentsPanel({
                   </p>
                 ) : null}
               </div>
-              {incident.status === "OPEN" ? (
+              {!canUpdate ? null : incident.status === "OPEN" ? (
                 <button type="button" className={primaryButton} onClick={() => onResolve(incident)}>
                   <Check size={15} />
                   Resolver

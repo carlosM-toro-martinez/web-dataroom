@@ -1,5 +1,13 @@
 import Dexie, { type EntityTable } from "dexie";
 import type { DrillingCampaign, DrillingHole, DrillingShiftReport } from "@/features/sondajes/model/sondajes.schema";
+import type {
+  DrillingPhoto,
+  GeologyReport,
+  GeologyReportPayload,
+  LogInterval,
+  LogRowPayload,
+  PhotoMeta
+} from "@/features/sondajes/model/geology.schema";
 
 // Base local de Sondajes (separada de la de Exploraciones).
 //  - campaigns / holes / shiftReports: copia de lo último descargado, para trabajar sin conexión.
@@ -94,12 +102,38 @@ export interface DrillingPersonnelLocal {
   active: boolean;
 }
 
+// ─── Geología (reporte geológico, logueo, fotos) ─────────────────────────────
+export type CachedGeologyReport = { id: string; holeId: string; data: GeologyReport };
+export type CachedGeologyLog = { holeId: string; rows: LogInterval[] };
+export type CachedPhoto = { id: string; holeId: string; data: DrillingPhoto };
+// Imágenes en el dispositivo: originales por subir y miniaturas ya descargadas. key = "<photoId>:full|thumb".
+export type StoredPhotoBlob = { key: string; photoId: string; blob: Blob };
+
+export type GeologyQueueItem = {
+  localId: string;
+  holeId: string;
+  // targetId: id del reporte / foto (generado en el dispositivo al crear).
+  targetId: string;
+  createdAt: string;
+  updatedAt: string;
+  syncError?: string;
+} & (
+  | { kind: "report"; action: "create" | "update"; payload: GeologyReportPayload }
+  | { kind: "log"; action: "replace"; payload: { rows: LogRowPayload[] } }
+  | { kind: "photo"; action: "create" | "update"; payload: PhotoMeta }
+);
+
 class SondajesDb extends Dexie {
   campaigns!: EntityTable<CachedCampaign, "id">;
   holes!: EntityTable<CachedHole, "id">;
   shiftReports!: EntityTable<CachedShiftReport, "id">;
   shiftReportQueue!: EntityTable<QueuedShiftReport, "localId">;
   personnel!: EntityTable<DrillingPersonnelLocal, "id">;
+  geologyReports!: EntityTable<CachedGeologyReport, "id">;
+  geologyLogs!: EntityTable<CachedGeologyLog, "holeId">;
+  photos!: EntityTable<CachedPhoto, "id">;
+  photoBlobs!: EntityTable<StoredPhotoBlob, "key">;
+  geologyQueue!: EntityTable<GeologyQueueItem, "localId">;
 
   constructor() {
     super("marteSondajesDb");
@@ -111,6 +145,13 @@ class SondajesDb extends Dexie {
     });
     this.version(2).stores({
       personnel: "id, role, shift"
+    });
+    this.version(3).stores({
+      geologyReports: "id, holeId",
+      geologyLogs: "holeId",
+      photos: "id, holeId",
+      photoBlobs: "key, photoId",
+      geologyQueue: "localId, holeId, targetId, createdAt"
     });
   }
 }

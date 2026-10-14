@@ -1,5 +1,6 @@
 import { FormEvent, useMemo, useState } from "react";
-import { Pencil, Search, UserPlus, UserX, X } from "lucide-react";
+import { Link } from "react-router-dom";
+import { Pencil, Search, ShieldCheck, UserPlus, UserX, X } from "lucide-react";
 import { ApiError } from "@/shared/api/core/apiError";
 import type { AuthRole, ManagedUser } from "@/features/auth/model/auth.schema";
 import { PasswordInput } from "@/shared/ui/PasswordInput";
@@ -10,24 +11,12 @@ import {
   useUpdateUserMutation,
   useUsersListQuery
 } from "@/features/auth/hooks/useUsersManagement";
+import { useRolesQuery } from "@/features/auth/hooks/useRoles";
 import {
   authInputClassName,
   authLabelClassName,
   authPrimaryButtonClassName
 } from "@/pages/auth/authUi";
-
-const roleOptions: AuthRole[] = [
-  "ADMIN",
-  "ALMACENERO",
-  "RECEPCIONISTA",
-  "SUPERINTENDENTE",
-  "TRABAJADOR",
-  "VISITANTE",
-  "GEOLOGOADMIN",
-  "GEOLOGO",
-  "SONDAJES",
-  "ADMINISTRADOR"
-];
 
 interface EditFormState {
   id: number;
@@ -52,12 +41,15 @@ export function RegisterUserPage() {
   const registerMutation = useRegisterMutation();
   const usersQuery = useUsersListQuery();
   const updateUserMutation = useUpdateUserMutation();
+  const rolesQuery = useRolesQuery();
   const { showError, showSuccess } = useToast();
+  const roleOptions = (rolesQuery.data ?? []).map((item) => ({ value: item.key, label: `${item.name} (${item.key})` }));
+  const roleName = (key: string) => rolesQuery.data?.find((item) => item.key === key)?.name ?? key;
 
   const [nombre, setNombre] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [role, setRole] = useState<AuthRole>("TRABAJADOR");
+  const [role, setRole] = useState<AuthRole>("GEOLOGO");
 
   const [search, setSearch] = useState("");
   const [roleFilter, setRoleFilter] = useState<"todos" | AuthRole>("todos");
@@ -68,7 +60,7 @@ export function RegisterUserPage() {
     setNombre("");
     setEmail("");
     setPassword("");
-    setRole("TRABAJADOR");
+    setRole("GEOLOGO");
   }
 
   function onSubmitCreate(event: FormEvent<HTMLFormElement>) {
@@ -175,10 +167,19 @@ export function RegisterUserPage() {
       />
 
       <article className="rounded-xl border border-[var(--color-border-soft)] bg-[var(--color-surface-container-low)] p-5 md:p-6">
-        <h2 className="mb-4 flex items-center gap-2 text-lg font-bold">
-          <UserPlus size={18} />
-          Crear trabajador
-        </h2>
+        <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
+          <h2 className="flex items-center gap-2 text-lg font-bold">
+            <UserPlus size={18} />
+            Crear trabajador
+          </h2>
+          <Link
+            to="/roles"
+            className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--color-outline-variant)] px-3 py-2 text-xs font-semibold text-[var(--color-on-surface-variant)] transition hover:border-[var(--color-primary)] hover:text-[var(--color-on-surface)]"
+          >
+            <ShieldCheck size={14} />
+            Roles y permisos
+          </Link>
+        </div>
 
         <form className="grid gap-4 md:grid-cols-2" onSubmit={onSubmitCreate}>
           <div className="md:col-span-2">
@@ -210,8 +211,8 @@ export function RegisterUserPage() {
               className={authInputClassName}
             >
               {roleOptions.map((item) => (
-                <option key={item} value={item}>
-                  {item}
+                <option key={item.value} value={item.value}>
+                  {item.label}
                 </option>
               ))}
             </select>
@@ -268,8 +269,8 @@ export function RegisterUserPage() {
             >
               <option value="todos">Todos los roles</option>
               {roleOptions.map((item) => (
-                <option key={item} value={item}>
-                  {item}
+                <option key={item.value} value={item.value}>
+                  {item.label}
                 </option>
               ))}
             </select>
@@ -325,7 +326,7 @@ export function RegisterUserPage() {
                     <td className="px-4 py-3 text-xs">{user.id}</td>
                     <td className="px-4 py-3 text-sm font-semibold">{user.nombre}</td>
                     <td className="px-4 py-3 text-xs">{user.email}</td>
-                    <td className="px-4 py-3 text-xs">{user.role}</td>
+                    <td className="px-4 py-3 text-xs">{roleName(user.role)}</td>
                     <td className="px-4 py-3 text-xs">
                       <span
                         className={`rounded-full px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider ${
@@ -434,8 +435,8 @@ export function RegisterUserPage() {
                   className={authInputClassName}
                 >
                   {roleOptions.map((item) => (
-                    <option key={item} value={item}>
-                      {item}
+                    <option key={item.value} value={item.value}>
+                      {item.label}
                     </option>
                   ))}
                 </select>

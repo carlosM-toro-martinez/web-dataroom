@@ -20,8 +20,6 @@ export const sondajesEndpoints = {
   runById: (id: string) => `/api/drilling/runs/${id}`,
   holeCoreBoxes: (holeId: string) => `/api/drilling/holes/${holeId}/core-boxes`,
   coreBoxById: (id: string) => `/api/drilling/core-boxes/${id}`,
-  holeLogIntervals: (holeId: string) => `/api/drilling/holes/${holeId}/log-intervals`,
-  logIntervalById: (id: string) => `/api/drilling/log-intervals/${id}`,
   holeSamples: (holeId: string) => `/api/drilling/holes/${holeId}/samples`,
   samples: "/api/drilling/samples",
   sampleById: (id: string) => `/api/drilling/samples/${id}`,
@@ -30,5 +28,11 @@ export const sondajesEndpoints = {
   dispatches: "/api/drilling/dispatches",
   dispatchById: (id: string) => `/api/drilling/dispatches/${id}`,
   personnel: "/api/drilling/personnel",
-  personnelById: (id: string) => `/api/drilling/personnel/${id}`
+  personnelById: (id: string) => `/api/drilling/personnel/${id}`,
+  holeGeologyReports: (holeId: string) => `/api/drilling/holes/${holeId}/geology-reports`,
+  geologyReportById: (id: string) => `/api/drilling/geology-reports/${id}`,
+  holeGeologyLog: (holeId: string) => `/api/drilling/holes/${holeId}/geology-log`,
+  holePhotos: (holeId: string) => `/api/drilling/holes/${holeId}/photos`,
+  photoById: (id: string) => `/api/drilling/photos/${id}`,
+  photoFile: (id: string, variant: "thumb" | "full") => `/api/drilling/photos/${id}/file?variant=${variant}`
 } as const;

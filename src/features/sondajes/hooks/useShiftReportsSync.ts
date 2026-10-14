@@ -16,19 +16,14 @@ export function useOnlineStatus() {
   return online;
 }
 
-// Sincronización de partes diarios con los mismos disparadores que las muestras de Exploraciones:
+// Disparadores de sincronización (los mismos que las muestras de Exploraciones):
 // al guardar, cada 60 s mientras haya pendientes, al recuperar conexión y al volver a la pestaña.
-export function useShiftReportsSync() {
-  const online = useOnlineStatus();
-  const queueQuery = useShiftReportQueueQuery();
-  const syncMutation = useSyncShiftReportsMutation();
-  const { mutateAsync } = syncMutation;
+export function useQueueSyncRunner(
+  pendingCount: number,
+  mutateAsync: (options: { retryFailed: boolean }) => Promise<ShiftReportsSyncResult>
+) {
   const inFlight = useRef<Promise<ShiftReportsSyncResult> | null>(null);
   const lastSilentRun = useRef(0);
-
-  const queue = queueQuery.data ?? [];
-  const pendingCount = queue.filter((item) => !item.synced).length;
-  const errorCount = queue.filter((item) => !item.synced && item.syncError).length;
 
   const runSync = useCallback(
     async (options: { silent?: boolean; force?: boolean } = {}): Promise<ShiftReportsSyncResult | undefined> => {
@@ -42,7 +37,7 @@ export function useShiftReportsSync() {
       // Pausa mínima entre sincronizaciones automáticas (no aplica al recuperar la conexión).
       if (options.silent && !options.force && now - lastSilentRun.current < 45_000) return undefined;
       if (options.silent) lastSilentRun.current = now;
-      // Manual: también reintenta los partes que quedaron con error.
+      // Manual: también reintenta lo que quedó con error.
       const run = mutateAsync({ retryFailed: !options.silent });
       inFlight.current = run;
       try {
@@ -74,6 +69,19 @@ export function useShiftReportsSync() {
       document.removeEventListener("visibilitychange", onVisibility);
     };
   }, [pendingCount, runSync]);
+
+  return runSync;
+}
+
+export function useShiftReportsSync() {
+  const online = useOnlineStatus();
+  const queueQuery = useShiftReportQueueQuery();
+  const syncMutation = useSyncShiftReportsMutation();
+
+  const queue = queueQuery.data ?? [];
+  const pendingCount = queue.filter((item) => !item.synced).length;
+  const errorCount = queue.filter((item) => !item.synced && item.syncError).length;
+  const runSync = useQueueSyncRunner(pendingCount, syncMutation.mutateAsync);
 
   return { online, queue, pendingCount, errorCount, isSyncing: syncMutation.isPending, runSync };
 }

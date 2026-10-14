@@ -1,50 +1,57 @@
 import { Link, useLocation, useNavigate } from "react-router-dom";
-import { ArrowLeft, ClipboardList, Database, Drill, LayoutDashboard, MapPinned, MoonStar, Settings, Sun, Users } from "lucide-react";
+import { ArrowLeft, ClipboardList, Database, Drill, LayoutDashboard, MapPinned, MoonStar, Settings, ShieldCheck, Sun, Users } from "lucide-react";
 import { useAuth } from "@/features/auth/context/AuthContext";
 import { useTheme } from "@/shared/theme/ThemeProvider";
 import { UserRouteMenu } from "@/shared/ui/UserRouteMenu";
-import type { AuthRole } from "@/features/auth/model/auth.schema";
+import { homePathFor, type PermissionModule } from "@/features/auth/lib/permissions";
 
 type MainRoute = {
   label: string;
   to: string;
   icon: typeof LayoutDashboard;
-  roles?: AuthRole[];
-  hiddenFor?: AuthRole[];
+  permission?: PermissionModule | PermissionModule[];
+  adminOnly?: boolean;
+  dashboard?: boolean;
 };
 
 const MAIN_ROUTES: MainRoute[] = [
-  { label: "Inicio", to: "/dashboard", icon: LayoutDashboard, roles: ["ADMIN", "SUPERINTENDENTE"] },
-  { label: "Data Room", to: "/exploraciones-data-room", icon: Database, hiddenFor: ["SONDAJES"] },
+  { label: "Inicio", to: "/dashboard", icon: LayoutDashboard, dashboard: true },
+  { label: "Data Room", to: "/exploraciones-data-room", icon: Database, permission: "dataRoom" },
   {
     label: "Muestras",
     to: "/exploraciones",
     icon: MapPinned,
-    roles: ["ADMIN", "SUPERINTENDENTE", "GEOLOGO"]
+    permission: ["exploracion", "produccion"]
   },
   {
     label: "Sondajes",
     to: "/sondajes",
     icon: Drill,
-    hiddenFor: ["VISITANTE"]
+    permission: ["sondajes", "geologiaSondajes"]
   },
   {
     label: "Ajustes",
     to: "/exploraciones/ajustes",
     icon: Settings,
-    roles: ["ADMIN"]
+    adminOnly: true
   },
   {
     label: "Trabajadores",
     to: "/trabajadores",
     icon: Users,
-    roles: ["ADMIN"]
+    permission: "usuarios"
+  },
+  {
+    label: "Roles",
+    to: "/roles",
+    icon: ShieldCheck,
+    permission: "usuarios"
   },
   {
     label: "Solicitudes",
     to: "/solicitudes-data-room",
     icon: ClipboardList,
-    roles: ["ADMIN"]
+    permission: "solicitudes"
   }
 ];
 
@@ -59,14 +66,14 @@ export function InternalHeader({
   description,
   eyebrow
 }: InternalHeaderProps) {
-  const { user } = useAuth();
+  const { user, can, isAdmin } = useAuth();
   const { mode, setMode } = useTheme();
   const location = useLocation();
   const navigate = useNavigate();
   const routes = MAIN_ROUTES.filter((route) => {
-    if (user?.role && route.hiddenFor?.includes(user.role)) return false;
-    if (!route.roles?.length) return true;
-    return user?.role ? route.roles.includes(user.role) : false;
+    if (route.dashboard) return homePathFor(user) === "/dashboard";
+    if (route.adminOnly) return isAdmin;
+    return route.permission ? can(route.permission) : true;
   });
 
   return (

@@ -1,13 +1,6 @@
-import { Navigate, Outlet } from "react-router-dom";
-import { useAuth } from "@/features/auth/context/AuthContext";
+import { PermissionRoute } from "@/app/router/guards/PermissionRoute";
 
-// Sondajes: todos los roles internos; los visitantes del Data Room no.
+// Sondajes: Perforación o Geología (cada uno ve su parte dentro del módulo).
 export function SondajesRoute() {
-  const { user } = useAuth();
-
-  if (!user?.role || user.role === "VISITANTE") {
-    return <Navigate to="/exploraciones-data-room" replace />;
-  }
-
-  return <Outlet />;
+  return <PermissionRoute module={["sondajes", "geologiaSondajes"]} />;
 }

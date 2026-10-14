@@ -223,12 +223,12 @@ function DeferredMediaImage({
 }
 
 export function ExploracionesDataRoomPage() {
-  const { user, token } = useAuth();
+  const { user, token, can } = useAuth();
   const { showError, showSuccess } = useToast();
   const navigate = useNavigate();
   const location = useLocation();
-  const canManage = user?.role === "ADMIN" || user?.role === "GEOLOGOADMIN" || user?.role === "SUPERINTENDENTE";
-  const canView = canManage || user?.role === "VISITANTE" || user?.role === "GEOLOGO";
+  const canManage = can("dataRoom", "update");
+  const canView = can("dataRoom", "read");
   const isVisitante = user?.role === "VISITANTE";
   const isAdmin = user?.role === "ADMIN";
   const params = useParams();

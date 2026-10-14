@@ -1,20 +1,18 @@
 import { Link, Navigate } from "react-router-dom";
-import { ClipboardList, Database, Drill, FileSpreadsheet, MapPinned, Users } from "lucide-react";
+import { ClipboardList, Database, Drill, FileSpreadsheet, MapPinned, ShieldCheck, Users } from "lucide-react";
 import { useAuth } from "@/features/auth/context/AuthContext";
+import { homePathFor } from "@/features/auth/lib/permissions";
 import { InternalHeader } from "@/shared/ui/InternalHeader";
 
 const cardClassName =
   "group rounded-xl border border-[var(--color-border-soft)] bg-[var(--color-surface-container-low)] p-5 transition hover:border-[var(--color-primary)] hover:bg-[var(--color-surface-container-high)]";
 
 export function DashboardPage() {
-  const { user } = useAuth();
-  if (user?.role === "GEOLOGO") {
-    return <Navigate to="/exploraciones-data-room" replace />;
+  const { user, can, isAdmin } = useAuth();
+  const home = homePathFor(user);
+  if (home !== "/dashboard") {
+    return <Navigate to={home} replace />;
   }
-
-  const canManageExploraciones =
-    user?.role === "ADMIN" || user?.role === "GEOLOGOADMIN" || user?.role === "SUPERINTENDENTE";
-  const canManageSystem = user?.role === "ADMIN";
 
   return (
     <section className="space-y-6 text-[var(--color-on-surface)]">
@@ -25,15 +23,17 @@ export function DashboardPage() {
       />
 
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-        <Link to="/exploraciones-data-room" className={cardClassName}>
-          <Database size={22} className="mb-4 text-[var(--color-primary)]" />
-          <h2 className="text-lg font-bold">Data Room</h2>
-          <p className="mt-2 text-sm text-[var(--color-on-surface-variant)]">
-            Consulta proyectos, perforaciones y exploración superficial.
-          </p>
-        </Link>
+        {can("dataRoom") ? (
+          <Link to="/exploraciones-data-room" className={cardClassName}>
+            <Database size={22} className="mb-4 text-[var(--color-primary)]" />
+            <h2 className="text-lg font-bold">Data Room</h2>
+            <p className="mt-2 text-sm text-[var(--color-on-surface-variant)]">
+              Consulta proyectos, perforaciones y exploración superficial.
+            </p>
+          </Link>
+        ) : null}
 
-        {canManageExploraciones ? (
+        {can(["exploracion", "produccion"]) ? (
           <Link to="/exploraciones" className={cardClassName}>
             <MapPinned size={22} className="mb-4 text-[var(--color-primary)]" />
             <h2 className="text-lg font-bold">Registro de muestras</h2>
@@ -43,7 +43,7 @@ export function DashboardPage() {
           </Link>
         ) : null}
 
-        {user?.role !== "VISITANTE" ? (
+        {can(["sondajes", "geologiaSondajes"]) ? (
           <Link to="/sondajes" className={cardClassName}>
             <Drill size={22} className="mb-4 text-[var(--color-primary)]" />
             <h2 className="text-lg font-bold">Sondajes</h2>
@@ -53,7 +53,7 @@ export function DashboardPage() {
           </Link>
         ) : null}
 
-        {canManageSystem ? (
+        {can("solicitudes") ? (
           <Link to="/solicitudes-data-room" className={cardClassName}>
             <ClipboardList size={22} className="mb-4 text-[var(--color-primary)]" />
             <h2 className="text-lg font-bold">Solicitudes Data Room</h2>
@@ -63,7 +63,7 @@ export function DashboardPage() {
           </Link>
         ) : null}
 
-        {canManageSystem ? (
+        {can("usuarios") ? (
           <Link to="/trabajadores" className={cardClassName}>
             <Users size={22} className="mb-4 text-[var(--color-primary)]" />
             <h2 className="text-lg font-bold">Trabajadores</h2>
@@ -73,7 +73,17 @@ export function DashboardPage() {
           </Link>
         ) : null}
 
-        {user?.role === "ADMIN" ? (
+        {can("usuarios") ? (
+          <Link to="/roles" className={cardClassName}>
+            <ShieldCheck size={22} className="mb-4 text-[var(--color-primary)]" />
+            <h2 className="text-lg font-bold">Roles y permisos</h2>
+            <p className="mt-2 text-sm text-[var(--color-on-surface-variant)]">
+              Crea roles y define qué puede ver, crear, editar o borrar cada uno.
+            </p>
+          </Link>
+        ) : null}
+
+        {isAdmin ? (
           <Link to="/exploraciones-data-room/forms" className={cardClassName}>
             <FileSpreadsheet size={22} className="mb-4 text-[var(--color-primary)]" />
             <h2 className="text-lg font-bold">Importaciones</h2>

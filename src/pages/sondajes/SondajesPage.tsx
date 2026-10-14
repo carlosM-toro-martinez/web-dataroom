@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { Link } from "react-router-dom";
 import {
   Boxes,
@@ -12,6 +13,7 @@ import {
   FlaskConical,
   FolderKanban,
   FolderPlus,
+  Microscope,
   Layers,
   MoreVertical,
   Pencil,
@@ -49,6 +51,9 @@ import { ImportProgramModal, type ImportRequest } from "@/features/sondajes/comp
 import { PersonnelModal } from "@/features/sondajes/components/PersonnelModal";
 import { SyncBar } from "@/features/sondajes/components/SyncBar";
 import { useShiftReportsSync } from "@/features/sondajes/hooks/useShiftReportsSync";
+import { useGeologySync } from "@/features/sondajes/hooks/useGeology";
+import { GeologyImportModal, describeImport } from "@/features/sondajes/components/geology/GeologyImportModal";
+import { useAuth } from "@/features/auth/context/AuthContext";
 import {
   Modal,
   dangerButton,
@@ -68,8 +73,7 @@ const ALL = "all";
 const UPCOMING_FEATURES = [
   { icon: Compass, title: "Control de desviación", description: "Mediciones de azimut e inclinación del pozo." },
   { icon: Ruler, title: "Recuperación y RQD", description: "Corridas con recuperación y RQD." },
-  { icon: Boxes, title: "Cajas de testigo", description: "Tramos, ubicación en almacén y fotos." },
-  { icon: Layers, title: "Logueo geológico", description: "Litología, alteración, mineralización y estructuras." },
+  { icon: Boxes, title: "Almacén de cajas", description: "Ubicación de cada caja de testigo en el almacén." },
   { icon: FlaskConical, title: "Muestras y laboratorio", description: "Lotes con folio, nota de remisión y resultados." }
 ];
 
@@ -96,6 +100,12 @@ function sumPlanned(holes: DrillingHole[]) {
 
 export function SondajesPage() {
   const { showError, showSuccess } = useToast();
+  const { can } = useAuth();
+  const canDrilling = can("sondajes");
+  const canGeology = can("geologiaSondajes");
+  const canCreate = can("sondajes", "create");
+  const canUpdate = can("sondajes", "update");
+  const canDelete = can("sondajes", "delete");
   const campaignsQuery = useDrillingCampaignsQuery();
   const holesQuery = useDrillingHolesQuery();
   const createCampaign = useCreateDrillingCampaignMutation();
@@ -106,11 +116,14 @@ export function SondajesPage() {
   const deleteHole = useDeleteDrillingHoleMutation();
   const importHoles = useImportDrillingHolesMutation();
   const sync = useShiftReportsSync();
+  const geologySync = useGeologySync();
   const pendingByHole = useMemo(() => {
     const counts = new Map<string, number>();
-    sync.queue.filter((item) => !item.synced).forEach((item) => counts.set(item.holeId, (counts.get(item.holeId) ?? 0) + 1));
+    const add = (holeId: string) => counts.set(holeId, (counts.get(holeId) ?? 0) + 1);
+    if (canDrilling) sync.queue.filter((item) => !item.synced).forEach((item) => add(item.holeId));
+    if (canGeology) geologySync.queue.forEach((item) => add(item.holeId));
     return counts;
-  }, [sync.queue]);
+  }, [sync.queue, geologySync.queue, canDrilling, canGeology]);
 
   const [selectedCampaignId, setSelectedCampaignId] = useState<string>(ALL);
   const [search, setSearch] = useState("");
@@ -120,6 +133,7 @@ export function SondajesPage() {
   const [detailHoleId, setDetailHoleId] = useState<string | null>(null);
   const [importOpen, setImportOpen] = useState(false);
   const [personnelOpen, setPersonnelOpen] = useState(false);
+  const [geologyImportOpen, setGeologyImportOpen] = useState(false);
   const [confirm, setConfirm] = useState<ConfirmState>(null);
   const [statusSavingId, setStatusSavingId] = useState<string | null>(null);
 
@@ -262,26 +276,41 @@ export function SondajesPage() {
         description="Pozos programados por área, su ubicación, orientación y estado de avance."
       />
 
-      <div className="flex flex-wrap items-center justify-end gap-2">
-        <button type="button" className={secondaryButton} onClick={() => setPersonnelOpen(true)}>
-          <Users size={16} />
-          Personal
-        </button>
-        <button type="button" className={secondaryButton} onClick={() => setImportOpen(true)}>
-          <FileSpreadsheet size={16} />
-          Importar Excel
-        </button>
-        <button type="button" className={secondaryButton} onClick={() => setProgramForm({ open: true, campaign: null })}>
-          <FolderPlus size={16} />
-          Nuevo programa
-        </button>
-        <button type="button" className={primaryButton} onClick={openNewHole}>
-          <Plus size={16} />
-          Nuevo pozo
-        </button>
-      </div>
+      {canDrilling || can("geologiaSondajes", "create") ? (
+        <div className="flex flex-wrap items-center justify-end gap-2">
+          {can("geologiaSondajes", "create") ? (
+            <button type="button" className={secondaryButton} onClick={() => setGeologyImportOpen(true)}>
+              <Microscope size={16} />
+              Importar reportes geológicos
+            </button>
+          ) : null}
+          {canDrilling ? (
+          <button type="button" className={secondaryButton} onClick={() => setPersonnelOpen(true)}>
+            <Users size={16} />
+            Personal
+          </button>
+          ) : null}
+          {canCreate ? (
+            <>
+              <button type="button" className={secondaryButton} onClick={() => setImportOpen(true)}>
+                <FileSpreadsheet size={16} />
+                Importar Excel
+              </button>
+              <button type="button" className={secondaryButton} onClick={() => setProgramForm({ open: true, campaign: null })}>
+                <FolderPlus size={16} />
+                Nuevo programa
+              </button>
+              <button type="button" className={primaryButton} onClick={openNewHole}>
+                <Plus size={16} />
+                Nuevo pozo
+              </button>
+            </>
+          ) : null}
+        </div>
+      ) : null}
 
-      <SyncBar sync={sync} />
+      {canDrilling ? <SyncBar sync={sync} /> : null}
+      {canGeology && (!canDrilling || geologySync.pendingCount > 0) ? <SyncBar sync={geologySync} itemLabel="cambio(s) de geología" /> : null}
 
       {loadError ? (
         <div className={`${panelClass} p-6 text-sm text-rose-600`}>{errorMessage(loadError, "No se pudieron cargar los sondajes.")}</div>
@@ -315,8 +344,8 @@ export function SondajesPage() {
             subtitle={campaign.category === "PRODUCTION" ? "Producción" : "Exploración"}
             holes={allHoles.filter((hole) => hole.campaignId === campaign.id)}
             onSelect={() => setSelectedCampaignId(campaign.id)}
-            onEdit={() => setProgramForm({ open: true, campaign })}
-            onDelete={() => setConfirm({ kind: "program", campaign })}
+            onEdit={canUpdate ? () => setProgramForm({ open: true, campaign }) : undefined}
+            onDelete={canDelete ? () => setConfirm({ kind: "program", campaign }) : undefined}
           />
         ))}
       </section>
@@ -355,7 +384,7 @@ export function SondajesPage() {
             ))}
           </div>
         ) : campaigns.length === 0 ? (
-          <EmptyState onImport={() => setImportOpen(true)} onCreate={() => setProgramForm({ open: true, campaign: null })} />
+          <EmptyState canCreate={canCreate} onImport={() => setImportOpen(true)} onCreate={() => setProgramForm({ open: true, campaign: null })} />
         ) : visibleHoles.length === 0 ? (
           <p className="px-4 py-12 text-center text-sm text-[var(--color-on-surface-variant)]">
             {scopedHoles.length === 0 ? "Este programa aún no tiene pozos." : "No hay pozos con estos filtros."}
@@ -409,14 +438,15 @@ export function SondajesPage() {
                           <DepthProgress current={hole.currentDepth ?? 0} planned={hole.plannedDepth ?? null} />
                         </td>
                         <td className="px-4 py-3">
-                          <HoleStatusMenu status={hole.status} disabled={statusSavingId === hole.id} onChange={(status) => changeStatus(hole, status)} />
+                          <HoleStatusMenu status={hole.status} disabled={statusSavingId === hole.id || !canUpdate} onChange={(status) => changeStatus(hole, status)} />
                         </td>
                         <td className="px-4 py-3">
                           <RowActions
                             holeId={hole.id}
+                            openLabel={canDrilling ? "Partes diarios" : "Geología del pozo"}
                             onView={() => setDetailHoleId(hole.id)}
-                            onEdit={() => setHoleForm({ open: true, hole })}
-                            onDelete={() => setConfirm({ kind: "hole", hole })}
+                            onEdit={canUpdate ? () => setHoleForm({ open: true, hole }) : undefined}
+                            onDelete={canDelete ? () => setConfirm({ kind: "hole", hole }) : undefined}
                           />
                         </td>
                       </tr>
@@ -440,7 +470,7 @@ export function SondajesPage() {
                           {campaign?.area || campaign?.name} · {formatMeters(hole.plannedDepth)}
                         </span>
                       </button>
-                      <HoleStatusMenu status={hole.status} disabled={statusSavingId === hole.id} onChange={(status) => changeStatus(hole, status)} />
+                      <HoleStatusMenu status={hole.status} disabled={statusSavingId === hole.id || !canUpdate} onChange={(status) => changeStatus(hole, status)} />
                     </div>
                     <dl className="grid grid-cols-3 gap-2 text-xs">
                       {[
@@ -460,9 +490,10 @@ export function SondajesPage() {
                     <DepthProgress current={hole.currentDepth ?? 0} planned={hole.plannedDepth ?? null} />
                     <RowActions
                       holeId={hole.id}
+                      openLabel={canDrilling ? "Partes diarios" : "Geología del pozo"}
                       onView={() => setDetailHoleId(hole.id)}
-                      onEdit={() => setHoleForm({ open: true, hole })}
-                      onDelete={() => setConfirm({ kind: "hole", hole })}
+                      onEdit={canUpdate ? () => setHoleForm({ open: true, hole }) : undefined}
+                      onDelete={canDelete ? () => setConfirm({ kind: "hole", hole }) : undefined}
                     />
                   </article>
                 );
@@ -519,17 +550,39 @@ export function SondajesPage() {
         onClose={() => setImportOpen(false)}
         onImport={runImport}
       />
-      <PersonnelModal open={personnelOpen} onClose={() => setPersonnelOpen(false)} />
+      {canDrilling ? <PersonnelModal open={personnelOpen} onClose={() => setPersonnelOpen(false)} /> : null}
+      {can("geologiaSondajes", "create") ? (
+        <GeologyImportModal
+          open={geologyImportOpen}
+          holes={allHoles}
+          onClose={() => setGeologyImportOpen(false)}
+          onImported={async (result) => {
+            setGeologyImportOpen(false);
+            const text = describeImport(result);
+            if (!navigator.onLine) {
+              showSuccess(`Importado en este dispositivo (${text}). Se sincronizará cuando haya conexión.`);
+              return;
+            }
+            const synced = await geologySync.runSync();
+            if (synced?.failed) showError(`Guardado en el dispositivo, pero el servidor rechazó algo: ${synced.errors[0]}`);
+            else showSuccess(`Importado: ${text}.`);
+          }}
+        />
+      ) : null}
       <HoleDetailModal
         hole={detailHole}
         campaign={detailHole ? campaignById.get(detailHole.campaignId) : undefined}
         statusSaving={statusSavingId === detailHole?.id}
         onClose={() => setDetailHoleId(null)}
-        onEdit={(hole) => {
-          setDetailHoleId(null);
-          setHoleForm({ open: true, hole });
-        }}
-        onStatusChange={changeStatus}
+        onEdit={
+          canUpdate
+            ? (hole) => {
+                setDetailHoleId(null);
+                setHoleForm({ open: true, hole });
+              }
+            : undefined
+        }
+        onStatusChange={canUpdate ? changeStatus : undefined}
       />
       <Modal
         open={Boolean(confirm)}
@@ -674,32 +727,62 @@ function FilterChip({ active, label, count, dot, onClick }: { active: boolean; l
 
 function RowActions({
   holeId,
+  openLabel,
   onView,
   onEdit,
   onDelete
 }: {
   holeId: string;
+  openLabel: string;
   onView: () => void;
-  onEdit: () => void;
-  onDelete: () => void;
+  onEdit?: () => void;
+  onDelete?: () => void;
 }) {
   const [open, setOpen] = useState(false);
-  const ref = useRef<HTMLDivElement>(null);
+  const [position, setPosition] = useState<{ top: number; left: number } | null>(null);
+  const buttonRef = useRef<HTMLButtonElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
 
-  // Cerrar al hacer clic fuera o con Escape
+  // El menú va en un portal con posición fija: dentro de la tabla (overflow) quedaba recortado
+  // cuando había pocas filas. Si no cabe debajo del botón, se abre hacia arriba.
+  function placeMenu() {
+    const rect = buttonRef.current?.getBoundingClientRect();
+    if (!rect) return false;
+    const menuHeight = menuRef.current?.offsetHeight ?? 180;
+    const menuWidth = 192;
+    const below = rect.bottom + 4;
+    const top = below + menuHeight > window.innerHeight - 8 ? Math.max(8, rect.top - menuHeight - 4) : below;
+    setPosition({ top, left: Math.max(8, Math.min(rect.right - menuWidth, window.innerWidth - menuWidth - 8)) });
+    return rect.bottom > 0 && rect.top < window.innerHeight;
+  }
+
+  // Reubica con la altura real del menú ya montado.
+  useLayoutEffect(() => {
+    if (open) placeMenu();
+  }, [open]);
+
   useEffect(() => {
     if (!open) return;
-    function handleClick(event: MouseEvent) {
-      if (ref.current && !ref.current.contains(event.target as Node)) setOpen(false);
+    function handleClick(event: Event) {
+      const target = event.target as Node;
+      if (menuRef.current?.contains(target) || buttonRef.current?.contains(target)) return;
+      setOpen(false);
     }
     function handleKey(event: KeyboardEvent) {
       if (event.key === "Escape") setOpen(false);
     }
-    document.addEventListener("mousedown", handleClick);
+    const follow = () => {
+      if (!placeMenu()) setOpen(false);
+    };
+    document.addEventListener("pointerdown", handleClick);
     document.addEventListener("keydown", handleKey);
+    window.addEventListener("scroll", follow, true);
+    window.addEventListener("resize", follow);
     return () => {
-      document.removeEventListener("mousedown", handleClick);
+      document.removeEventListener("pointerdown", handleClick);
       document.removeEventListener("keydown", handleKey);
+      window.removeEventListener("scroll", follow, true);
+      window.removeEventListener("resize", follow);
     };
   }, [open]);
 
@@ -717,22 +800,28 @@ function RowActions({
   );
 
   return (
-    <div ref={ref} className="relative flex justify-end">
+    <div className="flex justify-end">
       <button
+        ref={buttonRef}
         type="button"
         className={iconButton}
         title="Acciones"
         aria-haspopup="menu"
         aria-expanded={open}
-        onClick={() => setOpen((v) => !v)}
+        onClick={() => {
+          if (!open) placeMenu();
+          setOpen((v) => !v);
+        }}
       >
         <MoreVertical size={16} />
       </button>
 
-      {open ? (
+      {open && position ? createPortal(
         <div
+          ref={menuRef}
           role="menu"
-          className="absolute right-0 top-full z-50 mt-1 w-48 overflow-hidden rounded-xl border border-[var(--color-border-soft)] bg-[var(--color-surface-container)] py-1 shadow-xl"
+          style={{ top: position.top, left: position.left }}
+          className="fixed z-[110] w-48 overflow-hidden rounded-xl border border-[var(--color-border-soft)] bg-[var(--color-surface-container)] py-1 shadow-xl"
         >
           <Link
             to={`/sondajes/pozos/${holeId}`}
@@ -740,13 +829,18 @@ function RowActions({
             onClick={() => setOpen(false)}
           >
             <ClipboardList size={15} />
-            Partes diarios
+            {openLabel}
           </Link>
           {item(<Eye size={15} />, "Ver detalle", onView)}
-          {item(<Pencil size={15} />, "Editar pozo", onEdit)}
-          <div className="my-1 border-t border-[var(--color-border-soft)]" />
-          {item(<Trash2 size={15} />, "Eliminar pozo", onDelete, true)}
-        </div>
+          {onEdit ? item(<Pencil size={15} />, "Editar pozo", onEdit) : null}
+          {onDelete ? (
+            <>
+              <div className="my-1 border-t border-[var(--color-border-soft)]" />
+              {item(<Trash2 size={15} />, "Eliminar pozo", onDelete, true)}
+            </>
+          ) : null}
+        </div>,
+        document.body
       ) : null}
     </div>
   );
@@ -772,12 +866,12 @@ function PendingTag({ count }: { count: number }) {
   return (
     <span className="mt-1 inline-flex items-center gap-1 rounded-full bg-sky-500/15 px-2 py-0.5 text-[10px] font-bold text-sky-600">
       <CloudUpload size={11} />
-      {count} parte{count === 1 ? "" : "s"} sin enviar
+      {count} cambio{count === 1 ? "" : "s"} sin enviar
     </span>
   );
 }
 
-function EmptyState({ onImport, onCreate }: { onImport: () => void; onCreate: () => void }) {
+function EmptyState({ canCreate, onImport, onCreate }: { canCreate: boolean; onImport: () => void; onCreate: () => void }) {
   return (
     <div className="flex flex-col items-center gap-4 px-6 py-14 text-center">
       <span className="inline-flex h-16 w-16 items-center justify-center rounded-2xl bg-[var(--color-primary)] text-[var(--color-on-primary)]">
@@ -786,10 +880,12 @@ function EmptyState({ onImport, onCreate }: { onImport: () => void; onCreate: ()
       <div>
         <h3 className="text-lg font-extrabold">Aún no hay programas de perforación</h3>
         <p className="mt-1 max-w-md text-sm text-[var(--color-on-surface-variant)]">
-          Importa el Excel del programa DDH (Mosa, Lipeña…) o crea un programa y agrega sus pozos uno a uno.
+          {canCreate
+            ? "Importa el Excel del programa DDH (Mosa, Lipeña…) o crea un programa y agrega sus pozos uno a uno."
+            : "Cuando el equipo de perforación cargue los programas, aparecerán aquí."}
         </p>
       </div>
-      <div className="flex flex-wrap justify-center gap-2">
+      <div className={`flex flex-wrap justify-center gap-2 ${canCreate ? "" : "hidden"}`}>
         <button type="button" className={primaryButton} onClick={onImport}>
           <FileSpreadsheet size={16} />
           Importar Excel

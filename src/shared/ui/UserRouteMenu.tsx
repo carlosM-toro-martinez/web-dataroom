@@ -8,47 +8,55 @@ import {
   LayoutDashboard,
   LogOut,
   MapPinned,
+  ShieldCheck,
   UserCircle,
   Users
 } from "lucide-react";
 import { getPostLogoutPath } from "@/app/router/domainConfig";
 import { useAuth } from "@/features/auth/context/AuthContext";
-import type { AuthRole } from "@/features/auth/model/auth.schema";
+import { homePathFor, type PermissionModule } from "@/features/auth/lib/permissions";
 
 type RouteItem = {
   label: string;
   to: string;
   icon: typeof FolderKanban;
-  roles?: AuthRole[];
-  hiddenFor?: AuthRole[];
+  permission?: PermissionModule | PermissionModule[];
+  adminOnly?: boolean;
+  dashboard?: boolean;
 };
 
 const SYSTEM_ROUTES: RouteItem[] = [
-  { label: "Inicio", to: "/dashboard", icon: LayoutDashboard, roles: ["ADMIN", "SUPERINTENDENTE"] },
-  { label: "Data Room", to: "/exploraciones-data-room", icon: FolderKanban, hiddenFor: ["SONDAJES"] },
+  { label: "Inicio", to: "/dashboard", icon: LayoutDashboard, dashboard: true },
+  { label: "Data Room", to: "/exploraciones-data-room", icon: FolderKanban, permission: "dataRoom" },
   {
     label: "Muestras",
     to: "/exploraciones",
     icon: MapPinned,
-    roles: ["ADMIN", "SUPERINTENDENTE", "GEOLOGO"]
+    permission: ["exploracion", "produccion"]
   },
   {
     label: "Sondajes",
     to: "/sondajes",
     icon: Drill,
-    hiddenFor: ["VISITANTE"]
+    permission: ["sondajes", "geologiaSondajes"]
   },
   {
     label: "Trabajadores",
     to: "/trabajadores",
     icon: Users,
-    roles: ["ADMIN"]
+    permission: "usuarios"
+  },
+  {
+    label: "Roles y permisos",
+    to: "/roles",
+    icon: ShieldCheck,
+    permission: "usuarios"
   },
   {
     label: "Solicitudes Data Room",
     to: "/solicitudes-data-room",
     icon: ClipboardList,
-    roles: ["ADMIN"]
+    permission: "solicitudes"
   }
 ];
 
@@ -67,7 +75,7 @@ export function UserRouteMenu({
   align = "right",
   onNavigate
 }: UserRouteMenuProps) {
-  const { user, logout } = useAuth();
+  const { user, logout, can, isAdmin } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
   const menuRef = useRef<HTMLDivElement | null>(null);
@@ -76,11 +84,11 @@ export function UserRouteMenu({
   const routes = useMemo(
     () =>
       SYSTEM_ROUTES.filter((route) => {
-        if (user?.role && route.hiddenFor?.includes(user.role)) return false;
-    if (!route.roles?.length) return true;
-        return user?.role ? route.roles.includes(user.role) : false;
+        if (route.dashboard) return homePathFor(user) === "/dashboard";
+        if (route.adminOnly) return isAdmin;
+        return route.permission ? can(route.permission) : true;
       }),
-    [user?.role]
+    [user, can, isAdmin]
   );
 
   useEffect(() => {

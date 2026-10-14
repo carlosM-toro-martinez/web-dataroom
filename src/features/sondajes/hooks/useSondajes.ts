@@ -44,9 +44,9 @@ const base = ["sondajes"] as const;
 
 // Sondajes funciona sin conexión: las consultas corren siempre (no se pausan offline)
 // y, si no hay red, devuelven la última copia guardada en el dispositivo.
-const offlineQueryOptions = { networkMode: "always", retry: false } as const;
+export const offlineQueryOptions = { networkMode: "always", retry: false } as const;
 
-async function withOfflineCache<T>(remote: () => Promise<T>, save: (value: T) => Promise<void>, readCache: () => Promise<T>) {
+export async function withOfflineCache<T>(remote: () => Promise<T>, save: (value: T) => Promise<void>, readCache: () => Promise<T>) {
   try {
     const value = await remote();
     await save(value).catch(() => undefined);
@@ -83,7 +83,7 @@ export function useDrillingHolesQuery() {
 }
 
 // ─── Partes diarios (offline primero, igual que las muestras) ───────────────
-export function useHoleShiftReportsQuery(holeId?: string) {
+export function useHoleShiftReportsQuery(holeId?: string, enabled = true) {
   return useQuery({
     queryKey: [...base, "shift-reports", holeId],
     queryFn: () =>
@@ -92,7 +92,7 @@ export function useHoleShiftReportsQuery(holeId?: string) {
         (reports) => replaceCachedShiftReports(holeId as string, reports),
         () => getCachedShiftReports(holeId as string)
       ),
-    enabled: Boolean(holeId),
+    enabled: enabled && Boolean(holeId),
     ...offlineQueryOptions
   });
 }
@@ -197,8 +197,9 @@ export function useImportDrillingHolesMutation() {
 
 
 // ─── Personal de perforación (servidor + caché offline) ──────────────────────
-export function usePersonnelQuery() {
+export function usePersonnelQuery(enabled = true) {
   return useQuery({
+    enabled,
     queryKey: [...base, "personnel"],
     queryFn: () =>
       withOfflineCache(

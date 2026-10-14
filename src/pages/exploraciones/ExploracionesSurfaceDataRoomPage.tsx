@@ -255,9 +255,9 @@ function DeferredMediaImage({
 }
 
 export function ExploracionesSurfaceDataRoomPage() {
-  const { user, token } = useAuth();
-  const canManage = user?.role === "ADMIN" || user?.role === "GEOLOGOADMIN" || user?.role === "SUPERINTENDENTE";
-  const canView = canManage || user?.role === "VISITANTE" || user?.role === "GEOLOGO";
+  const { user, token, can } = useAuth();
+  const canManage = can("dataRoom", "update");
+  const canView = can("dataRoom", "read");
   const { areaId, levelId, laborId, sampleId } = useParams();
   const [modal, setModal] = useState<ModalType | null>(null);
   const [slide, setSlide] = useState(0);

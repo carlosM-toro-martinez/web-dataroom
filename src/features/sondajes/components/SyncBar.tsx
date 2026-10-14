@@ -1,24 +1,32 @@
 import { AlertTriangle, CheckCircle2, CloudUpload, RefreshCw, WifiOff } from "lucide-react";
 import { useToast } from "@/shared/ui/toast/ToastProvider";
-import { useShiftReportsSync } from "@/features/sondajes/hooks/useShiftReportsSync";
+import type { ShiftReportsSyncResult } from "@/features/sondajes/services/shiftReportsSync";
 import { secondaryButton } from "@/features/sondajes/components/ui";
 
-// Estado de conexión y de partes pendientes, con botón para sincronizar a mano.
-export function SyncBar({ sync }: { sync: ReturnType<typeof useShiftReportsSync> }) {
+type SyncState = {
+  online: boolean;
+  pendingCount: number;
+  errorCount: number;
+  isSyncing: boolean;
+  runSync: () => Promise<ShiftReportsSyncResult | undefined>;
+};
+
+// Estado de conexión y de cambios pendientes, con botón para sincronizar a mano.
+export function SyncBar({ sync, itemLabel = "parte(s)" }: { sync: SyncState; itemLabel?: string }) {
   const { showError, showSuccess } = useToast();
   const { online, pendingCount, errorCount, isSyncing, runSync } = sync;
 
   async function syncNow() {
     if (!online) {
-      showError("Sin conexión. Los partes quedan guardados en este dispositivo.");
+      showError(`Sin conexión. Los ${itemLabel.replace("(s)", "s")} quedan guardados en este dispositivo.`);
       return;
     }
     try {
       const result = await runSync();
       if (!result) return;
-      if (result.failed > 0) showError(result.errors[0] ?? `${result.failed} parte(s) no se pudieron sincronizar.`);
-      else if (result.synced > 0) showSuccess(`${result.synced} parte(s) sincronizado(s).`);
-      else showSuccess("No hay partes pendientes.");
+      if (result.failed > 0) showError(result.errors[0] ?? `${result.failed} ${itemLabel} no se pudieron sincronizar.`);
+      else if (result.synced > 0) showSuccess(`${result.synced} ${itemLabel} sincronizado(s).`);
+      else showSuccess("No hay cambios pendientes.");
     } catch (error) {
       showError(error instanceof Error ? error.message : "No se pudo sincronizar.");
     }
@@ -38,25 +46,25 @@ export function SyncBar({ sync }: { sync: ReturnType<typeof useShiftReportsSync>
         title: "Sin conexión",
         detail:
           pendingCount > 0
-            ? `${pendingCount} parte(s) guardado(s) en este dispositivo. Se enviarán solos al volver la conexión.`
-            : "Puedes seguir registrando partes; se guardan en este dispositivo."
+            ? `${pendingCount} ${itemLabel} guardado(s) en este dispositivo. Se enviarán solos al volver la conexión.`
+            : "Puedes seguir trabajando; todo se guarda en este dispositivo."
       }
     : errorCount > 0
       ? {
           icon: <AlertTriangle size={18} className="text-rose-600" />,
-          title: `${errorCount} parte(s) con error`,
-          detail: "Revisa el mensaje en el parte, corrígelo y vuelve a sincronizar."
+          title: `${errorCount} ${itemLabel} con error`,
+          detail: "Revisa el mensaje del registro, corrígelo y vuelve a sincronizar."
         }
       : pendingCount > 0
         ? {
             icon: <CloudUpload size={18} className="text-sky-600" />,
-            title: `${pendingCount} parte(s) por enviar`,
+            title: `${pendingCount} ${itemLabel} por enviar`,
             detail: "Se están sincronizando automáticamente."
           }
         : {
             icon: <CheckCircle2 size={18} className="text-emerald-600" />,
             title: "Todo sincronizado",
-            detail: "Los partes están guardados en el servidor."
+            detail: "Todo está guardado en el servidor."
           };
 
   return (

@@ -28,8 +28,8 @@ export function HoleDetailModal({
   campaign?: DrillingCampaign;
   statusSaving: boolean;
   onClose: () => void;
-  onEdit: (hole: DrillingHole) => void;
-  onStatusChange: (hole: DrillingHole, status: DrillingHoleStatus) => void;
+  onEdit?: (hole: DrillingHole) => void;
+  onStatusChange?: (hole: DrillingHole, status: DrillingHoleStatus) => void;
 }) {
   if (!hole) return null;
   const planned = hole.plannedDepth ?? null;
@@ -52,12 +52,14 @@ export function HoleDetailModal({
           </button>
           <Link to={`/sondajes/pozos/${hole.id}`} className={secondaryButton}>
             <ClipboardList size={15} />
-            Partes diarios
+            Abrir pozo
           </Link>
-          <button type="button" className={primaryButton} onClick={() => onEdit(hole)}>
-            <Pencil size={15} />
-            Editar
-          </button>
+          {onEdit ? (
+            <button type="button" className={primaryButton} onClick={() => onEdit(hole)}>
+              <Pencil size={15} />
+              Editar
+            </button>
+          ) : null}
         </>
       }
     >
@@ -66,7 +68,7 @@ export function HoleDetailModal({
           <div>
             <p className="text-[10px] font-bold uppercase tracking-wider text-[var(--color-on-surface-variant)]">Estado</p>
             <div className="mt-1.5">
-              <HoleStatusMenu status={hole.status} disabled={statusSaving} onChange={(status) => onStatusChange(hole, status)} />
+              <HoleStatusMenu status={hole.status} disabled={statusSaving || !onStatusChange} onChange={(status) => onStatusChange?.(hole, status)} />
             </div>
           </div>
           <div className="min-w-[180px] flex-1 sm:max-w-xs">

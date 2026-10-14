@@ -1,12 +1,5 @@
-import { Navigate, Outlet } from "react-router-dom";
-import { useAuth } from "@/features/auth/context/AuthContext";
+import { PermissionRoute } from "@/app/router/guards/PermissionRoute";
 
 export function ExploracionesAdminRoute() {
-  const { user } = useAuth();
-
-  if (!user?.role || !["ADMIN", "GEOLOGOADMIN", "SUPERINTENDENTE", "GEOLOGO"].includes(user.role)) {
-    return <Navigate to="/exploraciones-data-room" replace />;
-  }
-
-  return <Outlet />;
+  return <PermissionRoute module={["exploracion", "produccion"]} />;
 }

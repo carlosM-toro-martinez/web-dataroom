@@ -1,28 +1,18 @@
 import { z } from "zod";
 
-export const roleSchema = z.enum([
-  "ADMIN",
-  "ADMINISTRADOR",
-  "ALMACENERO",
-  "CONTADOR",
-  "GEOLOGO",
-  "GEOLOGOADMIN",
-  "LABORATORISTA",
-  "RECEPCIONISTA",
-  "SOLICITANTE",
-  "SONDAJES",
-  "SUPERINTENDENTE",
-  "TOPOGRAFO",
-  "TRABAJADOR",
-  "VISITANTE"
-]);
+// Los roles se administran desde la app; su clave es texto libre (ADMIN, GEOLOGO, ...).
+export const roleSchema = z.string().min(1);
+
+export const permissionActionSchema = z.enum(["create", "read", "update", "delete"]);
+export const permissionMapSchema = z.record(z.string(), z.array(permissionActionSchema));
 
 export const authUserSchema = z.object({
   id: z.number().int().positive(),
   nombre: z.string().min(1),
   email: z.string().email(),
   role: roleSchema,
-  activo: z.boolean().optional()
+  activo: z.boolean().optional(),
+  permissions: permissionMapSchema.optional()
 });
 
 export const loginPayloadSchema = z.object({
@@ -67,7 +57,40 @@ export const refreshResponseSchema = z.object({
   success: z.boolean(),
   data: z.object({
     accessToken: z.string().min(1),
-    refreshToken: z.string().min(1).optional()
+    refreshToken: z.string().min(1).optional(),
+    user: authUserSchema.optional()
+  })
+});
+
+export const meResponseSchema = z.object({
+  success: z.boolean().optional(),
+  data: authUserSchema
+});
+
+export const roleRecordSchema = z.object({
+  key: z.string().min(1),
+  name: z.string().min(1),
+  description: z.string().nullable().optional(),
+  isSystem: z.boolean(),
+  permissions: permissionMapSchema,
+  userCount: z.number().int().nonnegative().optional().default(0)
+});
+
+export const rolesListResponseSchema = z.object({
+  success: z.boolean().optional(),
+  data: z.array(roleRecordSchema).default([])
+});
+
+export const roleResponseSchema = z.object({
+  success: z.boolean().optional(),
+  data: roleRecordSchema
+});
+
+export const roleCatalogResponseSchema = z.object({
+  success: z.boolean().optional(),
+  data: z.object({
+    modules: z.array(z.object({ key: z.string(), label: z.string(), description: z.string() })),
+    actions: z.array(permissionActionSchema)
   })
 });
 
@@ -229,6 +252,10 @@ export const cancelDataRoomAccessPayloadSchema = z.object({
 });
 
 export type AuthRole = z.infer<typeof roleSchema>;
+export type PermissionAction = z.infer<typeof permissionActionSchema>;
+export type PermissionMap = z.infer<typeof permissionMapSchema>;
+export type RoleRecord = z.infer<typeof roleRecordSchema>;
+export type RoleCatalog = z.infer<typeof roleCatalogResponseSchema>["data"];
 export type AuthUser = z.infer<typeof authUserSchema>;
 export type LoginPayload = z.infer<typeof loginPayloadSchema>;
 export type RegisterPayload = z.infer<typeof registerPayloadSchema>;

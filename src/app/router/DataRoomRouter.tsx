@@ -27,6 +27,8 @@ import { PublicOnlyRoute } from "@/app/router/guards/PublicOnlyRoute";
 import { AdminRoute } from "@/app/router/guards/AdminRoute";
 import { ExploracionesAdminRoute } from "@/app/router/guards/ExploracionesAdminRoute";
 import { SondajesRoute } from "@/app/router/guards/SondajesRoute";
+import { PermissionRoute } from "@/app/router/guards/PermissionRoute";
+import { RolesPage } from "@/pages/auth/RolesPage";
 import { SeoManager } from "@/shared/seo/SeoManager";
 
 export function DataRoomRouter() {
@@ -49,23 +51,29 @@ export function DataRoomRouter() {
 
         <Route element={<ProtectedRoute />}>
           <Route path="/dashboard" element={<DashboardPage />} />
-          <Route path="/exploraciones-data-room" element={<ExploracionesDataRoomPage />} />
-          <Route path="/exploraciones-data-room/projects" element={<ExploracionesDataRoomPage />} />
-          <Route path="/exploraciones-data-room/projects/:projectId" element={<ExploracionesDataRoomPage />} />
-          <Route path="/exploraciones-data-room/projects/:projectId/zones/:zoneId" element={<ExploracionesDataRoomPage />} />
-          <Route path="/exploraciones-data-room/projects/:projectId/zones/:zoneId/drillholes/:drillHoleId" element={<ExploracionesDataRoomPage />} />
-          <Route path="/exploraciones-data-room/projects/:projectId/zones/:zoneId/drillholes/:drillHoleId/intervals/:intervalId" element={<ExploracionesDataRoomPage />} />
-          <Route path="/exploraciones-data-room/projects/:projectId/zones/:zoneId/drillholes/:drillHoleId/intervals/:intervalId/assays/:assayId" element={<ExploracionesDataRoomPage />} />
-          <Route path="/exploraciones-data-room/surface" element={<ExploracionesSurfaceDataRoomPage />} />
-          <Route path="/exploraciones-data-room/surface/areas/:areaId" element={<ExploracionesSurfaceDataRoomPage />} />
-          <Route path="/exploraciones-data-room/surface/areas/:areaId/levels/:levelId" element={<ExploracionesSurfaceDataRoomPage />} />
-          <Route path="/exploraciones-data-room/surface/areas/:areaId/levels/:levelId/labors/:laborId" element={<ExploracionesSurfaceDataRoomPage />} />
-          <Route path="/exploraciones-data-room/surface/areas/:areaId/levels/:levelId/labors/:laborId/samples/:sampleId" element={<ExploracionesSurfaceDataRoomPage />} />
+          <Route element={<PermissionRoute module="dataRoom" />}>
+            <Route path="/exploraciones-data-room" element={<ExploracionesDataRoomPage />} />
+            <Route path="/exploraciones-data-room/projects" element={<ExploracionesDataRoomPage />} />
+            <Route path="/exploraciones-data-room/projects/:projectId" element={<ExploracionesDataRoomPage />} />
+            <Route path="/exploraciones-data-room/projects/:projectId/zones/:zoneId" element={<ExploracionesDataRoomPage />} />
+            <Route path="/exploraciones-data-room/projects/:projectId/zones/:zoneId/drillholes/:drillHoleId" element={<ExploracionesDataRoomPage />} />
+            <Route path="/exploraciones-data-room/projects/:projectId/zones/:zoneId/drillholes/:drillHoleId/intervals/:intervalId" element={<ExploracionesDataRoomPage />} />
+            <Route path="/exploraciones-data-room/projects/:projectId/zones/:zoneId/drillholes/:drillHoleId/intervals/:intervalId/assays/:assayId" element={<ExploracionesDataRoomPage />} />
+            <Route path="/exploraciones-data-room/surface" element={<ExploracionesSurfaceDataRoomPage />} />
+            <Route path="/exploraciones-data-room/surface/areas/:areaId" element={<ExploracionesSurfaceDataRoomPage />} />
+            <Route path="/exploraciones-data-room/surface/areas/:areaId/levels/:levelId" element={<ExploracionesSurfaceDataRoomPage />} />
+            <Route path="/exploraciones-data-room/surface/areas/:areaId/levels/:levelId/labors/:laborId" element={<ExploracionesSurfaceDataRoomPage />} />
+            <Route path="/exploraciones-data-room/surface/areas/:areaId/levels/:levelId/labors/:laborId/samples/:sampleId" element={<ExploracionesSurfaceDataRoomPage />} />
+          </Route>
 
           <Route element={<ExploracionesAdminRoute />}>
             <Route path="/exploraciones" element={<ExploracionesPage />} />
-            <Route path="/exploraciones/exploracion" element={<ExploracionesPage category="EXPLORATION" />} />
-            <Route path="/exploraciones/produccion" element={<ExploracionesPage category="PRODUCTION" />} />
+            <Route element={<PermissionRoute module="exploracion" />}>
+              <Route path="/exploraciones/exploracion" element={<ExploracionesPage category="EXPLORATION" />} />
+            </Route>
+            <Route element={<PermissionRoute module="produccion" />}>
+              <Route path="/exploraciones/produccion" element={<ExploracionesPage category="PRODUCTION" />} />
+            </Route>
             <Route path="/exploraciones/elementos" element={<ExploracionesElementosPage />} />
             <Route path="/exploraciones/jerarquia" element={<ExploracionesHierarchyPage />} />
             <Route path="/exploraciones/reportes" element={<ExploracionesReportesPage />} />
@@ -79,8 +87,15 @@ export function DataRoomRouter() {
           <Route element={<AdminRoute />}>
             <Route path="/exploraciones/ajustes" element={<ExploracionesAjustesPage />} />
             <Route path="/exploraciones-data-room/forms" element={<ExploracionesFormsPage />} />
+          </Route>
+
+          <Route element={<PermissionRoute module="solicitudes" />}>
             <Route path="/solicitudes-data-room" element={<DataRoomAccessRequestsPage />} />
+          </Route>
+
+          <Route element={<PermissionRoute module="usuarios" />}>
             <Route path="/trabajadores" element={<RegisterUserPage />} />
+            <Route path="/roles" element={<RolesPage />} />
             <Route path="/usuarios/nuevo" element={<Navigate to="/trabajadores" replace />} />
           </Route>
         </Route>

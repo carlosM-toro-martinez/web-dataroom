@@ -7,8 +7,10 @@ import {
   useState,
   type PropsWithChildren
 } from "react";
-import type { AuthSession, AuthUser } from "@/features/auth/model/auth.schema";
+import type { AuthSession, AuthUser, PermissionAction } from "@/features/auth/model/auth.schema";
 import { logoutSession, refreshSession } from "@/features/auth/api/authApi";
+import { getCurrentUser } from "@/features/auth/api/rolesApi";
+import { hasPermission, type PermissionModule } from "@/features/auth/lib/permissions";
 import { isTransientNetworkError } from "@/shared/api/core/apiError";
 import {
   clearStoredAuthSession,
@@ -31,6 +33,7 @@ interface AuthContextValue {
   isAdmin: boolean;
   isSuperintendente: boolean;
   canManageUsers: boolean;
+  can: (module: PermissionModule | PermissionModule[], action?: PermissionAction) => boolean;
   login: (session: AuthSession) => void;
   logout: () => void;
 }
@@ -81,7 +84,7 @@ export function AuthProvider({ children }: PropsWithChildren) {
         applySession({
           accessToken: response.data.accessToken,
           refreshToken: response.data.refreshToken ?? currentRefreshToken,
-          user: session.user
+          user: response.data.user ?? session.user
         });
       } catch (error) {
         if (
@@ -119,7 +122,8 @@ export function AuthProvider({ children }: PropsWithChildren) {
       isAuthenticated: Boolean(session?.accessToken),
       isAdmin: session?.user.role === "ADMIN",
       isSuperintendente: session?.user.role === "GEOLOGOADMIN" || session?.user.role === "SUPERINTENDENTE",
-      canManageUsers: session?.user.role === "ADMIN",
+      canManageUsers: hasPermission(session?.user, "usuarios"),
+      can: (module, action = "read") => hasPermission(session?.user, module, action),
       login,
       logout
     };
@@ -160,6 +164,27 @@ export function AuthProvider({ children }: PropsWithChildren) {
       window.removeEventListener("online", onOnline);
     };
   }, [session?.accessToken, session?.refreshToken]);
+
+  // Trae rol y permisos vigentes del servidor (pueden haber cambiado desde el login).
+  useEffect(() => {
+    if (!session?.accessToken) return;
+    const syncUser = () => {
+      if (typeof navigator !== "undefined" && !navigator.onLine) return;
+      getCurrentUser()
+        .then((user) => {
+          setSession((current) => {
+            if (!current) return current;
+            const next = { ...current, user };
+            setStoredAuthSession(next);
+            return next;
+          });
+        })
+        .catch(() => undefined);
+    };
+    syncUser();
+    window.addEventListener("online", syncUser);
+    return () => window.removeEventListener("online", syncUser);
+  }, [session?.accessToken]);
 
   useEffect(() => {
     const onUnauthorized = () => {
