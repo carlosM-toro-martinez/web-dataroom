@@ -3,8 +3,10 @@ import {
   AlertTriangle,
   CheckCircle2,
   ChevronDown,
+  Download,
   FileSpreadsheet,
   Images,
+  Info,
   Layers,
   Loader2,
   Microscope,
@@ -12,6 +14,7 @@ import {
   Upload,
   XCircle
 } from "lucide-react";
+import { utils, writeFile } from "xlsx";
 import type { DrillingHole } from "@/features/sondajes/model/sondajes.schema";
 import type { PhotoKind } from "@/features/sondajes/model/geology.schema";
 import { parseGeologyWorkbook, type ExcelPhoto, type ParsedGeologyWorkbook } from "@/features/sondajes/lib/geologyExcel";
@@ -24,6 +27,7 @@ import {
   type HoleMatch
 } from "@/features/sondajes/lib/geologyImport";
 import { PHOTO_KINDS, fmt, lithologyColor } from "@/features/sondajes/lib/geology";
+import { SEVERITY_LABEL, reviewWorkbook, type Finding, type PreviousDay, type Severity } from "@/features/sondajes/lib/geologyReview";
 import { formatReportDate, isoToReportDate } from "@/features/sondajes/lib/shiftReports";
 import { formatBytes } from "@/features/sondajes/lib/imageProcessing";
 import { useAddPhotosMutation, useSaveGeologyLogMutation, useSaveGeologyReportMutation } from "@/features/sondajes/hooks/useGeology";
@@ -63,6 +67,49 @@ export function describeImport(result: GeologyImportResult) {
 const dateText = (iso: string | null | undefined) => (iso ? formatReportDate(`${iso}T00:00:00.000Z`, "short") : "sin fecha");
 const sortKey = (entry: Entry) => `${entry.parsed?.date ?? "9999"}|${entry.parsed?.fileDate ?? "9999"}|${entry.file.name}`;
 
+// ─── Revisión: observaciones de cada archivo, mirando también el día anterior ─
+const localToday = () => {
+  const now = new Date();
+  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+};
+
+function buildReviews(entries: Entry[], contexts: Record<string, HoleGeologyContext>, holeById: Map<string, DrillingHole>) {
+  const reviews = new Map<string, Finding[]>();
+  const today = localToday();
+  const ready = entries.filter((entry) => entry.status === "ready" && entry.parsed);
+  for (const entry of ready) {
+    const parsed = entry.parsed!;
+    const hole = entry.holeId ? holeById.get(entry.holeId) ?? null : null;
+    let previous: PreviousDay | null = null;
+    const earlierSections = new Map<string, string>();
+    if (hole && parsed.date) {
+      const date = parsed.date;
+      const candidates: PreviousDay[] = [];
+      for (const other of ready) {
+        if (other === entry || other.holeId !== hole.id || !other.parsed!.date || other.parsed!.date >= date) continue;
+        const report = reportFromWorkbook(other.parsed!);
+        if (report) {
+          candidates.push({ ...report, date: other.parsed!.date, startDate: other.parsed!.startDate, source: `el archivo ${other.file.name}` });
+        }
+        for (const photo of other.parsed!.photos) {
+          if (photo.kind === "SECTION" && photo.hash) earlierSections.set(photo.hash, `la del ${dateText(other.parsed!.date)} (${other.file.name})`);
+        }
+      }
+      for (const report of contexts[hole.id]?.reports ?? []) {
+        const reportDate = isoToReportDate(report.date);
+        if (reportDate >= date || candidates.some((item) => item.date === reportDate)) continue;
+        candidates.push({ ...report, date: reportDate, source: "el reporte ya cargado" });
+      }
+      previous = candidates.sort((a, b) => b.date.localeCompare(a.date))[0] ?? null;
+    }
+    reviews.set(entry.key, reviewWorkbook({ parsed, hole, match: entry.match, previous, earlierSections, today }));
+  }
+  return reviews;
+}
+
+const NEEDS_CONFIRMATION = "Tiene datos a corregir: corrige el Excel y vuelve a cargarlo, o confirma para importarlo tal cual.";
+const countBy = (findings: Finding[] | undefined, severity: Severity) => (findings ?? []).filter((item) => item.severity === severity).length;
+
 // ─── Plan: qué se aplicará realmente de cada archivo ─────────────────────────
 type EntryPlan = {
   importable: boolean;
@@ -73,7 +120,7 @@ type EntryPlan = {
   notes: string[];
 };
 
-function buildPlans(entries: Entry[], contexts: Record<string, HoleGeologyContext>, lockedHoleId?: string) {
+function buildPlans(entries: Entry[], contexts: Record<string, HoleGeologyContext>, reviews: Map<string, Finding[]>, lockedHoleId?: string) {
   const plans = new Map<string, EntryPlan>();
   const byHole = new Map<string, Entry[]>();
   for (const entry of entries) {
@@ -82,8 +129,8 @@ function buildPlans(entries: Entry[], contexts: Record<string, HoleGeologyContex
       ? "Elige a qué pozo corresponde."
       : lockedHoleId && entry.holeId !== lockedHoleId
         ? `Este archivo es del pozo ${entry.match?.hole.code ?? "otro"}. Impórtalo desde ese pozo o desde Programas.`
-        : entry.match && !entry.match.certain && !entry.confirmed
-          ? "Confirma el pozo para importarlo."
+        : countBy(reviews.get(entry.key), "error") && !entry.confirmed
+          ? NEEDS_CONFIRMATION
           : undefined;
     if (blocked || !entry.holeId) {
       plans.set(entry.key, { importable: false, blockedReason: blocked, report: { apply: false }, log: { apply: false }, photos: [], notes: [] });
@@ -254,7 +301,37 @@ export function GeologyImportModal({
     }
   }
 
-  const plans = useMemo(() => buildPlans(entries, contexts, lockedHole?.id), [entries, contexts, lockedHole?.id]);
+  const reviews = useMemo(() => buildReviews(entries, contexts, holeById), [entries, contexts, holeById]);
+  const plans = useMemo(() => buildPlans(entries, contexts, reviews, lockedHole?.id), [entries, contexts, reviews, lockedHole?.id]);
+  const reviewTotals = useMemo(() => {
+    const all = [...reviews.values()];
+    return {
+      errorFiles: all.filter((findings) => countBy(findings, "error")).length,
+      errors: all.reduce((sum, findings) => sum + countBy(findings, "error"), 0),
+      warnings: all.reduce((sum, findings) => sum + countBy(findings, "warning"), 0),
+      infos: all.reduce((sum, findings) => sum + countBy(findings, "info"), 0)
+    };
+  }, [reviews]);
+
+  // Planilla para devolver al equipo de geología con todo lo que hay que corregir, celda por celda.
+  function downloadFindings() {
+    const rows = [...entries]
+      .sort((a, b) => sortKey(a).localeCompare(sortKey(b)))
+      .flatMap((entry) =>
+        (reviews.get(entry.key) ?? []).map((finding) => ({
+          Archivo: entry.file.name,
+          Pozo: (entry.holeId && holeById.get(entry.holeId)?.code) || entry.parsed?.holeCode || "",
+          Tipo: SEVERITY_LABEL[finding.severity],
+          Ubicación: finding.where,
+          Observación: finding.message
+        }))
+      );
+    const sheet = utils.json_to_sheet(rows, { header: ["Archivo", "Pozo", "Tipo", "Ubicación", "Observación"] });
+    sheet["!cols"] = [{ wch: 34 }, { wch: 12 }, { wch: 10 }, { wch: 26 }, { wch: 110 }];
+    const book = utils.book_new();
+    utils.book_append_sheet(book, sheet, "Observaciones");
+    writeFile(book, `Observaciones_reportes_geologicos_${localToday()}.xlsx`);
+  }
   const ready = entries.filter((entry) => entry.status === "ready");
   // No se puede importar hasta que cada archivo tenga su plan (leído, pozo consultado y opciones iniciales puestas).
   const reading =
@@ -417,6 +494,40 @@ export function GeologyImportModal({
           ) : null}
           {failure ? <p className="rounded-2xl bg-rose-500/10 px-4 py-3 text-sm font-semibold text-rose-600">{failure}</p> : null}
 
+          {reviews.size ? (
+            <div
+              className={`flex flex-wrap items-center gap-3 rounded-2xl border p-3 ${
+                reviewTotals.errors ? "border-rose-500/40 bg-rose-500/5" : "border-[var(--color-border-soft)] bg-[var(--color-surface-container-low)]"
+              }`}
+              data-testid="review-summary"
+            >
+              <div className="min-w-0 flex-1 text-xs">
+                <p className="text-sm font-extrabold">Revisión de los Excel</p>
+                <p className="mt-0.5 text-[var(--color-on-surface-variant)]">
+                  {reviewTotals.errors
+                    ? `${reviewTotals.errorFiles} archivo(s) con datos a corregir. Lo ideal es corregir el Excel y volver a cargarlo; si confirmas, se importa tal cual.`
+                    : reviewTotals.warnings
+                      ? "Nada bloquea la importación, pero hay datos a revisar."
+                      : "Sin observaciones importantes."}
+                </p>
+                <p className="mt-1.5 flex flex-wrap gap-1.5">
+                  <SeverityChip severity="error" count={reviewTotals.errors} />
+                  <SeverityChip severity="warning" count={reviewTotals.warnings} />
+                  <SeverityChip severity="info" count={reviewTotals.infos} />
+                </p>
+              </div>
+              <button
+                type="button"
+                className={secondaryButton}
+                onClick={downloadFindings}
+                disabled={reviewTotals.errors + reviewTotals.warnings + reviewTotals.infos === 0}
+              >
+                <Download size={15} />
+                Descargar observaciones (.xlsx)
+              </button>
+            </div>
+          ) : null}
+
           {groups.map(([groupKey, group]) => {
             const hole = holeById.get(groupKey);
             const context = hole ? contexts[hole.id] : undefined;
@@ -439,11 +550,12 @@ export function GeologyImportModal({
                     key={entry.key}
                     entry={entry}
                     plan={plans.get(entry.key)}
+                    findings={reviews.get(entry.key) ?? []}
                     holes={lockedHole ? [lockedHole] : holes}
                     disabled={busy}
                     onChange={(patch) => update(entry.key, patch)}
                     onHoleChange={(holeId) => {
-                      update(entry.key, { holeId, confirmed: true, initialized: false });
+                      update(entry.key, { holeId, confirmed: false, initialized: false });
                       if (holeId) void ensureContext(holeId);
                     }}
                     onRemove={() => setEntries((current) => current.filter((item) => item.key !== entry.key))}
@@ -507,9 +619,58 @@ function PreviewImage({ blob }: { blob: Blob }) {
   return url ? <img src={url} alt="" className="aspect-[4/3] w-full object-cover" /> : <div className="aspect-[4/3] w-full animate-pulse bg-[var(--color-surface-container-high)]" />;
 }
 
+const SEVERITY_STYLE: Record<Severity, { chip: string; box: string; icon: React.ReactNode }> = {
+  error: { chip: "bg-rose-500/15 text-rose-700 dark:text-rose-300", box: "border-rose-500/40 bg-rose-500/5", icon: <XCircle size={13} className="mt-0.5 shrink-0 text-rose-600" /> },
+  warning: { chip: "bg-amber-500/15 text-amber-700 dark:text-amber-300", box: "border-amber-500/40 bg-amber-500/5", icon: <AlertTriangle size={13} className="mt-0.5 shrink-0 text-amber-600" /> },
+  info: { chip: "bg-sky-500/15 text-sky-700 dark:text-sky-300", box: "border-sky-500/30 bg-sky-500/5", icon: <Info size={13} className="mt-0.5 shrink-0 text-sky-600" /> }
+};
+
+function SeverityChip({ severity, count }: { severity: Severity; count: number }) {
+  if (!count) return null;
+  return (
+    <span className={`rounded-md px-2 py-0.5 text-[11px] font-bold ${SEVERITY_STYLE[severity].chip}`}>
+      {count} {SEVERITY_LABEL[severity].toLowerCase()}
+    </span>
+  );
+}
+
+function FindingsList({ findings }: { findings: Finding[] }) {
+  const [showAll, setShowAll] = useState(false);
+  const groups = (["error", "warning", "info"] as Severity[]).map((severity) => ({ severity, items: findings.filter((item) => item.severity === severity) })).filter((group) => group.items.length);
+  const limit = 6;
+  return (
+    <div className="mt-3 space-y-2" data-testid="findings">
+      {groups.map(({ severity, items }) => (
+        <div key={severity} className={`rounded-xl border p-3 text-xs ${SEVERITY_STYLE[severity].box}`}>
+          <p className="font-bold">
+            {SEVERITY_LABEL[severity]} ({items.length})
+          </p>
+          <ul className="mt-1.5 space-y-1">
+            {(showAll || severity === "error" ? items : items.slice(0, limit)).map((item, index) => (
+              <li key={index} className="flex gap-1.5">
+                {SEVERITY_STYLE[severity].icon}
+                <span className="min-w-0">
+                  <span className="mr-1.5 rounded bg-[var(--color-surface-container-high)] px-1 py-px font-mono text-[10px] font-semibold">{item.where}</span>
+                  {item.message}
+                </span>
+              </li>
+            ))}
+          </ul>
+          {!showAll && severity !== "error" && items.length > limit ? (
+            <button type="button" className="mt-1 text-[11px] font-semibold text-[var(--color-primary)]" onClick={() => setShowAll(true)}>
+              Ver {items.length - limit} más
+            </button>
+          ) : null}
+        </div>
+      ))}
+    </div>
+  );
+}
+
 function EntryCard({
   entry,
   plan,
+  findings,
   holes,
   disabled,
   onChange,
@@ -518,6 +679,7 @@ function EntryCard({
 }: {
   entry: Entry;
   plan?: EntryPlan;
+  findings: Finding[];
   holes: DrillingHole[];
   disabled: boolean;
   onChange: (patch: Partial<Entry> | ((entry: Entry) => Partial<Entry>)) => void;
@@ -543,17 +705,19 @@ function EntryCard({
   }
 
   const advance = parsed.fromDepth !== null && parsed.toDepth !== null ? parsed.toDepth - parsed.fromDepth : null;
-  const overlaps = parsed.logIssues.filter((issue) => issue.type === "overlap");
-  const gaps = parsed.logIssues.filter((issue) => issue.type === "gap");
   const dateMismatch = Boolean(parsed.date && parsed.fileDate && parsed.date !== parsed.fileDate);
   const blocked = plan && !plan.importable;
   const photoPlans = plan?.photos ?? [];
   const newPhotos = photoPlans.filter((item) => item.include).length;
   const duplicates = photoPlans.filter((item) => item.duplicateOf).length;
-  const warnings = [...parsed.warnings, ...(plan?.notes ?? [])];
+  const errors = countBy(findings, "error");
+  const notes = plan?.notes ?? [];
 
   return (
-    <article className={`rounded-2xl border p-4 ${blocked ? "border-amber-500/50 bg-amber-500/5" : "border-[var(--color-border-soft)]"}`}>
+    <article
+      data-testid="import-entry"
+      className={`rounded-2xl border p-4 ${errors && !entry.confirmed ? "border-rose-500/50 bg-rose-500/[0.03]" : blocked ? "border-amber-500/50 bg-amber-500/5" : "border-[var(--color-border-soft)]"}`}
+    >
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0">
           <p className="flex items-center gap-2 truncate text-sm font-bold">
@@ -570,6 +734,9 @@ function EntryCard({
                 {fmt(parsed.fromDepth!)} → {fmt(parsed.toDepth!)} m · {advance === 0 ? "sin avance" : `+${fmt(advance)} m`}
               </span>
             ) : null}
+            <SeverityChip severity="error" count={errors} />
+            <SeverityChip severity="warning" count={countBy(findings, "warning")} />
+            <SeverityChip severity="info" count={countBy(findings, "info")} />
           </div>
         </div>
         <button type="button" className={iconButton} onClick={onRemove} aria-label="Quitar archivo" disabled={disabled}>
@@ -577,15 +744,6 @@ function EntryCard({
         </button>
       </div>
 
-      {entry.match && !entry.match.certain ? (
-        <label className={`mt-3 flex cursor-pointer items-start gap-2.5 rounded-xl border p-3 text-xs ${entry.confirmed ? "border-emerald-500/50 bg-emerald-500/5" : "border-amber-500/60 bg-amber-500/10"}`}>
-          <input type="checkbox" className="mt-0.5 h-4 w-4 accent-emerald-600" checked={entry.confirmed} disabled={disabled} onChange={(event) => onChange({ confirmed: event.target.checked })} />
-          <span>
-            <span className="block font-semibold">{entry.match.reason}</span>
-            <span className="text-[var(--color-on-surface-variant)]">Marca para confirmar que corresponde al pozo {entry.match.hole.code}.</span>
-          </span>
-        </label>
-      ) : null}
       {!entry.match ? (
         <div className="mt-3 flex flex-wrap items-center gap-2 rounded-xl border border-amber-500/60 bg-amber-500/10 p-3 text-xs">
           <span className="font-semibold">No hay un pozo {parsed.holeCode ?? ""} en el sistema. ¿A cuál corresponde?</span>
@@ -604,7 +762,28 @@ function EntryCard({
           </select>
         </div>
       ) : null}
-      {blocked && plan?.blockedReason ? <p className="mt-2 text-xs font-semibold text-amber-700 dark:text-amber-300">{plan.blockedReason}</p> : null}
+      {findings.length ? <FindingsList findings={findings} /> : null}
+      {errors && entry.holeId ? (
+        <label
+          className={`mt-2 flex cursor-pointer items-start gap-2.5 rounded-xl border p-3 text-xs ${entry.confirmed ? "border-emerald-500/50 bg-emerald-500/5" : "border-rose-500/50 bg-rose-500/10"}`}
+        >
+          <input
+            type="checkbox"
+            data-testid="confirm-entry"
+            className="mt-0.5 h-4 w-4 accent-emerald-600"
+            checked={entry.confirmed}
+            disabled={disabled}
+            onChange={(event) => onChange({ confirmed: event.target.checked })}
+          />
+          <span>
+            <span className="block font-semibold">Revisé las observaciones: importar este archivo tal cual</span>
+            <span className="text-[var(--color-on-surface-variant)]">Los datos se guardan exactamente como vienen en el Excel, sin corregir nada.</span>
+          </span>
+        </label>
+      ) : null}
+      {blocked && plan?.blockedReason && plan.blockedReason !== NEEDS_CONFIRMATION ? (
+        <p className="mt-2 text-xs font-semibold text-amber-700 dark:text-amber-300">{plan.blockedReason}</p>
+      ) : null}
 
       {!blocked && plan ? (
         <div className="mt-3 grid gap-2 sm:grid-cols-3">
@@ -642,36 +821,16 @@ function EntryCard({
         </div>
       ) : null}
 
-      {overlaps.length || gaps.length ? (
-        <div className="mt-3 rounded-xl border border-orange-500/40 bg-orange-500/10 p-3 text-xs text-orange-800 dark:text-orange-300">
-          <p className="flex items-center gap-1.5 font-bold">
-            <AlertTriangle size={14} />
-            Quick log: {overlaps.length ? `${overlaps.length} solapamiento(s)` : ""}
-            {overlaps.length && gaps.length ? " y " : ""}
-            {gaps.length ? `${gaps.length} hueco(s)` : ""} en el Excel
-          </p>
-          <ul className="mt-1 space-y-0.5 pl-5">
-            {[...overlaps, ...gaps].slice(0, 6).map((issue) => (
-              <li key={`${issue.type}-${issue.from}-${issue.to}`} className="list-disc">
-                {issue.message}
-              </li>
-            ))}
-            {overlaps.length + gaps.length > 6 ? <li className="list-none">… y {overlaps.length + gaps.length - 6} más</li> : null}
-          </ul>
-          <p className="mt-1 text-[11px] opacity-80">Se importan tal cual vienen; corrígelos en el Excel de origen si es un error.</p>
-        </div>
-      ) : null}
-
-      {warnings.length ? (
+      {notes.length ? (
         <ul className="mt-2 space-y-1 text-xs text-amber-800 dark:text-amber-300">
-          {warnings.map((warning) => (
-            <li key={warning} className="flex gap-1.5">
+          {notes.map((note) => (
+            <li key={note} className="flex gap-1.5">
               <AlertTriangle size={13} className="mt-0.5 shrink-0" />
-              {warning}
+              {note}
             </li>
           ))}
         </ul>
-      ) : !blocked && plan ? (
+      ) : !blocked && plan && !findings.length ? (
         <p className="mt-2 flex items-center gap-1.5 text-xs font-semibold text-emerald-600">
           <CheckCircle2 size={13} />
           Sin observaciones.

@@ -1,6 +1,6 @@
 import { read, utils, type WorkBook, type WorkSheet } from "xlsx";
 import type { LogRowPayload, PhotoKind } from "@/features/sondajes/model/geology.schema";
-import { findLogIssues, sortRows, type LogIssue } from "@/features/sondajes/lib/geology";
+import { sortRows } from "@/features/sondajes/lib/geology";
 import { sha256Hex } from "@/features/sondajes/lib/contentHash";
 
 // Lector del "Reporte diario de perforación diamantina" que llena el equipo de geología:
@@ -37,14 +37,47 @@ export type ParsedGeologyWorkbook = {
   geologySummary: string | null;
   operationalNotes: string | null;
   logRows: LogRowPayload[];
+  // Fila del Excel y Hole_ID de cada tramo de logRows (mismo orden), para señalar dónde corregir.
+  logMeta: LogRowMeta[];
+  logSkippedRows: number[];
   logSkipped: number;
   // Códigos de pozo distintos que aparecen en la columna Hole_ID del quick log.
   logHoleIds: string[];
-  // Solapes y huecos del quick log (los datos se importan igual, tal cual el Excel).
-  logIssues: LogIssue[];
+  // Filas cuya fecha Date_Logged viene con el formato roto «2026<10-09T…».
+  logBadDates: number;
+  // Hojas y celdas de donde salió cada dato del resumen (ej. holeCode → "01_RESUMEN!A6").
+  summarySheet: string | null;
+  logSheet: string | null;
+  cells: Partial<Record<SummaryField, string>>;
+  // Títulos de las hojas de fotos (03 / 04), que también llevan el código del sondaje.
+  sheetTitles: Array<{ where: string; text: string }>;
   photos: ExcelPhoto[];
   warnings: string[];
 };
+
+export type LogRowMeta = { row: number; holeId: string | null };
+export type SummaryField =
+  | "holeCode"
+  | "date"
+  | "fromDepth"
+  | "toDepth"
+  | "plannedEast"
+  | "plannedNorth"
+  | "plannedElevation"
+  | "executedEast"
+  | "executedNorth"
+  | "executedElevation"
+  | "rigName"
+  | "diameter"
+  | "casing"
+  | "azimuth"
+  | "dip"
+  | "programmedDepth"
+  | "startDate"
+  | "endStatus"
+  | "geologists"
+  | "geologySummary"
+  | "operationalNotes";
 
 // Reporte_diario_26DLP077_101026.xlsx → { hole: "26DLP077", date: "2026-10-10" }
 export function fromFileName(name: string) {
@@ -100,8 +133,15 @@ function timestampFrom(value: unknown): string | null {
 }
 
 function grid(sheet: WorkSheet): Grid {
-  return utils.sheet_to_json<unknown[]>(sheet, { header: 1, raw: true, defval: "" });
+  return utils.sheet_to_json<unknown[]>(sheet, { header: 1, raw: true, defval: "", blankrows: true });
 }
+
+// Esquina superior izquierda de la hoja: el índice 0 de grid() corresponde a esa celda.
+function origin(sheet: WorkSheet) {
+  return sheet["!ref"] ? utils.decode_range(sheet["!ref"]).s : { r: 0, c: 0 };
+}
+
+type Loc = { r: number; c: number };
 
 function find(rows: Grid, predicate: (label: string) => boolean) {
   for (let r = 0; r < rows.length; r += 1) {
@@ -114,28 +154,35 @@ function find(rows: Grid, predicate: (label: string) => boolean) {
 
 const startsWith = (prefix: string) => (label: string) => label.startsWith(normalize(prefix));
 
-// Valor bajo una etiqueta (las cajas grandes del encabezado).
-function below(rows: Grid, label: string) {
+// Valor bajo una etiqueta (las cajas grandes del encabezado). loc = celda del valor (o de la etiqueta si está vacío).
+function below(rows: Grid, label: string): { value: unknown; loc: Loc } | undefined {
   const at = find(rows, startsWith(label));
   if (!at) return undefined;
   for (let r = at.r + 1; r < Math.min(rows.length, at.r + 4); r += 1) {
     const value = rows[r]?.[at.c];
-    if (value !== "" && value !== undefined) return value;
+    if (value !== "" && value !== undefined) return { value, loc: { r, c: at.c } };
   }
-  return undefined;
+  return { value: undefined, loc: { r: at.r + 1, c: at.c } };
 }
 
 // Valores a la derecha de una etiqueta en la misma fila (tabla "Información del sondaje").
-function rightOf(rows: Grid, label: string) {
+function rightOf(rows: Grid, label: string): Array<{ value: unknown; loc: Loc }> {
   const at = find(rows, startsWith(label));
   if (!at) return [];
-  return rows[at.r].slice(at.c + 1).filter((value) => value !== "" && value !== undefined);
+  return rows[at.r]
+    .map((value, c) => ({ value, loc: { r: at.r, c } }))
+    .slice(at.c + 1)
+    .filter(({ value }) => value !== "" && value !== undefined);
 }
 
 // Texto de una sección numerada ("2. RESUMEN...") hasta la siguiente sección.
 function sectionText(rows: Grid, heading: string, skip: (label: string) => boolean = () => false) {
   const at = find(rows, startsWith(heading));
   if (!at) return null;
+  return sectionLines(rows, at, skip);
+}
+
+function sectionLines(rows: Grid, at: Loc, skip: (label: string) => boolean) {
   const lines: string[] = [];
   for (let r = at.r + 1; r < rows.length; r += 1) {
     const first = normalize(rows[r].find((value) => value !== "") ?? "");
@@ -151,49 +198,83 @@ function sectionText(rows: Grid, heading: string, skip: (label: string) => boole
 // Coordenadas: bajo las columnas "Este (m) / Norte (m) / Elev (m)" hay un bloque Programado y otro Ejecutado.
 function coordinates(rows: Grid) {
   const at = find(rows, startsWith("COORDENADAS"));
-  const empty = { planned: [null, null, null], executed: [null, null, null] } as { planned: (number | null)[]; executed: (number | null)[] };
-  if (!at) return empty;
+  type Coord = { value: number | null; loc: Loc | null };
+  const none: Coord[] = [0, 1, 2].map(() => ({ value: null, loc: null }));
+  if (!at) return { planned: none, executed: none };
   const header = rows[at.r];
   const starts = header.map((value, index) => (normalize(value).startsWith("ESTE") ? index : -1)).filter((index) => index >= 0);
   const data = rows[at.r + 1] ?? [];
-  const read = (column?: number) => (column === undefined ? [null, null, null] : [0, 1, 2].map((offset) => (data[column + offset] === "" || data[column + offset] === undefined ? null : numberFrom(data[column + offset]))));
+  const read = (column?: number): Coord[] =>
+    column === undefined
+      ? none
+      : [0, 1, 2].map((offset) => {
+          const raw = data[column + offset];
+          return { value: raw === "" || raw === undefined ? null : numberFrom(raw), loc: { r: at.r + 1, c: column + offset } };
+        });
   return { planned: read(starts[0]), executed: read(starts[1]) };
 }
 
-function parseSummary(rows: Grid) {
-  const info = (label: string) => text(rightOf(rows, label)[0]);
+function parseSummary(rows: Grid, sheetName: string, base: Loc) {
+  const cells: Partial<Record<SummaryField, string>> = {};
+  const ref = (loc: Loc | null | undefined) => (loc ? `${sheetName}!${utils.encode_cell({ r: loc.r + base.r, c: loc.c + base.c })}` : undefined);
+  const mark = <T,>(field: SummaryField, loc: Loc | null | undefined, value: T) => {
+    const where = ref(loc);
+    if (where) cells[field] = where;
+    return value;
+  };
+  const boxed = (field: SummaryField, label: string) => {
+    const found = below(rows, label);
+    return mark(field, found?.loc, found?.value);
+  };
+  const info = (field: SummaryField, label: string) => {
+    const found = rightOf(rows, label)[0];
+    if (!found) {
+      const at = find(rows, startsWith(label));
+      if (at) mark(field, { r: at.r, c: at.c }, null);
+      return null;
+    }
+    return mark(field, found.loc, text(found.value));
+  };
+  const section = (field: SummaryField, heading: string, skip?: (label: string) => boolean) => {
+    const at = find(rows, startsWith(heading));
+    if (!at) return null;
+    return mark(field, at, sectionLines(rows, at, skip ?? (() => false)));
+  };
   const dates = rightOf(rows, "FECHA DE INICIO");
+  const datesLabel = find(rows, startsWith("FECHA DE INICIO"));
   const coords = coordinates(rows);
   const geologistsFooter = find(rows, startsWith("GEOLOGOS:"));
+  const coord = (field: SummaryField, item: { value: number | null; loc: Loc | null }) => mark(field, item.loc, item.value);
   return {
-    holeCode: text(below(rows, "SONDAJE")),
-    date: dateFrom(below(rows, "FECHA DE REPORTE")),
-    fromDepth: numberFrom(below(rows, "PROFUNDIDAD ANTERIOR")),
-    toDepth: numberFrom(below(rows, "PROFUNDIDAD ACTUAL")),
-    plannedEast: coords.planned[0],
-    plannedNorth: coords.planned[1],
-    plannedElevation: coords.planned[2],
-    executedEast: coords.executed[0],
-    executedNorth: coords.executed[1],
-    executedElevation: coords.executed[2],
-    rigName: info("EQUIPO"),
-    diameter: info("DIAMETRO"),
-    casing: info("ENCAMIZADO"),
-    azimuth: info("AZIMUT"),
-    dip: info("INCLINACION"),
-    programmedDepth: info("PROFUNDIDAD PROGRAMADA"),
-    startDate: dateFrom(dates[0]),
-    endStatus: text(dates[1]),
+    cells,
+    holeCode: text(boxed("holeCode", "SONDAJE")),
+    date: dateFrom(boxed("date", "FECHA DE REPORTE")),
+    fromDepth: numberFrom(boxed("fromDepth", "PROFUNDIDAD ANTERIOR")),
+    toDepth: numberFrom(boxed("toDepth", "PROFUNDIDAD ACTUAL")),
+    plannedEast: coord("plannedEast", coords.planned[0]),
+    plannedNorth: coord("plannedNorth", coords.planned[1]),
+    plannedElevation: coord("plannedElevation", coords.planned[2]),
+    executedEast: coord("executedEast", coords.executed[0]),
+    executedNorth: coord("executedNorth", coords.executed[1]),
+    executedElevation: coord("executedElevation", coords.executed[2]),
+    rigName: info("rigName", "EQUIPO"),
+    diameter: info("diameter", "DIAMETRO"),
+    casing: info("casing", "ENCAMIZADO"),
+    azimuth: info("azimuth", "AZIMUT"),
+    dip: info("dip", "INCLINACION"),
+    programmedDepth: info("programmedDepth", "PROFUNDIDAD PROGRAMADA"),
+    startDate: dateFrom(mark("startDate", dates[0]?.loc ?? datesLabel, dates[0]?.value)),
+    endStatus: text(mark("endStatus", dates[1]?.loc ?? datesLabel, dates[1]?.value)),
     geologists:
-      info("GEOLOGOS RESPONSABLES") ??
+      info("geologists", "GEOLOGOS RESPONSABLES") ??
       (geologistsFooter ? text(String(rows[geologistsFooter.r][geologistsFooter.c]).replace(/^ge[oó]logos:\s*/i, "")) : null),
-    geologySummary: sectionText(rows, "2. RESUMEN GEOLOGICO", (label) => label.startsWith("INTERVALO REPORTADO")),
-    operationalNotes: sectionText(rows, "3. OBSERVACIONES")
+    geologySummary: section("geologySummary", "2. RESUMEN GEOLOGICO", (label) => label.startsWith("INTERVALO REPORTADO")),
+    operationalNotes: section("operationalNotes", "3. OBSERVACIONES")
   };
 }
 
 // ─── Quick log ───────────────────────────────────────────────────────────────
-function parseQuickLog(rows: Grid) {
+function parseQuickLog(rows: Grid, base: Loc) {
   const header = rows[0]?.map((value) => String(value ?? "").trim()) ?? [];
   const col = (name: string) => header.findIndex((value) => value.toLowerCase() === name.toLowerCase());
   const at = (row: unknown[], name: string) => {
@@ -206,26 +287,29 @@ function parseQuickLog(rows: Grid) {
     return value === null ? null : Math.round(value);
   };
 
-  const result: LogRowPayload[] = [];
-  let skipped = 0;
+  const result: Array<{ payload: LogRowPayload; meta: LogRowMeta }> = [];
+  const skippedRows: number[] = [];
+  let badDates = 0;
   const holeIds = new Set<string>();
-  for (const row of rows.slice(1)) {
-    if (row.every((value) => value === "")) continue;
+  rows.slice(1).forEach((row, index) => {
+    const excelRow = base.r + index + 2;
+    if (row.every((value) => value === "")) return;
     const fromDepth = numberFrom(at(row, "mFrom"));
     const toDepth = numberFrom(at(row, "mTo"));
     if (fromDepth === null || toDepth === null || !(toDepth > fromDepth)) {
-      skipped += 1;
-      continue;
+      skippedRows.push(excelRow);
+      return;
     }
     const rowHole = text(at(row, "Hole_ID"));
     if (rowHole) holeIds.add(rowHole);
+    if (String(at(row, "Date_Logged") ?? "").includes("<")) badDates += 1;
     const minerals = [1, 2, 3, 4]
       .map((n) => ({ mineral: code(row, `Min${n}`), pct: text(at(row, `Min${n}_Pct`)), style: code(row, `Min${n}_Style`) }))
       .filter((mineral): mineral is { mineral: string; pct: string | null; style: string | null } => Boolean(mineral.mineral));
     const structures = [1, 2]
       .map((n) => ({ type: code(row, `Struct${n}`), angle: numberFrom(at(row, `Struct${n}_Ang`)), fracCount: numberFrom(at(row, `Struct${n}_Frac_N`)) }))
       .filter((structure): structure is { type: string; angle: number | null; fracCount: number | null } => Boolean(structure.type));
-    result.push({
+    result.push({ meta: { row: excelRow, holeId: rowHole }, payload: {
       fromDepth,
       toDepth,
       dataSet: code(row, "DataSet"),
@@ -241,9 +325,16 @@ function parseQuickLog(rows: Grid) {
       description: text(at(row, "Lith_Obs")),
       loggedBy: text(at(row, "Logged_By")),
       loggedAt: timestampFrom(at(row, "Date_Logged"))
-    });
-  }
-  return { rows: sortRows(result), skipped, holeIds: [...holeIds] };
+    } });
+  });
+  const ordered = [...result].sort((a, b) => a.payload.fromDepth - b.payload.fromDepth || a.payload.toDepth - b.payload.toDepth || a.meta.row - b.meta.row);
+  return {
+    rows: ordered.map((item) => item.payload),
+    meta: ordered.map((item) => item.meta),
+    skippedRows,
+    badDates,
+    holeIds: [...holeIds]
+  };
 }
 
 // ─── Imágenes embebidas ──────────────────────────────────────────────────────
@@ -362,27 +453,19 @@ export async function parseGeologyWorkbook(file: File): Promise<ParsedGeologyWor
     throw new Error("No se encontraron las hojas del reporte (RESUMEN o QUICK_LOG). ¿Es el Excel del reporte diario de geología?");
   }
 
-  const summary = summarySheet ? parseSummary(grid(workbook.Sheets[summarySheet])) : null;
+  const summary = summarySheet ? parseSummary(grid(workbook.Sheets[summarySheet]), summarySheet, origin(workbook.Sheets[summarySheet])) : null;
   if (!summarySheet) warnings.push("No hay hoja de resumen: solo se importará el logueo y las fotos.");
-  const log = logSheet ? parseQuickLog(grid(workbook.Sheets[logSheet])) : { rows: [], skipped: 0, holeIds: [] as string[] };
+  const log = logSheet
+    ? parseQuickLog(grid(workbook.Sheets[logSheet]), origin(workbook.Sheets[logSheet]))
+    : { rows: [], meta: [], skippedRows: [] as number[], badDates: 0, holeIds: [] as string[] };
   const fileInfo = fromFileName(file.name);
 
   const holeCode = summary?.holeCode ?? log.holeIds[0] ?? null;
-  const differentIds = log.holeIds.filter((id) => !holeCode || normalizeHoleCode(id) !== normalizeHoleCode(holeCode));
-  if (differentIds.length) {
-    warnings.push(`El quick log usa el código ${differentIds.join(", ")} en la columna Hole_ID, distinto del sondaje ${holeCode ?? "del resumen"}.`);
-  }
-  if (summary?.date && fileInfo.date && summary.date !== fileInfo.date) {
-    warnings.push(`La fecha del reporte (${dmy(summary.date)}) no coincide con la del nombre del archivo (${dmy(fileInfo.date)}).`);
-  }
-  if (holeCode && fileInfo.hole && normalizeHoleCode(holeCode) !== normalizeHoleCode(fileInfo.hole)) {
-    warnings.push(`El nombre del archivo es del pozo ${fileInfo.hole} y el resumen dice ${holeCode}.`);
-  }
-  if (summary && summary.fromDepth !== null && summary.toDepth !== null) {
-    if (summary.toDepth < summary.fromDepth) warnings.push("La profundidad actual del resumen es menor que la anterior.");
-    else if (summary.toDepth === summary.fromDepth) warnings.push(`Sin avance en el día: profundidad anterior y actual son ${summary.toDepth} m.`);
-  }
-  if (log.skipped) warnings.push(`${log.skipped} fila(s) del quick log sin profundidades válidas se omitieron.`);
+  // Títulos «MEMORIA FOTOGRÁFICA DE TESTIGOS | 26-DLP-079» de las hojas de fotos.
+  const sheetTitles = workbook.SheetNames.filter((name) => name !== summarySheet && name !== logSheet).flatMap((name) => {
+    const title = text(workbook.Sheets[name]?.A1?.v);
+    return title ? [{ where: `${name}!A1`, text: title }] : [];
+  });
 
   let photos: ExcelPhoto[] = [];
   try {
@@ -418,12 +501,17 @@ export async function parseGeologyWorkbook(file: File): Promise<ParsedGeologyWor
     geologySummary: summary?.geologySummary ?? null,
     operationalNotes: summary?.operationalNotes ?? null,
     logRows: log.rows,
-    logSkipped: log.skipped,
+    logMeta: log.meta,
+    logSkippedRows: log.skippedRows,
+    logSkipped: log.skippedRows.length,
     logHoleIds: log.holeIds,
-    logIssues: findLogIssues(log.rows),
+    logBadDates: log.badDates,
+    summarySheet: summarySheet ?? null,
+    logSheet: logSheet ?? null,
+    cells: summary?.cells ?? {},
+    sheetTitles,
     photos,
     warnings
   };
 }
 
-const dmy = (iso: string) => `${iso.slice(8, 10)}/${iso.slice(5, 7)}/${iso.slice(0, 4)}`;
