@@ -240,7 +240,12 @@ export function reviewWorkbook({ parsed, hole, match, previous, earlierSections,
     .map((row, index) => ({ row, meta: parsed.logMeta[index] }))
     .filter(({ row }) => [row.alteration1Int, row.alteration2Int].some((value) => value !== null && value !== undefined && (value < 0 || value > 5)));
   if (badIntensity.length) add("warning", `${logSheet} filas ${rangeText(badIntensity.map((item) => item.meta.row))}`, "Intensidad de alteración fuera de la escala 0–5.");
-  if (parsed.logBadDates) add("info", `${logSheet} columna Date_Logged`, `${parsed.logBadDates} fecha(s) escritas con «<» en lugar de «-» (por ejemplo 2026<10-09): se leen igual, pero conviene corregirlo en la app de logueo.`);
+  if (parsed.logBadDates) {
+    add("warning", `${logSheet} columna Date_Logged`, `${parsed.logBadDates} fecha(s) escritas con «<» en lugar de «-» (por ejemplo 2026<10-09): el sistema las lee bien, pero conviene corregirlo en la app de logueo.`);
+  }
+  if (parsed.logUnreadDates.length) {
+    add("warning", `${logSheet} filas ${rangeText(parsed.logUnreadDates)}`, `${parsed.logUnreadDates.length} fecha(s) de logueo (Date_Logged) que no se pudieron leer: el tramo se importa sin fecha.`);
+  }
 
   const unknown: string[] = [];
   const collect = (label: string, dictionary: Record<string, unknown>, values: Array<string | null | undefined>) => {

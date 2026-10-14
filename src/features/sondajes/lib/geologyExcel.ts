@@ -45,6 +45,8 @@ export type ParsedGeologyWorkbook = {
   logHoleIds: string[];
   // Filas cuya fecha Date_Logged viene con el formato roto «2026<10-09T…».
   logBadDates: number;
+  // Filas del Excel cuya Date_Logged no se pudo interpretar en ningún formato.
+  logUnreadDates: number[];
   // Hojas y celdas de donde salió cada dato del resumen (ej. holeCode → "01_RESUMEN!A6").
   summarySheet: string | null;
   logSheet: string | null;
@@ -125,10 +127,26 @@ function dateFrom(value: unknown): string | null {
 }
 
 // "2026<10-06T12:02:20.592175" (así exporta la app de logueo) → ISO.
+// Fecha y hora de logueo en cualquiera de los formatos que se han visto o pueden aparecer:
+// «2026<10-09T11:50:51.347491» (separador roto), 2026-10-09 11:50, 09/10/2026 11:50, fecha nativa o número de Excel.
 function timestampFrom(value: unknown): string | null {
-  const raw = String(value ?? "").trim().replace(/</g, "-");
+  if (value instanceof Date) return Number.isNaN(value.getTime()) ? null : value.toISOString();
+  if (typeof value === "number" && value > 0) {
+    // El número de Excel es la hora de reloj del lugar (sin zona), igual que el texto.
+    const wall = new Date(Math.round((value - 25569) * 86_400_000));
+    return new Date(wall.getUTCFullYear(), wall.getUTCMonth(), wall.getUTCDate(), wall.getUTCHours(), wall.getUTCMinutes(), wall.getUTCSeconds()).toISOString();
+  }
+  const raw = String(value ?? "").trim();
   if (!raw) return null;
-  const date = new Date(raw.replace(/(\.\d{3})\d+/, "$1"));
+  const time = "(?:\\D+(\\d{1,2}):(\\d{2})(?::(\\d{2})(?:[.,](\\d{1,3})\\d*)?)?)?";
+  const ymd = raw.match(new RegExp(`^(\\d{4})\\D(\\d{1,2})\\D(\\d{1,2})${time}`));
+  const dmy = raw.match(new RegExp(`^(\\d{1,2})\\D(\\d{1,2})\\D(\\d{4})${time}`));
+  const parts = ymd ? [ymd[1], ymd[2], ymd[3], ...ymd.slice(4)] : dmy ? [dmy[3], dmy[2], dmy[1], ...dmy.slice(4)] : null;
+  if (!parts) return null;
+  const [year, month, day, hour, minute, second] = parts.slice(0, 6).map((part) => Number(part ?? 0));
+  const ms = Number((parts[6] ?? "0").padEnd(3, "0"));
+  if (month < 1 || month > 12 || day < 1 || day > 31) return null;
+  const date = new Date(year, month - 1, day, hour, minute, second, ms);
   return Number.isNaN(date.getTime()) ? null : date.toISOString();
 }
 
@@ -290,6 +308,7 @@ function parseQuickLog(rows: Grid, base: Loc) {
   const result: Array<{ payload: LogRowPayload; meta: LogRowMeta }> = [];
   const skippedRows: number[] = [];
   let badDates = 0;
+  const unreadDates: number[] = [];
   const holeIds = new Set<string>();
   rows.slice(1).forEach((row, index) => {
     const excelRow = base.r + index + 2;
@@ -302,7 +321,10 @@ function parseQuickLog(rows: Grid, base: Loc) {
     }
     const rowHole = text(at(row, "Hole_ID"));
     if (rowHole) holeIds.add(rowHole);
-    if (String(at(row, "Date_Logged") ?? "").includes("<")) badDates += 1;
+    const loggedRaw = at(row, "Date_Logged");
+    const loggedAt = timestampFrom(loggedRaw);
+    if (String(loggedRaw ?? "").includes("<")) badDates += 1;
+    if (!loggedAt && String(loggedRaw ?? "").trim()) unreadDates.push(excelRow);
     const minerals = [1, 2, 3, 4]
       .map((n) => ({ mineral: code(row, `Min${n}`), pct: text(at(row, `Min${n}_Pct`)), style: code(row, `Min${n}_Style`) }))
       .filter((mineral): mineral is { mineral: string; pct: string | null; style: string | null } => Boolean(mineral.mineral));
@@ -324,7 +346,7 @@ function parseQuickLog(rows: Grid, base: Loc) {
       structures: structures.length ? structures : null,
       description: text(at(row, "Lith_Obs")),
       loggedBy: text(at(row, "Logged_By")),
-      loggedAt: timestampFrom(at(row, "Date_Logged"))
+      loggedAt
     } });
   });
   const ordered = [...result].sort((a, b) => a.payload.fromDepth - b.payload.fromDepth || a.payload.toDepth - b.payload.toDepth || a.meta.row - b.meta.row);
@@ -333,6 +355,7 @@ function parseQuickLog(rows: Grid, base: Loc) {
     meta: ordered.map((item) => item.meta),
     skippedRows,
     badDates,
+    unreadDates,
     holeIds: [...holeIds]
   };
 }
@@ -457,7 +480,7 @@ export async function parseGeologyWorkbook(file: File): Promise<ParsedGeologyWor
   if (!summarySheet) warnings.push("No hay hoja de resumen: solo se importará el logueo y las fotos.");
   const log = logSheet
     ? parseQuickLog(grid(workbook.Sheets[logSheet]), origin(workbook.Sheets[logSheet]))
-    : { rows: [], meta: [], skippedRows: [] as number[], badDates: 0, holeIds: [] as string[] };
+    : { rows: [], meta: [], skippedRows: [] as number[], badDates: 0, unreadDates: [] as number[], holeIds: [] as string[] };
   const fileInfo = fromFileName(file.name);
 
   const holeCode = summary?.holeCode ?? log.holeIds[0] ?? null;
@@ -506,6 +529,7 @@ export async function parseGeologyWorkbook(file: File): Promise<ParsedGeologyWor
     logSkipped: log.skippedRows.length,
     logHoleIds: log.holeIds,
     logBadDates: log.badDates,
+    logUnreadDates: log.unreadDates,
     summarySheet: summarySheet ?? null,
     logSheet: logSheet ?? null,
     cells: summary?.cells ?? {},
