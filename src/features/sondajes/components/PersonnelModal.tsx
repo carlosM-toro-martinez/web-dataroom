@@ -1,6 +1,8 @@
 import { useRef, useState } from "react";
 import { Pencil, Plus, Trash2, Upload, Users } from "lucide-react";
 import { read, utils } from "xlsx";
+import { useAuth } from "@/features/auth/context/AuthContext";
+import { useToast } from "@/shared/ui/toast/ToastProvider";
 import { usePersonnelQuery, useDeletePersonnelMutation, useSavePersonnelMutation, type DrillingPersonnelLocal } from "@/features/sondajes/hooks/useSondajes";
 import type { PersonnelRole, PersonnelShift } from "@/features/sondajes/db/sondajesDb";
 import { Modal, dangerButton, fieldClass, primaryButton, secondaryButton } from "@/features/sondajes/components/ui";
@@ -74,7 +76,18 @@ function parsePersonnelExcel(file: File): Promise<Array<{ name: string; role: Pe
   });
 }
 
+// El servidor ya rechaza lo que el rol no puede hacer; aquí además se ocultan los botones para que no parezca posible.
+function apiMessage(error: unknown, fallback: string) {
+  const data = (error as { response?: { data?: { error?: string; message?: string } } })?.response?.data;
+  return data?.error ?? data?.message ?? (error instanceof Error && error.message ? error.message : fallback);
+}
+
 export function PersonnelModal({ open, onClose }: { open: boolean; onClose: () => void }) {
+  const { can } = useAuth();
+  const { showError } = useToast();
+  const canCreate = can("sondajes", "create");
+  const canUpdate = can("sondajes", "update");
+  const canDelete = can("sondajes", "delete");
   const { data: personnel = [] } = usePersonnelQuery();
   const saveMutation = useSavePersonnelMutation();
   const deleteMutation = useDeletePersonnelMutation();
@@ -91,8 +104,15 @@ export function PersonnelModal({ open, onClose }: { open: boolean; onClose: () =
     e.target.value = "";
     setImporting(true);
     setImportError(null);
+    let records: Awaited<ReturnType<typeof parsePersonnelExcel>> = [];
     try {
-      const records = await parsePersonnelExcel(file);
+      records = await parsePersonnelExcel(file);
+    } catch {
+      setImportError("Error al leer el archivo. Asegurate de que sea un Excel válido (.xlsx o .xls).");
+      setImporting(false);
+      return;
+    }
+    try {
       if (records.length === 0) {
         setImportError("No se encontró personal válido. Verificá que las columnas sean: número, nombre, cargo, turno.");
         return;
@@ -100,8 +120,8 @@ export function PersonnelModal({ open, onClose }: { open: boolean; onClose: () =
       for (const record of records) {
         await saveMutation.mutateAsync({ id: null, ...record, active: true });
       }
-    } catch {
-      setImportError("Error al leer el archivo. Asegurate de que sea un Excel válido (.xlsx o .xls).");
+    } catch (error) {
+      setImportError(apiMessage(error, "No se pudo guardar el personal."));
     } finally {
       setImporting(false);
     }
@@ -117,20 +137,28 @@ export function PersonnelModal({ open, onClose }: { open: boolean; onClose: () =
 
   async function save() {
     if (!editing || !editing.form.name.trim()) return;
-    await saveMutation.mutateAsync({
-      id: editing.id,
-      name: editing.form.name.trim(),
-      role: editing.form.role,
-      shift: editing.form.shift,
-      active: true
-    });
-    setEditing(null);
+    try {
+      await saveMutation.mutateAsync({
+        id: editing.id,
+        name: editing.form.name.trim(),
+        role: editing.form.role,
+        shift: editing.form.shift,
+        active: true
+      });
+      setEditing(null);
+    } catch (error) {
+      showError(apiMessage(error, "No se pudo guardar a la persona."));
+    }
   }
 
   async function confirmDelete() {
     if (!confirmDeleteId) return;
-    await deleteMutation.mutateAsync(confirmDeleteId);
-    setConfirmDeleteId(null);
+    try {
+      await deleteMutation.mutateAsync(confirmDeleteId);
+      setConfirmDeleteId(null);
+    } catch (error) {
+      showError(apiMessage(error, "No se pudo eliminar a la persona."));
+    }
   }
 
   const sorted = [...personnel].sort((a, b) => {
@@ -151,15 +179,21 @@ export function PersonnelModal({ open, onClose }: { open: boolean; onClose: () =
         footer={
           <div className="flex w-full flex-wrap items-center justify-between gap-2">
             <div className="flex flex-wrap gap-2">
-              <input ref={fileInputRef} type="file" accept=".xlsx,.xls" className="hidden" onChange={handleImport} />
-              <button type="button" className={secondaryButton} disabled={importing} onClick={() => fileInputRef.current?.click()}>
-                <Upload size={15} />
-                {importing ? "Importando..." : "Importar Excel"}
-              </button>
-              <button type="button" className={secondaryButton} onClick={openNew}>
-                <Plus size={15} />
-                Agregar persona
-              </button>
+              {canCreate ? (
+                <>
+                  <input ref={fileInputRef} type="file" accept=".xlsx,.xls" className="hidden" onChange={handleImport} />
+                  <button type="button" className={secondaryButton} disabled={importing} onClick={() => fileInputRef.current?.click()}>
+                    <Upload size={15} />
+                    {importing ? "Importando..." : "Importar Excel"}
+                  </button>
+                  <button type="button" className={secondaryButton} onClick={openNew}>
+                    <Plus size={15} />
+                    Agregar persona
+                  </button>
+                </>
+              ) : (
+                <p className="self-center text-xs text-[var(--color-on-surface-variant)]">Solo lectura: tu rol puede ver el personal, no modificarlo.</p>
+              )}
             </div>
             <button type="button" className={secondaryButton} onClick={onClose}>
               Cerrar
@@ -177,13 +211,19 @@ export function PersonnelModal({ open, onClose }: { open: boolean; onClose: () =
             <Users size={36} className="text-[var(--color-on-surface-variant)]" />
             <p className="text-sm text-[var(--color-on-surface-variant)]">
               No hay personal registrado aún.
-              <br />
-              Agrega perforistas, ayudantes, supervisores, etc.
+              {canCreate ? (
+                <>
+                  <br />
+                  Agrega perforistas, ayudantes, supervisores, etc.
+                </>
+              ) : null}
             </p>
-            <button type="button" className={primaryButton} onClick={openNew}>
-              <Plus size={15} />
-              Agregar persona
-            </button>
+            {canCreate ? (
+              <button type="button" className={primaryButton} onClick={openNew}>
+                <Plus size={15} />
+                Agregar persona
+              </button>
+            ) : null}
           </div>
         ) : (
           <div className="overflow-hidden rounded-xl border border-[var(--color-border-soft)]">
@@ -193,7 +233,7 @@ export function PersonnelModal({ open, onClose }: { open: boolean; onClose: () =
                   <th className="px-4 py-2.5">Nombre</th>
                   <th className="px-4 py-2.5">Rol</th>
                   <th className="px-4 py-2.5">Turno</th>
-                  <th className="px-4 py-2.5 text-right">Acciones</th>
+                  {canUpdate || canDelete ? <th className="px-4 py-2.5 text-right">Acciones</th> : null}
                 </tr>
               </thead>
               <tbody className="divide-y divide-[var(--color-border-soft)]">
@@ -207,26 +247,32 @@ export function PersonnelModal({ open, onClose }: { open: boolean; onClose: () =
                         {SHIFT_LABELS[person.shift]}
                       </span>
                     </td>
-                    <td className="px-4 py-2.5">
-                      <div className="flex justify-end gap-1">
-                        <button
-                          type="button"
-                          title="Editar"
-                          className="rounded-lg p-1.5 text-[var(--color-on-surface-variant)] transition hover:bg-[var(--color-surface-container-highest)] hover:text-[var(--color-primary)]"
-                          onClick={() => openEdit(person)}
-                        >
-                          <Pencil size={14} />
-                        </button>
-                        <button
-                          type="button"
-                          title="Eliminar"
-                          className="rounded-lg p-1.5 text-[var(--color-on-surface-variant)] transition hover:bg-[var(--color-surface-container-highest)] hover:text-rose-600"
-                          onClick={() => setConfirmDeleteId(person.id)}
-                        >
-                          <Trash2 size={14} />
-                        </button>
-                      </div>
-                    </td>
+                    {canUpdate || canDelete ? (
+                      <td className="px-4 py-2.5">
+                        <div className="flex justify-end gap-1">
+                          {canUpdate ? (
+                            <button
+                              type="button"
+                              title="Editar"
+                              className="rounded-lg p-1.5 text-[var(--color-on-surface-variant)] transition hover:bg-[var(--color-surface-container-highest)] hover:text-[var(--color-primary)]"
+                              onClick={() => openEdit(person)}
+                            >
+                              <Pencil size={14} />
+                            </button>
+                          ) : null}
+                          {canDelete ? (
+                            <button
+                              type="button"
+                              title="Eliminar"
+                              className="rounded-lg p-1.5 text-[var(--color-on-surface-variant)] transition hover:bg-[var(--color-surface-container-highest)] hover:text-rose-600"
+                              onClick={() => setConfirmDeleteId(person.id)}
+                            >
+                              <Trash2 size={14} />
+                            </button>
+                          ) : null}
+                        </div>
+                      </td>
+                    ) : null}
                   </tr>
                 ))}
               </tbody>
@@ -337,7 +383,7 @@ export function PersonnelModal({ open, onClose }: { open: boolean; onClose: () =
           </>
         }
       >
-        <p className="text-sm">¿Eliminar este registro de personal? Solo se borra localmente en este dispositivo.</p>
+        <p className="text-sm">¿Eliminar este registro de personal? Se borra del sistema para todos.</p>
       </Modal>
     </>
   );
