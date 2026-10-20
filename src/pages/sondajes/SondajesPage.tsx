@@ -67,7 +67,7 @@ import {
   secondaryButton
 } from "@/features/sondajes/components/ui";
 
-const pageShell = "mx-auto w-full max-w-7xl space-y-5 px-4 pb-10 sm:px-6 lg:px-8";
+const pageShell = "space-y-6";
 const ALL = "all";
 
 // Funcionalidades siguientes; tablas y API ya existen.

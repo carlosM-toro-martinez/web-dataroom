@@ -526,7 +526,7 @@ export function ExploracionesDataRoomPage() {
       ) : null}
 
       {isLanding ? (
-        <div className="mx-auto grid max-w-5xl grid-cols-1 gap-4 md:grid-cols-3">
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
           <article className="md:col-span-3 rounded-xl border border-[var(--color-border-soft)] bg-[var(--color-surface-container-low)] p-4">
             <div className="flex items-center justify-between gap-3">
               <div>
@@ -569,10 +569,10 @@ export function ExploracionesDataRoomPage() {
             }
             className="rounded-xl border border-[var(--color-border-soft)] bg-[var(--color-surface-container-low)] p-5 text-left transition hover:border-[var(--color-primary)]"
           >
-            <p className="text-lg font-bold">Taladros</p>
+            <p className="text-lg font-bold">Drilling</p>
             <p className="mt-2 text-sm text-[var(--color-on-surface-variant)]">
               {preferredDrillProject
-                ? "Enter the drilling data room."
+                ? "Drillholes, intervals, assays and significant intercepts."
                 : "No drilling project yet. Click to create the first one."}
             </p>
           </button>
@@ -583,20 +583,9 @@ export function ExploracionesDataRoomPage() {
           >
             <p className="text-lg font-bold">Surface</p>
             <p className="mt-2 text-sm text-[var(--color-on-surface-variant)]">
-              Enter the surface exploration data room.
+              Surface sampling by area, level and labor.
             </p>
           </button>
-          {isAdmin ? (
-            <button
-              type="button"
-              className="rounded-xl border border-[var(--color-border-soft)] bg-[var(--color-surface-container-low)] p-5 text-left opacity-75"
-            >
-              <p className="text-lg font-bold">Geochemistry</p>
-              <p className="mt-2 text-sm text-[var(--color-on-surface-variant)]">
-                Geochemistry module (coming soon).
-              </p>
-            </button>
-          ) : null}
           {isAdmin ? (
             <Link
               to="/exploraciones-data-room/forms"
@@ -726,7 +715,7 @@ export function ExploracionesDataRoomPage() {
       ) : null}
 
       {!isLanding && !projectId ? (
-        <div className="mx-auto max-w-5xl">
+        <div>
           <Card
             title="Projects"
             action={

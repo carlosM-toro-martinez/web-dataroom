@@ -111,7 +111,7 @@ import type { OfflineProposalCatalog, OfflineProposalSample } from "@/features/e
 import { cacheProposalCatalogs, deleteSeedLaboratoryCatalogs, pruneMissingProposalCatalogs } from "@/features/exploraciones/db/exploracionesDb";
 
 const pageShell =
-  "exploraciones-page mx-auto w-full max-w-7xl space-y-6 px-4 pb-8 sm:px-6 lg:px-8";
+  "exploraciones-page space-y-6";
 const panelClass =
   "rounded-xl border border-[var(--color-border-soft)] bg-[var(--color-surface-container-low)]";
 const fieldClass =

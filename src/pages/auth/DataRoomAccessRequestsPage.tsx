@@ -194,7 +194,7 @@ export function DataRoomAccessRequestsPage() {
   return (
     <section className="space-y-6 text-[var(--color-on-surface)]">
       <InternalHeader
-        eyebrow="Administracion"
+        eyebrow="Administración"
         title="Solicitudes Data Room"
         description="Evalua solicitudes externas, aprueba accesos visitantes y define su vencimiento."
       />

@@ -293,7 +293,7 @@ export function AuditPage() {
 
   const verdict = verify.data;
   return (
-    <div className="mx-auto w-full max-w-7xl space-y-5 px-4 pb-10 sm:px-6 lg:px-8">
+    <div className="space-y-6">
       <InternalHeader
         eyebrow="Administración"
         title="Bitácora de auditoría"

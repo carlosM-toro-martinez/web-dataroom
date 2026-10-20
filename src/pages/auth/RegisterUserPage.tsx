@@ -161,9 +161,9 @@ export function RegisterUserPage() {
   return (
     <section className="space-y-6 text-[var(--color-on-surface)]">
       <InternalHeader
-        eyebrow="Administracion"
+        eyebrow="Administración"
         title="Trabajadores"
-        description="Administracion de usuarios: alta, edicion y baja logica."
+        description="Administración de usuarios: alta, edición y baja lógica."
       />
 
       <article className="rounded-xl border border-[var(--color-border-soft)] bg-[var(--color-surface-container-low)] p-5 md:p-6">
@@ -181,7 +181,7 @@ export function RegisterUserPage() {
           </Link>
         </div>
 
-        <form className="grid gap-4 md:grid-cols-2" onSubmit={onSubmitCreate}>
+        <form className="grid max-w-4xl gap-4 md:grid-cols-2" onSubmit={onSubmitCreate}>
           <div className="md:col-span-2">
             <label className={authLabelClassName}>Nombre</label>
             <input

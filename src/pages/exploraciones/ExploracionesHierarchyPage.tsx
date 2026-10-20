@@ -36,7 +36,7 @@ import { cacheProposalCatalogs, pruneMissingProposalCatalogs } from "@/features/
 import { InternalHeader } from "@/shared/ui/InternalHeader";
 import { useToast } from "@/shared/ui/toast/ToastProvider";
 
-const pageShell = "mx-auto w-full max-w-7xl space-y-5 px-4 pb-8 sm:px-6 lg:px-8";
+const pageShell = "space-y-6";
 const panelClass = "rounded-xl border border-[var(--color-border-soft)] bg-[var(--color-surface-container-low)]";
 const fieldClass =
   "w-full rounded-lg border border-[var(--color-border-soft)] bg-[var(--color-surface-container-high)] px-3 py-2.5 text-sm text-[var(--color-on-surface)] outline-none transition focus:border-[var(--color-primary)] focus:ring-1 focus:ring-[var(--color-primary)]";

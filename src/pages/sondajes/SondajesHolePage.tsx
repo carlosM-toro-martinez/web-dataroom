@@ -58,7 +58,7 @@ import {
 } from "@/features/sondajes/components/ui";
 
 const F = REPORTE_DIARIO;
-const pageShell = "mx-auto w-full max-w-5xl space-y-5 px-4 pb-10 sm:px-6 lg:px-8";
+const pageShell = "space-y-6";
 
 function formatHours(value: number) {
   return `${value.toLocaleString("es-BO", { maximumFractionDigits: 1 })} h`;
@@ -205,43 +205,42 @@ export function SondajesHolePage() {
         description={showGeology ? "Reporte geológico diario" : "Partes diarios de perforación"}
       />
 
-      <div className="flex flex-wrap items-center justify-between gap-2">
+      <div className="flex flex-wrap items-center justify-between gap-3">
         <Link to="/sondajes" className={`${secondaryButton} shrink-0`}>
           <ArrowLeft size={15} />
           Programas
         </Link>
+        <div className="flex flex-wrap items-center gap-3">
         {canDrilling && canGeology ? (
-          <div className="ml-auto inline-flex rounded-2xl border border-[var(--color-border-soft)] bg-[var(--color-surface-container-low)] p-1 shadow-sm">
-            {(
-              [
-                ["drilling", Drill, "Perforación"],
-                ["geology", Microscope, "Geología"]
-              ] as const
-            ).map(([value, Icon, text]) => (
-              <button
-                key={value}
-                type="button"
-                onClick={() => setSection(value)}
-                className={`inline-flex items-center gap-2 rounded-xl px-4 py-2 text-sm font-bold transition ${
-                  section === value ? "bg-[var(--color-primary)] text-[var(--color-on-primary)] shadow" : "text-[var(--color-on-surface-variant)] hover:text-[var(--color-on-surface)]"
-                }`}
-              >
-                <Icon size={16} />
-                {text}
-              </button>
-            ))}
-          </div>
-        ) : null}
-      </div>
-
-      {!showGeology && can("sondajes", "create") ? (
-        <div className="flex justify-end">
-          <button type="button" className={`${primaryButton} px-5 py-3 text-base`} onClick={() => setForm({ open: true, report: null })}>
-            <Plus size={18} />
-            Nuevo parte
-          </button>
+            <div className="inline-flex rounded-2xl border border-[var(--color-border-soft)] bg-[var(--color-surface-container-low)] p-1 shadow-sm">
+              {(
+                [
+                  ["drilling", Drill, "Perforación"],
+                  ["geology", Microscope, "Geología"]
+                ] as const
+              ).map(([value, Icon, text]) => (
+                <button
+                  key={value}
+                  type="button"
+                  onClick={() => setSection(value)}
+                  className={`inline-flex items-center gap-2 rounded-xl px-4 py-2 text-sm font-bold transition ${
+                    section === value ? "bg-[var(--color-primary)] text-[var(--color-on-primary)] shadow" : "text-[var(--color-on-surface-variant)] hover:text-[var(--color-on-surface)]"
+                  }`}
+                >
+                  <Icon size={16} />
+                  {text}
+                </button>
+              ))}
+            </div>
+          ) : null}
+          {!showGeology && can("sondajes", "create") ? (
+            <button type="button" className={`${primaryButton} px-5`} onClick={() => setForm({ open: true, report: null })}>
+              <Plus size={17} />
+              Nuevo parte
+            </button>
+          ) : null}
         </div>
-      ) : null}
+      </div>
 
       {showGeology ? (
         <GeologyPanel hole={hole} campaign={campaign} />
