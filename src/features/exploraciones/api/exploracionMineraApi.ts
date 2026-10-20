@@ -35,6 +35,7 @@ import {
   recoverySchema,
   resourceSchema,
   significantInterceptSchema,
+  computedInterceptSchema,
   updateAssayPayloadSchema,
   updateAssayValuePayloadSchema,
   updateAlterationPayloadSchema,
@@ -140,20 +141,17 @@ function normalizeListResponse<T>(raw: unknown, parser: (value: unknown) => T): 
   const listRaw = candidates.find((item) => Array.isArray(item));
   const list = Array.isArray(listRaw) ? listRaw.map(parser) : [];
 
-  const metaSource = root && typeof root === "object" ? root : {};
-  const meta = listMetaSchema
-    .safeParse({
-      total: (metaSource as Record<string, unknown>).total,
-      page: (metaSource as Record<string, unknown>).page,
-      limit: (metaSource as Record<string, unknown>).limit
-    })
-    .success
-    ? listMetaSchema.parse({
-        total: (metaSource as Record<string, unknown>).total,
-        page: (metaSource as Record<string, unknown>).page,
-        limit: (metaSource as Record<string, unknown>).limit
-      })
-    : {};
+  // El total puede venir al lado de la lista (raw.meta) o dentro de ella (raw.data.meta / raw.data.total).
+  const topMeta = raw && typeof raw === "object" && "meta" in raw ? (raw as { meta?: unknown }).meta : undefined;
+  const metaSource = topMeta && typeof topMeta === "object" ? topMeta : root && typeof root === "object" ? root : {};
+  const metaCandidate = {
+    total: (metaSource as Record<string, unknown>).total,
+    page: (metaSource as Record<string, unknown>).page,
+    limit: (metaSource as Record<string, unknown>).limit,
+    totalPages: (metaSource as Record<string, unknown>).totalPages
+  };
+  const parsedMeta = listMetaSchema.safeParse(metaCandidate);
+  const meta = parsedMeta.success ? parsedMeta.data : {};
 
   return { data: list, meta };
 }
@@ -227,7 +225,13 @@ export async function updateZone(id: number, payload: UpdateZonePayload) {
   return normalizeDetailResponse(response.data, (item) => zoneSchema.parse(item));
 }
 
-export async function getDrillHoles(params: { zoneId?: number; page?: number; limit?: number }) {
+export async function getDrillHoles(params: {
+  zoneId?: number;
+  page?: number;
+  limit?: number;
+  view?: "summary" | "full";
+  search?: string;
+}) {
   const response = await httpClient.get(apiEndpoints.exploraciones.drillholes, {
     params: buildParams(params)
   });
@@ -637,6 +641,21 @@ export async function getSignificantIntercepts(params: {
     params: buildParams(params)
   });
   return normalizeListResponse(response.data, (item) => significantInterceptSchema.parse(item));
+}
+
+export type InterceptParams = {
+  element: "au" | "cu" | "ag";
+  cutoff: number;
+  minWidth: number;
+  maxDilution: number;
+};
+
+export async function getComputedIntercepts(params: { zoneId?: number; drillHoleId?: number } & InterceptParams) {
+  const response = await httpClient.get(`${apiEndpoints.exploraciones.significantIntercepts}/computed`, {
+    params: buildParams(params)
+  });
+  const root = (response.data ?? {}) as { data?: unknown[] };
+  return (Array.isArray(root.data) ? root.data : []).map((item) => computedInterceptSchema.parse(item));
 }
 
 export async function getSignificantInterceptById(id: number) {

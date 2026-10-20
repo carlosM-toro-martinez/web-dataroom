@@ -249,9 +249,25 @@ export const listMetaSchema = z
   .object({
     total: z.number().int().nonnegative().optional(),
     page: z.number().int().positive().optional(),
-    limit: z.number().int().positive().optional()
+    limit: z.number().int().positive().optional(),
+    totalPages: z.number().int().positive().optional()
   })
   .passthrough();
+
+// Intercepto calculado desde los ensayos (no se guarda en la base de datos).
+export const computedInterceptSchema = z.object({
+  drillHoleId: z.number().int().positive(),
+  drillHoleName: z.string(),
+  element: z.enum(["au", "cu", "ag"]),
+  fromDepth: z.number(),
+  toDepth: z.number(),
+  width: z.number(),
+  au: z.number().nullable(),
+  cu: z.number().nullable(),
+  ag: z.number().nullable(),
+  intervals: z.number()
+});
+export type ComputedIntercept = z.infer<typeof computedInterceptSchema>;
 
 export const createProjectPayloadSchema = z.object({
   name: requiredText,

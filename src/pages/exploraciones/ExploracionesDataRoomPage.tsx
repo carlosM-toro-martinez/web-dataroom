@@ -34,6 +34,7 @@ import {
   useCreateQaqcMutation,
   useCreateRecoveryMutation,
   useCreateSignificantInterceptMutation,
+  useComputedInterceptsQuery,
   useCreateZoneMutation,
   useDensitiesByIntervalQuery,
   useDrillHoleDetailQuery,
@@ -251,9 +252,36 @@ export function ExploracionesDataRoomPage() {
   const projectDetail = useProjectDetailQuery(projectId);
   const zonesQuery = useZonesByProjectQuery(projectId);
   const zoneDetail = useZoneDetailQuery(zoneId);
-  const drillHolesQuery = useDrillHolesByZoneQuery(zoneId);
+  const [holeSearchInput, setHoleSearchInput] = useState("");
+  const holeSearch = useDebouncedValue(holeSearchInput.trim(), 350);
+  const [holePage, setHolePage] = useState(1);
+  const [intervalPage, setIntervalPage] = useState(1);
+  const [interceptPage, setInterceptPage] = useState(1);
+  const [interceptElement, setInterceptElement] = useState<"au" | "cu" | "ag">("au");
+  const [interceptCutoffInput, setInterceptCutoffInput] = useState("0.5");
+  const [interceptMinWidthInput, setInterceptMinWidthInput] = useState("1");
+  const [interceptDilutionInput, setInterceptDilutionInput] = useState("2");
+  const debouncedCutoff = useDebouncedValue(interceptCutoffInput, 500);
+  const debouncedMinWidth = useDebouncedValue(interceptMinWidthInput, 500);
+  const debouncedDilution = useDebouncedValue(interceptDilutionInput, 500);
+  const interceptParams = useMemo(() => {
+    const num = (value: string, fallback: number) => {
+      const parsed = Number(value.replace(",", "."));
+      return Number.isFinite(parsed) && parsed >= 0 ? parsed : fallback;
+    };
+    return {
+      element: interceptElement,
+      cutoff: num(debouncedCutoff, INTERCEPT_DEFAULTS[interceptElement]),
+      minWidth: num(debouncedMinWidth, 1),
+      maxDilution: num(debouncedDilution, 2)
+    };
+  }, [interceptElement, debouncedCutoff, debouncedMinWidth, debouncedDilution]);
+  const drillHolesQuery = useDrillHolesByZoneQuery(zoneId, { search: holeSearch, page: holePage, limit: 25 });
+  // Para elegir sondaje al crear un intercepto manual: la lista completa de la zona, liviana.
+  const holeOptionsQuery = useDrillHolesByZoneQuery(zoneId, { page: 1, limit: 500 });
+  const computedInterceptsQuery = useComputedInterceptsQuery(zoneId, interceptParams);
   const drillHoleDetail = useDrillHoleDetailQuery(drillHoleId);
-  const intervalsQuery = useIntervalsByDrillHoleQuery(drillHoleId);
+  const intervalsQuery = useIntervalsByDrillHoleQuery(drillHoleId, intervalPage, 50);
   const intervalDetail = useIntervalDetailQuery(intervalId);
   const assaysQuery = useAssaysByIntervalQuery(intervalId);
   const lithologiesQuery = useLithologiesByIntervalQuery(intervalId);
@@ -317,18 +345,54 @@ export function ExploracionesDataRoomPage() {
     const fallback = resolve(DRILLHOLES_MEDIA_SCHEME.default);
     return fallback.length ? fallback : [dataRoomMediaUrl("model-1")];
   }, [drillholesMediaByName, projectId, token, zoneId]);
+  // Tabla única de interceptos de la zona: los calculados desde los ensayos y los cargados a mano.
+  const interceptRows = useMemo<InterceptRow[]>(() => {
+    const calculated = (computedInterceptsQuery.data ?? []).map<InterceptRow>((item, index) => ({
+      key: `calc-${item.drillHoleId}-${index}`,
+      drillHoleId: item.drillHoleId,
+      hole: item.drillHoleName,
+      including: null,
+      from: item.fromDepth,
+      to: item.toDepth,
+      width: item.width,
+      trueWidth: null,
+      au: item.au,
+      cu: item.cu,
+      ag: item.ag,
+      comments: `${item.intervals} interval${item.intervals === 1 ? "" : "s"}`,
+      source: "calculated"
+    }));
+    const manual = (significantInterceptsByZoneQuery.data?.data ?? []).map<InterceptRow>((item) => ({
+      key: `manual-${item.id}`,
+      drillHoleId: item.drillHoleId,
+      hole: item.drillHole?.name ?? `Drillhole #${item.drillHoleId}`,
+      including: item.isIncluding,
+      from: item.fromDepth,
+      to: item.toDepth,
+      width: item.width,
+      trueWidth: item.trueWidth ?? null,
+      au: item.au ?? null,
+      cu: item.cu ?? null,
+      ag: item.ag ?? null,
+      comments: item.comments ?? null,
+      source: "manual"
+    }));
+    // Los de mejor ley primero (según el elemento elegido).
+    const grade = (row: InterceptRow) => row[interceptElement] ?? Number.NEGATIVE_INFINITY;
+    return [...calculated, ...manual].sort((a, b) => grade(b) - grade(a) || a.hole.localeCompare(b.hole, "en", { numeric: true }) || a.from - b.from);
+  }, [computedInterceptsQuery.data, significantInterceptsByZoneQuery.data?.data, interceptElement]);
+  const INTERCEPT_PAGE_SIZE = 15;
+  const interceptTotalPages = Math.max(1, Math.ceil(interceptRows.length / INTERCEPT_PAGE_SIZE));
+  const visibleInterceptRows = interceptRows.slice((interceptPage - 1) * INTERCEPT_PAGE_SIZE, interceptPage * INTERCEPT_PAGE_SIZE);
   const topInterceptByDrillHole = useMemo(() => {
-    const map = new Map<number, any>();
-    (significantInterceptsByZoneQuery.data?.data ?? []).forEach((intercept) => {
-      const current = map.get(intercept.drillHoleId);
-      const score = Math.max(intercept.au ?? Number.NEGATIVE_INFINITY, intercept.cu ?? Number.NEGATIVE_INFINITY, intercept.ag ?? Number.NEGATIVE_INFINITY);
-      const currentScore = current
-        ? Math.max(current.au ?? Number.NEGATIVE_INFINITY, current.cu ?? Number.NEGATIVE_INFINITY, current.ag ?? Number.NEGATIVE_INFINITY)
-        : Number.NEGATIVE_INFINITY;
-      if (!current || score > currentScore) map.set(intercept.drillHoleId, intercept);
+    const map = new Map<number, InterceptRow>();
+    const grade = (row: InterceptRow) => row[interceptElement] ?? Number.NEGATIVE_INFINITY;
+    interceptRows.forEach((row) => {
+      const current = map.get(row.drillHoleId);
+      if (!current || grade(row) > grade(current)) map.set(row.drillHoleId, row);
     });
     return map;
-  }, [significantInterceptsByZoneQuery.data?.data]);
+  }, [interceptRows, interceptElement]);
   const markMediaLoaded = (src: string) => {
     setLoadedMedia((current) => {
       if (current.has(src)) return current;
@@ -377,16 +441,27 @@ export function ExploracionesDataRoomPage() {
   const formatTopIntercept = (drillHoleId: number) => {
     const intercept = topInterceptByDrillHole.get(drillHoleId);
     if (!intercept) return null;
-    const values = [
-      intercept.au != null ? `Au ${intercept.au} g/t` : null,
-      intercept.cu != null ? `Cu ${intercept.cu}%` : null,
-      intercept.ag != null ? `Ag ${intercept.ag} g/t` : null
-    ].filter(Boolean);
+    const value = intercept[interceptElement];
     return {
-      label: values[0] ?? `Width ${intercept.width}`,
-      interval: `${intercept.fromDepth} - ${intercept.toDepth} m`
+      label: value != null ? `${ELEMENT_LABEL[interceptElement]} ${value} ${ELEMENT_UNIT[interceptElement]}` : `Width ${intercept.width} m`,
+      interval: `${intercept.from} - ${intercept.to} m`
     };
   };
+
+  // Al cambiar de zona o de sondaje se vuelve a la primera página.
+  useEffect(() => {
+    setHolePage(1);
+    setHoleSearchInput("");
+  }, [zoneId]);
+  useEffect(() => {
+    setIntervalPage(1);
+  }, [drillHoleId]);
+  useEffect(() => {
+    setInterceptPage(1);
+  }, [zoneId, interceptParams]);
+  useEffect(() => {
+    setHolePage(1);
+  }, [holeSearch]);
 
   const isLoading = useMemo(
     () =>
@@ -443,7 +518,7 @@ export function ExploracionesDataRoomPage() {
       <InternalHeader
         eyebrow="Data Room"
         title="Exploration Data Room"
-        description="Explora proyectos, zonas, perforaciones, intervalos y ensayos desde una vista ejecutiva centralizada."
+        description="Browse projects, zones, drillholes, intervals and assays from one place."
       />
 
       {isLoading ? (
@@ -821,15 +896,12 @@ export function ExploracionesDataRoomPage() {
                       </button>
                     </div>
                   </div>
-                  <p className="mt-2 text-xs text-[var(--color-on-surface-variant)]">
-                    Add more images or gifs in <code>DRILLHOLES_MEDIA_SCHEME</code> (this file).
-                  </p>
                 </Card>
                 </div>
                 <div className="space-y-4 xl:col-span-6">
                 <Card
                   title="Significant Intercepts"
-                  description={`Significant intercepts registered for zone ${zoneDetail.data?.name ?? `#${zoneId}`}.`}
+                  description={`Mineralized runs in zone ${zoneDetail.data?.name ?? `#${zoneId}`}, calculated from the assays with the cut-off below. Manually entered intercepts are listed too.`}
                   action={
                     canManage ? (
                       <AddBtn
@@ -839,22 +911,41 @@ export function ExploracionesDataRoomPage() {
                     ) : undefined
                   }
                 >
+                  <div className="mb-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
+                    <label className="block">
+                      <span className="mb-1 block text-[10px] font-bold uppercase tracking-wide text-[var(--color-on-surface-variant)]">Element</span>
+                      <select
+                        className={inputClassName}
+                        value={interceptElement}
+                        onChange={(e) => {
+                          const element = e.target.value as "au" | "cu" | "ag";
+                          setInterceptElement(element);
+                          setInterceptCutoffInput(String(INTERCEPT_DEFAULTS[element]));
+                        }}
+                      >
+                        <option value="au">Au (g/t)</option>
+                        <option value="cu">Cu (%)</option>
+                        <option value="ag">Ag (g/t)</option>
+                      </select>
+                    </label>
+                    <label className="block">
+                      <span className="mb-1 block text-[10px] font-bold uppercase tracking-wide text-[var(--color-on-surface-variant)]">Cut-off ({ELEMENT_UNIT[interceptElement]})</span>
+                      <input className={inputClassName} inputMode="decimal" value={interceptCutoffInput} onChange={(e) => setInterceptCutoffInput(e.target.value)} />
+                    </label>
+                    <label className="block">
+                      <span className="mb-1 block text-[10px] font-bold uppercase tracking-wide text-[var(--color-on-surface-variant)]">Min. width (m)</span>
+                      <input className={inputClassName} inputMode="decimal" value={interceptMinWidthInput} onChange={(e) => setInterceptMinWidthInput(e.target.value)} />
+                    </label>
+                    <label className="block">
+                      <span className="mb-1 block text-[10px] font-bold uppercase tracking-wide text-[var(--color-on-surface-variant)]">Max. dilution (m)</span>
+                      <input className={inputClassName} inputMode="decimal" value={interceptDilutionInput} onChange={(e) => setInterceptDilutionInput(e.target.value)} />
+                    </label>
+                  </div>
                   <div className="overflow-x-auto rounded-xl border border-[var(--color-border-soft)] bg-[var(--color-surface-container-high)]">
                     <table className="w-full border-collapse text-left">
                       <thead>
                         <tr>
-                          {[
-                            "Hole",
-                            "Incl.",
-                            "From",
-                            "To",
-                            "Width",
-                            "True Width",
-                            "Au g/t",
-                            "Cu %",
-                            "Ag g/t",
-                            "Comments"
-                          ].map((h) => (
+                          {["Hole", "Source", "From", "To", "Width", "True Width", "Au g/t", "Cu %", "Ag g/t", "Notes"].map((h) => (
                             <th
                               key={h}
                               className="bg-[var(--color-surface-container-highest)] px-3 py-2 text-xs font-bold uppercase tracking-wide text-[var(--color-on-surface-variant)]"
@@ -865,64 +956,70 @@ export function ExploracionesDataRoomPage() {
                         </tr>
                       </thead>
                       <tbody>
-                        {(significantInterceptsByZoneQuery.data?.data ?? []).length ? (
-                          (significantInterceptsByZoneQuery.data?.data ?? []).map((si) => (
+                        {computedInterceptsQuery.isLoading ? (
+                          [0, 1, 2].map((row) => (
+                            <tr key={row}>
+                              <td colSpan={10} className="px-3 py-2">
+                                <div className="h-6 animate-pulse rounded bg-[var(--color-surface-container-highest)]" />
+                              </td>
+                            </tr>
+                          ))
+                        ) : computedInterceptsQuery.isError ? (
+                          <tr>
+                            <td colSpan={10} className="px-3 py-4 text-sm text-rose-500">
+                              Could not calculate the intercepts.{" "}
+                              <button type="button" className="font-semibold underline" onClick={() => void computedInterceptsQuery.refetch()}>
+                                Retry
+                              </button>
+                            </td>
+                          </tr>
+                        ) : interceptRows.length ? (
+                          visibleInterceptRows.map((si) => (
                             <tr
-                              key={si.id}
+                              key={si.key}
                               className="border-t border-[var(--color-border-soft)] transition hover:bg-[var(--color-surface-container-highest)]"
                             >
                               <td className="px-3 py-2 text-sm font-semibold">
-                                <Link
-                                  className="text-[var(--color-primary)] hover:underline"
-                                  to={pathFor(projectId, zoneId, si.drillHoleId)}
-                                >
-                                  {si.drillHole?.name ?? `Drillhole #${si.drillHoleId}`}
+                                <Link className="text-[var(--color-primary)] hover:underline" to={pathFor(projectId, zoneId, si.drillHoleId)}>
+                                  {si.hole}
                                 </Link>
                               </td>
                               <td className="px-3 py-2 text-sm">
                                 <span
-                                  className={`rounded-full px-2 py-0.5 text-xs font-bold ${si.isIncluding ? "bg-emerald-500/15 text-emerald-300" : "bg-slate-500/20 text-slate-300"}`}
+                                  className={`rounded-full px-2 py-0.5 text-xs font-bold ${si.source === "calculated" ? "bg-sky-500/15 text-sky-700 dark:text-sky-300" : "bg-slate-500/20 text-slate-600 dark:text-slate-300"}`}
                                 >
-                                  {si.isIncluding ? "YES" : "NO"}
+                                  {si.source === "calculated" ? "Calculated" : "Manual"}
                                 </span>
                               </td>
-                              <td className="px-3 py-2 font-mono text-sm text-cyan-300">
-                                {si.fromDepth}
-                              </td>
-                              <td className="px-3 py-2 font-mono text-sm text-cyan-300">
-                                {si.toDepth}
-                              </td>
-                              <td className="px-3 py-2 font-mono text-sm font-bold text-amber-300">
-                                {si.width}
-                              </td>
+                              <td className="px-3 py-2 font-mono text-sm text-cyan-700 dark:text-cyan-300">{si.from}</td>
+                              <td className="px-3 py-2 font-mono text-sm text-cyan-700 dark:text-cyan-300">{si.to}</td>
+                              <td className="px-3 py-2 font-mono text-sm font-bold text-amber-700 dark:text-amber-300">{si.width}</td>
                               <td className="px-3 py-2 font-mono text-sm">{si.trueWidth ?? "-"}</td>
-                              <td className="px-3 py-2 font-mono text-sm font-bold text-yellow-300">
-                                {si.au ?? "-"}
-                              </td>
-                              <td className="px-3 py-2 font-mono text-sm font-bold text-orange-300">
-                                {si.cu ?? "-"}
-                              </td>
-                              <td className="px-3 py-2 font-mono text-sm font-bold text-lime-300">
-                                {si.ag ?? "-"}
-                              </td>
-                              <td className="px-3 py-2 text-sm text-[var(--color-on-surface-variant)]">
-                                {si.comments ?? "-"}
-                              </td>
+                              <td className="px-3 py-2 font-mono text-sm font-bold text-yellow-700 dark:text-yellow-300">{si.au ?? "-"}</td>
+                              <td className="px-3 py-2 font-mono text-sm font-bold text-orange-700 dark:text-orange-300">{si.cu ?? "-"}</td>
+                              <td className="px-3 py-2 font-mono text-sm font-bold text-lime-700 dark:text-lime-300">{si.ag ?? "-"}</td>
+                              <td className="px-3 py-2 text-sm text-[var(--color-on-surface-variant)]">{si.comments ?? "-"}</td>
                             </tr>
                           ))
                         ) : (
                           <tr>
-                            <td
-                              colSpan={10}
-                              className="px-3 py-4 text-sm text-[var(--color-on-surface-variant)]"
-                            >
-                              No significant intercepts.
+                            <td colSpan={10} className="px-3 py-4 text-sm text-[var(--color-on-surface-variant)]">
+                              No intercepts above {interceptParams.cutoff} {ELEMENT_UNIT[interceptElement]} with at least {interceptParams.minWidth} m width. Try a lower cut-off or width.
                             </td>
                           </tr>
                         )}
                       </tbody>
                     </table>
                   </div>
+                  <Pager
+                    meta={{ total: interceptRows.length, limit: INTERCEPT_PAGE_SIZE, totalPages: interceptTotalPages }}
+                    page={interceptPage}
+                    onPage={setInterceptPage}
+                    noun="intercepts, best grade first"
+                  />
+                  <p className="mt-1 text-xs text-[var(--color-on-surface-variant)]">
+                    Grades are length-weighted averages of the assays in each run.
+                  </p>
                 </Card>
                 <Card
                   title="Drillholes"
@@ -933,33 +1030,56 @@ export function ExploracionesDataRoomPage() {
                     ) : undefined
                   }
                 >
-                  <SimpleTable
-                    headers={["Hole", "Type", "Best Grade", "Depth", "Campaign", "Open"]}
-                    rows={(drillHolesQuery.data?.data ?? []).map((d) => [
-                      d.name,
-                      d.type,
-                      (() => {
-                        const top = formatTopIntercept(d.id);
-                        if (!top) return <span className="text-[var(--color-on-surface-variant)]">-</span>;
-                        return (
-                          <span className="inline-flex flex-col rounded-lg bg-lime-400 px-2 py-1 text-xs font-bold text-lime-950 ring-1 ring-lime-500/70">
-                            <span>{top.label}</span>
-                            <span className="font-medium opacity-80">{top.interval}</span>
-                          </span>
-                        );
-                      })(),
-                      String(d.depth),
-                      d.campaign ?? "-",
-                      <Link
-                        key={d.id}
-                        className="text-[var(--color-primary)]"
-                        to={pathFor(projectId, zoneId, d.id)}
-                      >
-                        View Intervals
-                      </Link>
-                    ])}
-                    empty="No drillholes in this zone."
-                  />
+                  <div className="mb-3">
+                    <input
+                      className={inputClassName}
+                      placeholder="Search drillhole by name…"
+                      value={holeSearchInput}
+                      onChange={(e) => setHoleSearchInput(e.target.value)}
+                    />
+                  </div>
+                  {drillHolesQuery.isError ? (
+                    <p className="rounded-lg bg-rose-500/10 px-3 py-3 text-sm text-rose-500">
+                      Could not load the drillholes.{" "}
+                      <button type="button" className="font-semibold underline" onClick={() => void drillHolesQuery.refetch()}>
+                        Retry
+                      </button>
+                    </p>
+                  ) : drillHolesQuery.isLoading ? (
+                    <div className="space-y-2">
+                      {[0, 1, 2, 3].map((row) => (
+                        <div key={row} className="h-9 animate-pulse rounded-lg bg-[var(--color-surface-container-high)]" />
+                      ))}
+                    </div>
+                  ) : (
+                    <>
+                      <SimpleTable
+                        headers={["Hole", "Type", "Intervals", "Best Grade", "Depth (m)", "Campaign", "Open"]}
+                        rows={(drillHolesQuery.data?.data ?? []).map((d) => [
+                          d.name,
+                          d.type,
+                          String((d as { _count?: { intervals?: number } })._count?.intervals ?? "-"),
+                          (() => {
+                            const top = formatTopIntercept(d.id);
+                            if (!top) return <span className="text-[var(--color-on-surface-variant)]">-</span>;
+                            return (
+                              <span className="inline-flex flex-col rounded-lg bg-lime-400 px-2 py-1 text-xs font-bold text-lime-950 ring-1 ring-lime-500/70">
+                                <span>{top.label}</span>
+                                <span className="font-medium opacity-80">{top.interval}</span>
+                              </span>
+                            );
+                          })(),
+                          String(d.depth),
+                          d.campaign ?? "-",
+                          <Link key={d.id} className="text-[var(--color-primary)]" to={pathFor(projectId, zoneId, d.id)}>
+                            View Intervals
+                          </Link>
+                        ])}
+                        empty={holeSearch ? `No drillholes match “${holeSearch}”.` : "No drillholes in this zone yet."}
+                      />
+                      <Pager meta={drillHolesQuery.data?.meta} page={holePage} onPage={setHolePage} noun="drillholes" />
+                    </>
+                  )}
                 </Card>
                 </div>
               </div>
@@ -979,22 +1099,49 @@ export function ExploracionesDataRoomPage() {
                   <div className="mb-3 text-xs text-[var(--color-on-surface-variant)]">
                     You are viewing intervals for the selected drillhole.
                   </div>
-                  <SimpleTable
-                    headers={["ID", "From", "To", "Action"]}
-                    rows={(intervalsQuery.data?.data ?? []).map((i) => [
-                      String(i.id),
-                      String(i.fromDepth),
-                      String(i.toDepth),
-                      <Link
-                        key={i.id}
-                        className="text-[var(--color-primary)]"
-                        to={pathFor(projectId, zoneId, drillHoleId, i.id)}
-                      >
-                        View Assays
-                      </Link>
-                    ])}
-                    empty="This drillhole has no intervals yet."
-                  />
+                  {intervalsQuery.isError ? (
+                    <p className="rounded-lg bg-rose-500/10 px-3 py-3 text-sm text-rose-500">
+                      Could not load the intervals.{" "}
+                      <button type="button" className="font-semibold underline" onClick={() => void intervalsQuery.refetch()}>
+                        Retry
+                      </button>
+                    </p>
+                  ) : intervalsQuery.isLoading ? (
+                    <div className="space-y-2">
+                      {[0, 1, 2, 3, 4].map((row) => (
+                        <div key={row} className="h-9 animate-pulse rounded-lg bg-[var(--color-surface-container-high)]" />
+                      ))}
+                    </div>
+                  ) : (
+                    <>
+                      <SimpleTable
+                        headers={["From (m)", "To (m)", "Rock", "Au g/t", "Cu %", "Ag g/t", "Action"]}
+                        rows={(intervalsQuery.data?.data ?? []).map((i) => {
+                          const detail = i as unknown as {
+                            assays?: Array<{ au?: unknown; cu?: unknown; ag?: unknown }>;
+                            lithologies?: Array<{ rockType?: string | null }>;
+                          };
+                          const mean = (key: "au" | "cu" | "ag") => {
+                            const values = (detail.assays ?? []).map((a) => Number(a[key])).filter((v) => Number.isFinite(v));
+                            return values.length ? String(Math.round((values.reduce((a, b) => a + b, 0) / values.length) * 1000) / 1000) : "-";
+                          };
+                          return [
+                            String(i.fromDepth),
+                            String(i.toDepth),
+                            detail.lithologies?.[0]?.rockType ?? "-",
+                            mean("au"),
+                            mean("cu"),
+                            mean("ag"),
+                            <Link key={i.id} className="text-[var(--color-primary)]" to={pathFor(projectId, zoneId, drillHoleId, i.id)}>
+                              View Assays
+                            </Link>
+                          ];
+                        })}
+                        empty="This drillhole has no intervals yet."
+                      />
+                      <Pager meta={intervalsQuery.data?.meta} page={intervalPage} onPage={setIntervalPage} noun="intervals" />
+                    </>
+                  )}
                 </Card>
                 <div className="mt-3" />
                 <Card
@@ -1285,7 +1432,7 @@ export function ExploracionesDataRoomPage() {
         <CreateModal
           type={modal}
           context={{ projectId, zoneId, drillHoleId, intervalId, assayId }}
-          drillHoles={drillHolesQuery.data?.data ?? []}
+          drillHoles={holeOptionsQuery.data?.data ?? []}
           onClose={() => setModal(null)}
           onSubmit={async (payload) => {
             try {
@@ -1383,6 +1530,82 @@ function ProjectResourceMap({
           </Popup>
         </Marker>
       </MapContainer>
+    </div>
+  );
+}
+
+type InterceptRow = {
+  key: string;
+  drillHoleId: number;
+  hole: string;
+  including: boolean | null;
+  from: number;
+  to: number;
+  width: number;
+  trueWidth: number | null;
+  au: number | null;
+  cu: number | null;
+  ag: number | null;
+  comments: string | null;
+  source: "calculated" | "manual";
+};
+
+const INTERCEPT_DEFAULTS = { au: 0.5, cu: 0.3, ag: 20 } as const;
+const ELEMENT_LABEL = { au: "Au", cu: "Cu", ag: "Ag" } as const;
+const ELEMENT_UNIT = { au: "g/t", cu: "%", ag: "g/t" } as const;
+
+function useDebouncedValue<T>(value: T, delay: number) {
+  const [debounced, setDebounced] = useState(value);
+  useEffect(() => {
+    const timer = window.setTimeout(() => setDebounced(value), delay);
+    return () => window.clearTimeout(timer);
+  }, [value, delay]);
+  return debounced;
+}
+
+function Pager({
+  meta,
+  page,
+  onPage,
+  noun
+}: {
+  meta?: { total?: number; limit?: number; totalPages?: number } | undefined;
+  page: number;
+  onPage: (page: number) => void;
+  noun: string;
+}) {
+  const total = meta?.total;
+  const limit = meta?.limit ?? 25;
+  if (total === undefined) return null;
+  const totalPages = meta?.totalPages ?? Math.max(1, Math.ceil(total / limit));
+  const first = total === 0 ? 0 : (page - 1) * limit + 1;
+  const last = Math.min(page * limit, total);
+  return (
+    <div className="mt-3 flex flex-wrap items-center justify-between gap-2 text-xs text-[var(--color-on-surface-variant)]">
+      <span>
+        Showing {first}–{last} of {total} {noun}
+      </span>
+      {totalPages > 1 ? (
+        <span className="flex items-center gap-2">
+          <button
+            type="button"
+            disabled={page <= 1}
+            onClick={() => onPage(page - 1)}
+            className="rounded-lg border border-[var(--color-border-soft)] px-3 py-1.5 font-semibold disabled:opacity-40"
+          >
+            Previous
+          </button>
+          Page {page} of {totalPages}
+          <button
+            type="button"
+            disabled={page >= totalPages}
+            onClick={() => onPage(page + 1)}
+            className="rounded-lg border border-[var(--color-border-soft)] px-3 py-1.5 font-semibold disabled:opacity-40"
+          >
+            Next
+          </button>
+        </span>
+      ) : null}
     </div>
   );
 }

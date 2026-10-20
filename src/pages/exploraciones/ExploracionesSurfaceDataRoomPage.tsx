@@ -604,7 +604,7 @@ export function ExploracionesSurfaceDataRoomPage() {
             </button>
           </div>
           <p className="mt-2 text-xs text-[var(--color-on-surface-variant)]">
-            Images are demo placeholders linked to selected Area/Level/Labor.
+            Reference images for the selected area, level and labor.
           </p>
         </article>
 

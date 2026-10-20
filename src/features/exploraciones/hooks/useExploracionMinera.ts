@@ -1,4 +1,4 @@
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient, keepPreviousData } from "@tanstack/react-query";
 import { queryKeys } from "@/shared/lib/queryKeys";
 import {
   createAlteration,
@@ -25,7 +25,9 @@ import {
   getAlterations,
   getDensities,
   getDrillHoleById,
+  getComputedIntercepts,
   getDrillHoles,
+  type InterceptParams,
   getDrillHoleSurveys,
   getExplorationHierarchy,
   getGeologicalStructures,
@@ -142,11 +144,25 @@ export function useZoneDetailQuery(zoneId?: number) {
   });
 }
 
-export function useDrillHolesByZoneQuery(zoneId?: number) {
+// Lista liviana (sin intervalos ni ensayos anidados), con búsqueda y paginación en el servidor.
+export function useDrillHolesByZoneQuery(zoneId?: number, options: { search?: string; page?: number; limit?: number } = {}) {
+  const { search = "", page = 1, limit = 25 } = options;
   return useQuery({
-    queryKey: [...queryKeys.exploraciones.all, "drillholes", zoneId],
-    queryFn: () => getDrillHoles({ zoneId, page: 1, limit: 100 }),
+    queryKey: [...queryKeys.exploraciones.all, "drillholes", zoneId, "summary", search, page, limit],
+    queryFn: () => getDrillHoles({ zoneId, page, limit, view: "summary", ...(search ? { search } : {}) }),
     enabled: Boolean(zoneId),
+    placeholderData: keepPreviousData,
+    retry: false
+  });
+}
+
+export function useComputedInterceptsQuery(zoneId: number | undefined, params: InterceptParams) {
+  return useQuery({
+    queryKey: [...queryKeys.exploraciones.all, "computed-intercepts", zoneId, params],
+    queryFn: () => getComputedIntercepts({ zoneId, ...params }),
+    enabled: Boolean(zoneId),
+    placeholderData: keepPreviousData,
+    staleTime: 60_000,
     retry: false
   });
 }
@@ -160,11 +176,12 @@ export function useDrillHoleDetailQuery(drillHoleId?: number) {
   });
 }
 
-export function useIntervalsByDrillHoleQuery(drillHoleId?: number) {
+export function useIntervalsByDrillHoleQuery(drillHoleId?: number, page = 1, limit = 50) {
   return useQuery({
-    queryKey: [...queryKeys.exploraciones.all, "intervals", drillHoleId],
-    queryFn: () => getIntervals({ drillHoleId, page: 1, limit: 100 }),
+    queryKey: [...queryKeys.exploraciones.all, "intervals", drillHoleId, page, limit],
+    queryFn: () => getIntervals({ drillHoleId, page, limit }),
     enabled: Boolean(drillHoleId),
+    placeholderData: keepPreviousData,
     retry: false
   });
 }

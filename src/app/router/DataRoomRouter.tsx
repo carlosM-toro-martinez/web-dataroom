@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { Suspense, lazy, useEffect } from "react";
 import { Navigate, Route, Routes, useLocation } from "react-router-dom";
 import { CorporateLandingPage } from "@/pages/corporate/CorporateLandingPage";
 import { ResponsibleMiningPage } from "@/pages/corporate/ResponsibleMiningPage";
@@ -8,35 +8,46 @@ import { LoginPage } from "@/pages/auth/LoginPage";
 import { DataRoomAccessRequestPublicPage } from "@/pages/auth/DataRoomAccessRequestPublicPage";
 import { ForgotPasswordPage } from "@/pages/auth/ForgotPasswordPage";
 import { ResetPasswordPage } from "@/pages/auth/ResetPasswordPage";
-import { RegisterUserPage } from "@/pages/auth/RegisterUserPage";
-import { DataRoomAccessRequestsPage } from "@/pages/auth/DataRoomAccessRequestsPage";
-import { DashboardPage } from "@/pages/dashboard/DashboardPage";
+const RegisterUserPage = lazy(() => import("@/pages/auth/RegisterUserPage").then((module) => ({ default: module.RegisterUserPage })));
+const DataRoomAccessRequestsPage = lazy(() => import("@/pages/auth/DataRoomAccessRequestsPage").then((module) => ({ default: module.DataRoomAccessRequestsPage })));
+const DashboardPage = lazy(() => import("@/pages/dashboard/DashboardPage").then((module) => ({ default: module.DashboardPage })));
 import { NotFoundPage } from "@/pages/not-found/NotFoundPage";
-import { ExploracionesPage } from "@/pages/exploraciones/ExploracionesPage";
-import { ExploracionesReportesPage } from "@/pages/exploraciones/ExploracionesReportesPage";
-import { ExploracionesElementosPage } from "@/pages/exploraciones/ExploracionesElementosPage";
-import { ExploracionesHierarchyPage } from "@/pages/exploraciones/ExploracionesHierarchyPage";
-import { ExploracionesDataRoomPage } from "@/pages/exploraciones/ExploracionesDataRoomPage";
-import { ExploracionesSurfaceDataRoomPage } from "@/pages/exploraciones/ExploracionesSurfaceDataRoomPage";
-import { ExploracionesFormsPage } from "@/pages/exploraciones/ExploracionesFormsPage";
-import { ExploracionesAjustesPage } from "@/pages/exploraciones/ExploracionesAjustesPage";
-import { SondajesPage } from "@/pages/sondajes/SondajesPage";
-import { AuditPage } from "@/pages/audit/AuditPage";
-import { SondajesHolePage } from "@/pages/sondajes/SondajesHolePage";
+const ExploracionesPage = lazy(() => import("@/pages/exploraciones/ExploracionesPage").then((module) => ({ default: module.ExploracionesPage })));
+const ExploracionesReportesPage = lazy(() => import("@/pages/exploraciones/ExploracionesReportesPage").then((module) => ({ default: module.ExploracionesReportesPage })));
+const ExploracionesElementosPage = lazy(() => import("@/pages/exploraciones/ExploracionesElementosPage").then((module) => ({ default: module.ExploracionesElementosPage })));
+const ExploracionesHierarchyPage = lazy(() => import("@/pages/exploraciones/ExploracionesHierarchyPage").then((module) => ({ default: module.ExploracionesHierarchyPage })));
+const ExploracionesDataRoomPage = lazy(() => import("@/pages/exploraciones/ExploracionesDataRoomPage").then((module) => ({ default: module.ExploracionesDataRoomPage })));
+const ExploracionesSurfaceDataRoomPage = lazy(() => import("@/pages/exploraciones/ExploracionesSurfaceDataRoomPage").then((module) => ({ default: module.ExploracionesSurfaceDataRoomPage })));
+const ExploracionesFormsPage = lazy(() => import("@/pages/exploraciones/ExploracionesFormsPage").then((module) => ({ default: module.ExploracionesFormsPage })));
+const ExploracionesAjustesPage = lazy(() => import("@/pages/exploraciones/ExploracionesAjustesPage").then((module) => ({ default: module.ExploracionesAjustesPage })));
+const SondajesPage = lazy(() => import("@/pages/sondajes/SondajesPage").then((module) => ({ default: module.SondajesPage })));
+const AuditPage = lazy(() => import("@/pages/audit/AuditPage").then((module) => ({ default: module.AuditPage })));
+const SondajesHolePage = lazy(() => import("@/pages/sondajes/SondajesHolePage").then((module) => ({ default: module.SondajesHolePage })));
 import { ProtectedRoute } from "@/app/router/guards/ProtectedRoute";
 import { PublicOnlyRoute } from "@/app/router/guards/PublicOnlyRoute";
 import { AdminRoute } from "@/app/router/guards/AdminRoute";
 import { ExploracionesAdminRoute } from "@/app/router/guards/ExploracionesAdminRoute";
 import { SondajesRoute } from "@/app/router/guards/SondajesRoute";
 import { PermissionRoute } from "@/app/router/guards/PermissionRoute";
-import { RolesPage } from "@/pages/auth/RolesPage";
+const RolesPage = lazy(() => import("@/pages/auth/RolesPage").then((module) => ({ default: module.RolesPage })));
 import { SeoManager } from "@/shared/seo/SeoManager";
+
+// Mientras se descarga la pantalla pedida (cada módulo se baja solo cuando se entra a él).
+function RouteFallback() {
+  return (
+    <div className="flex min-h-[40vh] items-center justify-center" role="status" aria-live="polite">
+      <span className="h-8 w-8 animate-spin rounded-full border-2 border-[var(--color-border-soft)] border-t-[var(--color-primary)]" />
+      <span className="sr-only">Loading…</span>
+    </div>
+  );
+}
 
 export function DataRoomRouter() {
   return (
     <>
       <SeoManager />
       <ScrollToRouteTarget />
+      <Suspense fallback={<RouteFallback />}>
       <Routes>
         <Route element={<PublicOnlyRoute />}>
           <Route path="/login" element={<LoginPage />} />
@@ -105,6 +116,7 @@ export function DataRoomRouter() {
         <Route path="/404" element={<NotFoundPage />} />
         <Route path="*" element={<Navigate to="/404" replace />} />
       </Routes>
+      </Suspense>
     </>
   );
 }
