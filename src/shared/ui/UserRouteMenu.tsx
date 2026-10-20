@@ -73,6 +73,8 @@ type UserRouteMenuProps = {
   logoutClassName?: string;
   align?: "left" | "right";
   onNavigate?: () => void;
+  // false: el menú solo muestra la cuenta y «Cerrar sesión» (la navegación ya está en la barra).
+  showRoutes?: boolean;
 };
 
 export function UserRouteMenu({
@@ -80,7 +82,8 @@ export function UserRouteMenu({
   menuClassName,
   logoutClassName,
   align = "right",
-  onNavigate
+  onNavigate,
+  showRoutes = true
 }: UserRouteMenuProps) {
   const { user, logout, can, isAdmin } = useAuth();
   const navigate = useNavigate();
@@ -139,7 +142,7 @@ export function UserRouteMenu({
         }
       >
         <UserCircle size={18} />
-        <span className="max-w-32 truncate">{user?.nombre ?? "Perfil"}</span>
+        <span className={`max-w-32 truncate ${showRoutes ? "" : "hidden sm:inline"}`}>{user?.nombre ?? "Perfil"}</span>
         <ChevronDown size={14} className={open ? "rotate-180 transition" : "transition"} />
       </button>
 
@@ -159,6 +162,7 @@ export function UserRouteMenu({
               {user?.email ?? user?.role ?? ""}
             </p>
           </div>
+          {showRoutes ? (
           <div className="max-h-80 overflow-y-auto p-1">
             {routes.map((route) => {
               const Icon = route.icon;
@@ -184,6 +188,7 @@ export function UserRouteMenu({
               );
             })}
           </div>
+          ) : null}
           <button
             type="button"
             role="menuitem"

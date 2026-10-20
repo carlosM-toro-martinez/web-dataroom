@@ -280,30 +280,18 @@ export function SondajesPage() {
 
       {canDrilling || can("geologiaSondajes", "create") ? (
         <div className="flex flex-wrap items-center justify-end gap-2">
-          {can("geologiaSondajes", "create") ? (
-            <button type="button" className={secondaryButton} onClick={() => setGeologyImportOpen(true)}>
-              <Microscope size={16} />
-              Importar reportes geológicos
-            </button>
-          ) : null}
-          {canDrilling ? (
-          <button type="button" className={secondaryButton} onClick={() => setPersonnelOpen(true)}>
-            <Users size={16} />
-            Personal
-          </button>
-          ) : null}
-          {canDrilling ? (
-            <button type="button" className={secondaryButton} onClick={() => setBackupOpen(true)}>
-              <ClipboardList size={16} />
-              Respaldo de partes
-            </button>
-          ) : null}
+          <ToolsMenu
+            items={[
+              ...(can("geologiaSondajes", "create")
+                ? [{ key: "geo", label: "Importar reportes geológicos", icon: <Microscope size={16} />, onClick: () => setGeologyImportOpen(true) }]
+                : []),
+              ...(canDrilling ? [{ key: "personnel", label: "Personal", icon: <Users size={16} />, onClick: () => setPersonnelOpen(true) }] : []),
+              ...(canDrilling ? [{ key: "backup", label: "Respaldo de partes", icon: <ClipboardList size={16} />, onClick: () => setBackupOpen(true) }] : []),
+              ...(canCreate ? [{ key: "import", label: "Importar Excel", icon: <FileSpreadsheet size={16} />, onClick: () => setImportOpen(true) }] : [])
+            ]}
+          />
           {canCreate ? (
             <>
-              <button type="button" className={secondaryButton} onClick={() => setImportOpen(true)}>
-                <FileSpreadsheet size={16} />
-                Importar Excel
-              </button>
               <button type="button" className={secondaryButton} onClick={() => setProgramForm({ open: true, campaign: null })}>
                 <FolderPlus size={16} />
                 Nuevo programa
@@ -739,6 +727,57 @@ function FilterChip({ active, label, count, dot, onClick }: { active: boolean; l
       {label}
       <span className={`tabular-nums ${active ? "opacity-80" : "opacity-60"}`}>{count}</span>
     </button>
+  );
+}
+
+type ToolItem = { key: string; label: string; icon: React.ReactNode; onClick: () => void };
+
+// Acciones poco frecuentes agrupadas en un solo botón para no llenar la pantalla de botones.
+function ToolsMenu({ items }: { items: ToolItem[] }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!open) return;
+    const onDown = (event: PointerEvent) => {
+      if (!ref.current?.contains(event.target as Node)) setOpen(false);
+    };
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setOpen(false);
+    };
+    document.addEventListener("pointerdown", onDown);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("pointerdown", onDown);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [open]);
+  if (items.length === 0) return null;
+  return (
+    <div className="relative" ref={ref}>
+      <button type="button" className={secondaryButton} aria-haspopup="menu" aria-expanded={open} onClick={() => setOpen((current) => !current)}>
+        <MoreVertical size={16} />
+        Más acciones
+      </button>
+      {open ? (
+        <div role="menu" className="absolute right-0 top-full z-40 mt-1 w-72 overflow-hidden rounded-xl border border-[var(--color-border-soft)] bg-[var(--color-surface-container-low)] p-1 shadow-2xl">
+          {items.map((item) => (
+            <button
+              key={item.key}
+              type="button"
+              role="menuitem"
+              className="flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-left text-sm font-semibold text-[var(--color-on-surface)] transition hover:bg-[var(--color-surface-container-high)]"
+              onClick={() => {
+                setOpen(false);
+                item.onClick();
+              }}
+            >
+              {item.icon}
+              {item.label}
+            </button>
+          ))}
+        </div>
+      ) : null}
+    </div>
   );
 }
 
