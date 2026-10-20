@@ -5,6 +5,7 @@ import {
   ClipboardList,
   Drill,
   FolderKanban,
+  History,
   LayoutDashboard,
   LogOut,
   MapPinned,
@@ -57,6 +58,12 @@ const SYSTEM_ROUTES: RouteItem[] = [
     to: "/solicitudes-data-room",
     icon: ClipboardList,
     permission: "solicitudes"
+  },
+  {
+    label: "Auditoría",
+    to: "/auditoria",
+    icon: History,
+    adminOnly: true
   }
 ];
 

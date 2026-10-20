@@ -21,6 +21,7 @@ import { ExploracionesSurfaceDataRoomPage } from "@/pages/exploraciones/Explorac
 import { ExploracionesFormsPage } from "@/pages/exploraciones/ExploracionesFormsPage";
 import { ExploracionesAjustesPage } from "@/pages/exploraciones/ExploracionesAjustesPage";
 import { SondajesPage } from "@/pages/sondajes/SondajesPage";
+import { AuditPage } from "@/pages/audit/AuditPage";
 import { SondajesHolePage } from "@/pages/sondajes/SondajesHolePage";
 import { ProtectedRoute } from "@/app/router/guards/ProtectedRoute";
 import { PublicOnlyRoute } from "@/app/router/guards/PublicOnlyRoute";
@@ -87,6 +88,7 @@ export function DataRoomRouter() {
           <Route element={<AdminRoute />}>
             <Route path="/exploraciones/ajustes" element={<ExploracionesAjustesPage />} />
             <Route path="/exploraciones-data-room/forms" element={<ExploracionesFormsPage />} />
+            <Route path="/auditoria" element={<AuditPage />} />
           </Route>
 
           <Route element={<PermissionRoute module="solicitudes" />}>

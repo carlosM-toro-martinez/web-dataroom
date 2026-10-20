@@ -1,5 +1,5 @@
 import { Link, useLocation, useNavigate } from "react-router-dom";
-import { ArrowLeft, ClipboardList, Database, Drill, LayoutDashboard, MapPinned, MoonStar, Settings, ShieldCheck, Sun, Users } from "lucide-react";
+import { ArrowLeft, ClipboardList, Database, Drill, History, LayoutDashboard, MapPinned, MoonStar, Settings, ShieldCheck, Sun, Users } from "lucide-react";
 import { useAuth } from "@/features/auth/context/AuthContext";
 import { useTheme } from "@/shared/theme/ThemeProvider";
 import { UserRouteMenu } from "@/shared/ui/UserRouteMenu";
@@ -52,6 +52,12 @@ const MAIN_ROUTES: MainRoute[] = [
     to: "/solicitudes-data-room",
     icon: ClipboardList,
     permission: "solicitudes"
+  },
+  {
+    label: "Auditoría",
+    to: "/auditoria",
+    icon: History,
+    adminOnly: true
   }
 ];
 
