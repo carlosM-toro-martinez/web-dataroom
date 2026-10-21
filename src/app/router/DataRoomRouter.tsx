@@ -21,6 +21,7 @@ const ExploracionesSurfaceDataRoomPage = lazy(() => import("@/pages/exploracione
 const ExploracionesFormsPage = lazy(() => import("@/pages/exploraciones/ExploracionesFormsPage").then((module) => ({ default: module.ExploracionesFormsPage })));
 const ExploracionesAjustesPage = lazy(() => import("@/pages/exploraciones/ExploracionesAjustesPage").then((module) => ({ default: module.ExploracionesAjustesPage })));
 const SondajesPage = lazy(() => import("@/pages/sondajes/SondajesPage").then((module) => ({ default: module.SondajesPage })));
+const SampleAnalyticsPage = lazy(() => import("@/pages/analytics/SampleAnalyticsPage").then((module) => ({ default: module.SampleAnalyticsPage })));
 const AuditPage = lazy(() => import("@/pages/audit/AuditPage").then((module) => ({ default: module.AuditPage })));
 const SondajesHolePage = lazy(() => import("@/pages/sondajes/SondajesHolePage").then((module) => ({ default: module.SondajesHolePage })));
 import { ProtectedRoute } from "@/app/router/guards/ProtectedRoute";
@@ -94,6 +95,10 @@ export function DataRoomRouter() {
           <Route element={<SondajesRoute />}>
             <Route path="/sondajes" element={<SondajesPage />} />
             <Route path="/sondajes/pozos/:holeId" element={<SondajesHolePage />} />
+          </Route>
+
+          <Route element={<PermissionRoute module="analisisMuestras" />}>
+            <Route path="/analisis-muestras" element={<SampleAnalyticsPage />} />
           </Route>
 
           <Route element={<AdminRoute />}>

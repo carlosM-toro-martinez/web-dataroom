@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type CSSProperties, type MouseEventHandler } from "react";
 import { Link, Navigate, useLocation, useNavigate, useParams } from "react-router-dom";
-import { ChevronRight, Plus, X } from "lucide-react";
+import { Plus, X } from "lucide-react";
 import L from "leaflet";
 import { MapContainer, Marker, Popup, TileLayer } from "react-leaflet";
 import "leaflet/dist/leaflet.css";
@@ -12,6 +12,15 @@ import drillMediaFallback02 from "@/assets/images/GENERAL_2COBRE.jpg";
 import { useAuth } from "@/features/auth/context/AuthContext";
 import { useToast } from "@/shared/ui/toast/ToastProvider";
 import { InternalHeader } from "@/shared/ui/InternalHeader";
+import {
+  ChipRow,
+  ContextHeader,
+  DataRoomBreadcrumb,
+  DataTable,
+  Section,
+  fmtNum,
+  type Crumb
+} from "@/features/exploraciones/components/dataroom/DataRoomUi";
 import { AuthenticatedMediaVideo } from "@/features/exploraciones/components/AuthenticatedMediaVideo";
 import { dataRoomMediaUrl } from "@/features/exploraciones/lib/dataRoomMedia";
 import {
@@ -513,17 +522,90 @@ export function ExploracionesDataRoomPage() {
 
   if (!canView) return <Navigate to="/perfil" replace />;
 
+  const projectName = projectDetail.data?.name ?? "Project";
+  const holeName = drillHoleDetail.data?.name ?? "Drillhole";
+  const intervalLabel = intervalDetail.data ? `${fmtNum(intervalDetail.data.fromDepth)}–${fmtNum(intervalDetail.data.toDepth)} m` : "Interval";
+  const crumbs: Crumb[] = [{ label: "Data Room", to: "/exploraciones-data-room" }];
+  if (projectId) crumbs.push({ label: projectName, to: zoneId ? pathFor(projectId) : undefined });
+  if (projectId && zoneId) crumbs.push({ label: `Zone ${zoneDetail.data?.name ?? ""}`.trim(), to: drillHoleId ? pathFor(projectId, zoneId) : undefined });
+  if (projectId && zoneId && drillHoleId) crumbs.push({ label: holeName, to: intervalId ? pathFor(projectId, zoneId, drillHoleId) : undefined });
+  if (projectId && zoneId && drillHoleId && intervalId) crumbs.push({ label: intervalLabel, to: assayId ? pathFor(projectId, zoneId, drillHoleId, intervalId) : undefined });
+  if (assayId) crumbs.push({ label: `Assay ${assayDetail.data?.assayMethod ?? ""}`.trim() });
+
+  const mediaViewer = (
+    <Section title="Models & Images" description="Reference model for the current zone.">
+      <div className="overflow-hidden rounded-xl border border-[var(--color-border-soft)] bg-black">
+        <DeferredMediaImage
+          src={drillholesMedia[mediaSlide]}
+          alt={`Drillholes media ${mediaSlide + 1}`}
+          loaded={loadedMedia.has(drillholesMedia[mediaSlide])}
+          onLoad={() => markMediaLoaded(drillholesMedia[mediaSlide])}
+          className="h-[260px] w-full"
+          imageClassName="h-[260px] w-full object-contain"
+        />
+      </div>
+      <div className="mt-3 flex items-center justify-between gap-2">
+        <button
+          onClick={() => setMediaSlide((s) => (s - 1 + drillholesMedia.length) % drillholesMedia.length)}
+          className="rounded-lg border border-[var(--color-border-soft)] px-3 py-1.5 text-xs font-semibold"
+        >
+          Prev
+        </button>
+        <div className="flex gap-2">
+          {drillholesMedia.map((_, i) => (
+            <button
+              key={i}
+              onClick={() => setMediaSlide(i)}
+              aria-label={`Image ${i + 1}`}
+              className={`h-2.5 w-2.5 rounded-full ${i === mediaSlide ? "bg-[var(--color-primary)]" : "bg-[var(--color-border-soft)]"}`}
+            />
+          ))}
+        </div>
+        <div className="flex items-center gap-2">
+          <button onClick={() => setMediaFullScreen(true)} className="rounded-lg border border-[var(--color-border-soft)] px-3 py-1.5 text-xs font-semibold">
+            Fullscreen
+          </button>
+          <button
+            onClick={() => setMediaSlide((s) => (s + 1) % drillholesMedia.length)}
+            className="rounded-lg border border-[var(--color-border-soft)] px-3 py-1.5 text-xs font-semibold"
+          >
+            Next
+          </button>
+        </div>
+      </div>
+    </Section>
+  );
+
+  const errorBox = (message: string, retry: () => void) => (
+    <p className="rounded-lg bg-rose-500/10 px-3 py-3 text-sm text-rose-500">
+      {message}{" "}
+      <button type="button" className="font-semibold underline" onClick={retry}>
+        Retry
+      </button>
+    </p>
+  );
+  const skeleton = (
+    <div className="space-y-2">
+      {[0, 1, 2, 3].map((row) => (
+        <div key={row} className="h-10 animate-pulse rounded-lg bg-[var(--color-surface-container-high)]" />
+      ))}
+    </div>
+  );
+  const meanOf = (assays: Array<Record<string, unknown>> | undefined, key: "au" | "cu" | "ag") => {
+    const values = (assays ?? []).map((a) => Number(a[key])).filter((v) => Number.isFinite(v));
+    return values.length ? values.reduce((a, b) => a + b, 0) / values.length : null;
+  };
+
   return (
-    <section className="space-y-6 text-[var(--color-on-surface)]">
+    <section className="space-y-5 text-[var(--color-on-surface)]">
       <InternalHeader
         eyebrow="Data Room"
         title="Exploration Data Room"
         description="Browse projects, zones, drillholes, intervals and assays from one place."
       />
+      {!isLanding ? <DataRoomBreadcrumb items={crumbs} /> : null}
 
-      {isLoading ? (
-        <LoadingPanel label="Loading exploration data..." />
-      ) : null}
+      {isLoading ? <LoadingPanel label="Loading exploration data..." /> : null}
 
       {isLanding ? (
         <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
@@ -715,705 +797,437 @@ export function ExploracionesDataRoomPage() {
       ) : null}
 
       {!isLanding && !projectId ? (
-        <div>
-          <Card
-            title="Projects"
-            action={
-              canManage ? (
-                <AddBtn label="Add Project" onClick={() => setModal("project")} />
-              ) : undefined
-            }
-          >
-            <SimpleTable
-              headers={["ID", "Name", "Location", "Action"]}
-              rows={(projectsQuery.data?.data ?? []).map((p) => [
-                String(p.id),
-                p.name,
-                p.location ?? "-",
-                <Link key={p.id} className="text-[var(--color-primary)]" to={pathFor(p.id)}>
-                  Open
-                </Link>
-              ])}
-              empty="No projects."
-            />
-          </Card>
-        </div>
+        <Section title="Projects" action={canManage ? <AddBtn label="Add Project" onClick={() => setModal("project")} /> : undefined}>
+          <DataTable
+            columns={[
+              { header: "Project", cell: (p) => p.name },
+              { header: "Location", cell: (p) => p.location ?? "—" }
+            ]}
+            rows={projectsQuery.data?.data ?? []}
+            rowKey={(p) => String(p.id)}
+            rowTo={(p) => pathFor(p.id)}
+            empty="No projects."
+          />
+        </Section>
       ) : null}
 
       {projectId && !zoneId ? (
         <div className="space-y-4">
-          <header className="rounded-xl border border-[var(--color-border-soft)] bg-[var(--color-surface-container-low)] p-4">
-            <h2 className="text-xl font-bold">{projectDetail.data?.name ?? "Project"}</h2>
-            <p className="text-sm text-[var(--color-on-surface-variant)]">
-              {projectDetail.data?.location ?? "No location"}
-            </p>
-          </header>
-          <div className="grid gap-4 xl:grid-cols-9">
-            <div className="xl:col-span-6">
-              <Card
-                title="Project Zones"
-                description={`Zones defined for project ${projectDetail.data?.name ?? `#${projectId}`}.`}
-                action={
-                  canManage ? <AddBtn label="Add Zone" onClick={() => setModal("zone")} /> : undefined
-                }
-              >
-                <SimpleTable
-                  headers={["Zone", "Action"]}
-                  rows={(zonesQuery.data?.data ?? []).map((z) => [
-                    z.name,
-                    <Link
-                      key={z.id}
-                      className="text-[var(--color-primary)]"
-                      to={pathFor(projectId, z.id)}
-                    >
-                      View Drillholes
-                    </Link>
-                  ])}
-                  empty="No zones."
-                />
-              </Card>
-            </div>
-            <div className="xl:col-span-3">
-              <Card
-                title="Map"
-                description={`Geospatial overview for project ${projectDetail.data?.name ?? `#${projectId}`}.`}
-              >
-                <ProjectResourceMap
-                  latitude={DEFAULT_PROJECT_MAP_LAT}
-                  longitude={DEFAULT_PROJECT_MAP_LNG}
-                  resources={[]}
-                />
-              </Card>
-            </div>
+          <ContextHeader
+            eyebrow="Project"
+            title={projectName}
+            subtitle={projectDetail.data?.location ?? "No location"}
+            stats={[{ label: "Zones", value: zonesQuery.data?.data?.length ?? "—" }]}
+          />
+          <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_380px]">
+            <Section
+              title="Zones"
+              description="Choose a zone to see its drillholes and significant intercepts."
+              action={canManage ? <AddBtn label="Add Zone" onClick={() => setModal("zone")} /> : undefined}
+            >
+              <DataTable
+                columns={[
+                  { header: "Zone", cell: (z) => z.name },
+                  { header: "Description", cell: (z) => <span className="text-[var(--color-on-surface-variant)]">{z.description ?? "—"}</span>, wide: true }
+                ]}
+                rows={zonesQuery.data?.data ?? []}
+                rowKey={(z) => String(z.id)}
+                rowTo={(z) => pathFor(projectId, z.id)}
+                empty="No zones."
+              />
+            </Section>
+            <Section title="Map" description="Project location.">
+              <ProjectResourceMap latitude={DEFAULT_PROJECT_MAP_LAT} longitude={DEFAULT_PROJECT_MAP_LNG} resources={[]} />
+            </Section>
           </div>
         </div>
       ) : null}
 
       {projectId && zoneId ? (
         <div className="space-y-4">
-          <header className="rounded-xl border border-[var(--color-border-soft)] bg-[var(--color-surface-container-low)] p-4">
-            <h2 className="text-xl font-bold">{projectDetail.data?.name ?? "Project"}</h2>
-            <p className="text-sm text-[var(--color-on-surface-variant)]">
-              {projectDetail.data?.location ?? "No location"}
-            </p>
-            <p className="mt-2 text-sm">
-              <strong>Zone:</strong> {zoneDetail.data?.name ?? "-"} ·{" "}
-              {zoneDetail.data?.description ?? "No description"}
-            </p>
-          </header>
-          <article className="rounded-xl border border-[var(--color-border-soft)] bg-[var(--color-surface-container-low)] p-4">
-            <div className="mb-3 flex items-center justify-between">
-              <h2 className="text-base font-bold">Hierarchy</h2>
-              {canManage ? (
-                <div className="flex flex-wrap gap-2">
-                  <AddBtn label="Add Zone" onClick={() => setModal("zone")} />
-                  <AddBtn label="Add Drillhole" onClick={() => setModal("drillhole")} />
-                </div>
-              ) : null}
-            </div>
-            <div className="grid gap-3 md:grid-cols-2">
-              <MiniList
-                title="Projects"
-                items={(projectsQuery.data?.data ?? []).map((project) => ({
-                  id: String(project.id),
-                  label: project.name,
-                  to: pathFor(project.id),
-                  selected: project.id === projectId
-                }))}
+          <ChipRow
+            label="Zone"
+            items={(zonesQuery.data?.data ?? []).map((zone) => ({ id: String(zone.id), label: zone.name, to: pathFor(projectId, zone.id), selected: zone.id === zoneId }))}
+          />
+
+          {!drillHoleId ? (
+            <div className="animate-[fadeIn_.28s_ease-out] space-y-4">
+              <ContextHeader
+                eyebrow="Zone"
+                title={zoneDetail.data?.name ?? "Zone"}
+                subtitle={zoneDetail.data?.description ?? undefined}
+                stats={[
+                  { label: "Drillholes", value: drillHolesQuery.data?.meta?.total ?? "—" },
+                  { label: "Significant intercepts", value: computedInterceptsQuery.isLoading ? "…" : interceptRows.length }
+                ]}
               />
-              <MiniList
-                title="Zones"
-                items={(zonesQuery.data?.data ?? []).map((zone) => ({
-                  id: String(zone.id),
-                  label: zone.name,
-                  to: pathFor(projectId, zone.id),
-                  selected: zone.id === zoneId
-                }))}
-              />
-            </div>
-          </article>
-          <div className="animate-[fadeIn_.28s_ease-out]">
-            {!drillHoleId ? (
-              <div className="grid gap-4 xl:grid-cols-9">
-                <div className="xl:col-span-3">
-                <Card
-                  title="Drillholes Media Viewer"
-                  description="Model/image preview for the current drillholes context."
-                >
-                  <div className="overflow-hidden rounded-xl border border-[var(--color-border-soft)] bg-black">
-                    <DeferredMediaImage
-                      src={drillholesMedia[mediaSlide]}
-                      alt={`Drillholes media ${mediaSlide + 1}`}
-                      loaded={loadedMedia.has(drillholesMedia[mediaSlide])}
-                      onLoad={() => markMediaLoaded(drillholesMedia[mediaSlide])}
-                      className="h-[320px] w-full"
-                      imageClassName="h-[320px] w-full object-contain"
-                    />
-                  </div>
-                  <div className="mt-3 flex items-center justify-between">
-                    <button
-                      onClick={() =>
-                        setMediaSlide(
-                          (s) => (s - 1 + drillholesMedia.length) % drillholesMedia.length
-                        )
-                      }
-                      className="rounded-lg border border-[var(--color-border-soft)] px-3 py-1.5 text-xs font-semibold"
-                    >
-                      Prev
-                    </button>
-                    <div className="flex gap-2">
-                      {drillholesMedia.map((_, i) => (
-                        <button
-                          key={i}
-                          onClick={() => setMediaSlide(i)}
-                          className={`h-2.5 w-2.5 rounded-full ${i === mediaSlide ? "bg-[var(--color-primary)]" : "bg-[var(--color-border-soft)]"}`}
-                        />
-                      ))}
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <button
-                        onClick={() => setMediaFullScreen(true)}
-                        className="rounded-lg border border-[var(--color-border-soft)] px-3 py-1.5 text-xs font-semibold"
-                      >
-                        Fullscreen
-                      </button>
-                      <button
-                        onClick={() => setMediaSlide((s) => (s + 1) % drillholesMedia.length)}
-                        className="rounded-lg border border-[var(--color-border-soft)] px-3 py-1.5 text-xs font-semibold"
-                      >
-                        Next
-                      </button>
-                    </div>
-                  </div>
-                </Card>
-                </div>
-                <div className="space-y-4 xl:col-span-6">
-                <Card
-                  title="Significant Intercepts"
-                  description={`Mineralized runs in zone ${zoneDetail.data?.name ?? `#${zoneId}`}, calculated from the assays with the cut-off below. Manually entered intercepts are listed too.`}
-                  action={
-                    canManage ? (
-                      <AddBtn
-                        label="Add Significant Intercept"
-                        onClick={() => setModal("significantIntercept")}
-                      />
-                    ) : undefined
-                  }
-                >
-                  <div className="mb-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
-                    <label className="block">
-                      <span className="mb-1 block text-[10px] font-bold uppercase tracking-wide text-[var(--color-on-surface-variant)]">Element</span>
-                      <select
-                        className={inputClassName}
-                        value={interceptElement}
-                        onChange={(e) => {
-                          const element = e.target.value as "au" | "cu" | "ag";
-                          setInterceptElement(element);
-                          setInterceptCutoffInput(String(INTERCEPT_DEFAULTS[element]));
-                        }}
-                      >
-                        <option value="au">Au (g/t)</option>
-                        <option value="cu">Cu (%)</option>
-                        <option value="ag">Ag (g/t)</option>
-                      </select>
-                    </label>
-                    <label className="block">
-                      <span className="mb-1 block text-[10px] font-bold uppercase tracking-wide text-[var(--color-on-surface-variant)]">Cut-off ({ELEMENT_UNIT[interceptElement]})</span>
-                      <input className={inputClassName} inputMode="decimal" value={interceptCutoffInput} onChange={(e) => setInterceptCutoffInput(e.target.value)} />
-                    </label>
-                    <label className="block">
-                      <span className="mb-1 block text-[10px] font-bold uppercase tracking-wide text-[var(--color-on-surface-variant)]">Min. width (m)</span>
-                      <input className={inputClassName} inputMode="decimal" value={interceptMinWidthInput} onChange={(e) => setInterceptMinWidthInput(e.target.value)} />
-                    </label>
-                    <label className="block">
-                      <span className="mb-1 block text-[10px] font-bold uppercase tracking-wide text-[var(--color-on-surface-variant)]">Max. dilution (m)</span>
-                      <input className={inputClassName} inputMode="decimal" value={interceptDilutionInput} onChange={(e) => setInterceptDilutionInput(e.target.value)} />
-                    </label>
-                  </div>
-                  <div className="overflow-x-auto rounded-xl border border-[var(--color-border-soft)] bg-[var(--color-surface-container-high)]">
-                    <table className="w-full border-collapse text-left">
-                      <thead>
-                        <tr>
-                          {["Hole", "Source", "From", "To", "Width", "True Width", "Au g/t", "Cu %", "Ag g/t", "Notes"].map((h) => (
-                            <th
-                              key={h}
-                              className="bg-[var(--color-surface-container-highest)] px-3 py-2 text-xs font-bold uppercase tracking-wide text-[var(--color-on-surface-variant)]"
-                            >
-                              {h}
-                            </th>
-                          ))}
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {computedInterceptsQuery.isLoading ? (
-                          [0, 1, 2].map((row) => (
-                            <tr key={row}>
-                              <td colSpan={10} className="px-3 py-2">
-                                <div className="h-6 animate-pulse rounded bg-[var(--color-surface-container-highest)]" />
-                              </td>
-                            </tr>
-                          ))
-                        ) : computedInterceptsQuery.isError ? (
-                          <tr>
-                            <td colSpan={10} className="px-3 py-4 text-sm text-rose-500">
-                              Could not calculate the intercepts.{" "}
-                              <button type="button" className="font-semibold underline" onClick={() => void computedInterceptsQuery.refetch()}>
-                                Retry
-                              </button>
-                            </td>
-                          </tr>
-                        ) : interceptRows.length ? (
-                          visibleInterceptRows.map((si) => (
-                            <tr
-                              key={si.key}
-                              className="border-t border-[var(--color-border-soft)] transition hover:bg-[var(--color-surface-container-highest)]"
-                            >
-                              <td className="px-3 py-2 text-sm font-semibold">
-                                <Link className="text-[var(--color-primary)] hover:underline" to={pathFor(projectId, zoneId, si.drillHoleId)}>
-                                  {si.hole}
-                                </Link>
-                              </td>
-                              <td className="px-3 py-2 text-sm">
-                                <span
-                                  className={`rounded-full px-2 py-0.5 text-xs font-bold ${si.source === "calculated" ? "bg-sky-500/15 text-sky-700 dark:text-sky-300" : "bg-slate-500/20 text-slate-600 dark:text-slate-300"}`}
-                                >
-                                  {si.source === "calculated" ? "Calculated" : "Manual"}
-                                </span>
-                              </td>
-                              <td className="px-3 py-2 font-mono text-sm text-cyan-700 dark:text-cyan-300">{si.from}</td>
-                              <td className="px-3 py-2 font-mono text-sm text-cyan-700 dark:text-cyan-300">{si.to}</td>
-                              <td className="px-3 py-2 font-mono text-sm font-bold text-amber-700 dark:text-amber-300">{si.width}</td>
-                              <td className="px-3 py-2 font-mono text-sm">{si.trueWidth ?? "-"}</td>
-                              <td className="px-3 py-2 font-mono text-sm font-bold text-yellow-700 dark:text-yellow-300">{si.au ?? "-"}</td>
-                              <td className="px-3 py-2 font-mono text-sm font-bold text-orange-700 dark:text-orange-300">{si.cu ?? "-"}</td>
-                              <td className="px-3 py-2 font-mono text-sm font-bold text-lime-700 dark:text-lime-300">{si.ag ?? "-"}</td>
-                              <td className="px-3 py-2 text-sm text-[var(--color-on-surface-variant)]">{si.comments ?? "-"}</td>
-                            </tr>
-                          ))
-                        ) : (
-                          <tr>
-                            <td colSpan={10} className="px-3 py-4 text-sm text-[var(--color-on-surface-variant)]">
-                              No intercepts above {interceptParams.cutoff} {ELEMENT_UNIT[interceptElement]} with at least {interceptParams.minWidth} m width. Try a lower cut-off or width.
-                            </td>
-                          </tr>
-                        )}
-                      </tbody>
-                    </table>
-                  </div>
-                  <Pager
-                    meta={{ total: interceptRows.length, limit: INTERCEPT_PAGE_SIZE, totalPages: interceptTotalPages }}
-                    page={interceptPage}
-                    onPage={setInterceptPage}
-                    noun="intercepts, best grade first"
-                  />
-                  <p className="mt-1 text-xs text-[var(--color-on-surface-variant)]">
-                    Grades are length-weighted averages of the assays in each run.
-                  </p>
-                </Card>
-                <Card
-                  title="Drillholes"
-                  description={`Drillholes registered for zone ${zoneDetail.data?.name ?? `#${zoneId}`}.`}
-                  action={
-                    canManage ? (
-                      <AddBtn label="Add Drillhole" onClick={() => setModal("drillhole")} />
-                    ) : undefined
-                  }
-                >
-                  <div className="mb-3">
+              <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_360px]">
+                <div className="min-w-0 space-y-4">
+                  <Section
+                    title="Drillholes"
+                    description="Click a drillhole to see its intervals."
+                    action={canManage ? <AddBtn label="Add Drillhole" onClick={() => setModal("drillhole")} /> : undefined}
+                  >
                     <input
-                      className={inputClassName}
+                      className={`${inputClassName} mb-3`}
                       placeholder="Search drillhole by name…"
                       value={holeSearchInput}
                       onChange={(e) => setHoleSearchInput(e.target.value)}
                     />
-                  </div>
-                  {drillHolesQuery.isError ? (
-                    <p className="rounded-lg bg-rose-500/10 px-3 py-3 text-sm text-rose-500">
-                      Could not load the drillholes.{" "}
-                      <button type="button" className="font-semibold underline" onClick={() => void drillHolesQuery.refetch()}>
-                        Retry
-                      </button>
-                    </p>
-                  ) : drillHolesQuery.isLoading ? (
-                    <div className="space-y-2">
-                      {[0, 1, 2, 3].map((row) => (
-                        <div key={row} className="h-9 animate-pulse rounded-lg bg-[var(--color-surface-container-high)]" />
-                      ))}
-                    </div>
-                  ) : (
-                    <>
-                      <SimpleTable
-                        headers={["Hole", "Type", "Intervals", "Best Grade", "Depth (m)", "Campaign", "Open"]}
-                        rows={(drillHolesQuery.data?.data ?? []).map((d) => [
-                          d.name,
-                          d.type,
-                          String((d as { _count?: { intervals?: number } })._count?.intervals ?? "-"),
-                          (() => {
-                            const top = formatTopIntercept(d.id);
-                            if (!top) return <span className="text-[var(--color-on-surface-variant)]">-</span>;
-                            return (
-                              <span className="inline-flex flex-col rounded-lg bg-lime-400 px-2 py-1 text-xs font-bold text-lime-950 ring-1 ring-lime-500/70">
-                                <span>{top.label}</span>
-                                <span className="font-medium opacity-80">{top.interval}</span>
-                              </span>
-                            );
-                          })(),
-                          String(d.depth),
-                          d.campaign ?? "-",
-                          <Link key={d.id} className="text-[var(--color-primary)]" to={pathFor(projectId, zoneId, d.id)}>
-                            View Intervals
-                          </Link>
-                        ])}
-                        empty={holeSearch ? `No drillholes match “${holeSearch}”.` : "No drillholes in this zone yet."}
-                      />
-                      <Pager meta={drillHolesQuery.data?.meta} page={holePage} onPage={setHolePage} noun="drillholes" />
-                    </>
-                  )}
-                </Card>
-                </div>
-              </div>
-            ) : null}
-
-            {drillHoleId && !intervalId ? (
-              <div ref={intervalsRef}>
-                <Card
-                  title="Intervals"
-                  description={`Intervals logged for drillhole ${drillHoleDetail.data?.name ?? `#${drillHoleId}`}.`}
-                  action={
-                    canManage ? (
-                      <AddBtn label="Add Interval" onClick={() => setModal("interval")} />
-                    ) : undefined
-                  }
-                >
-                  <div className="mb-3 text-xs text-[var(--color-on-surface-variant)]">
-                    You are viewing intervals for the selected drillhole.
-                  </div>
-                  {intervalsQuery.isError ? (
-                    <p className="rounded-lg bg-rose-500/10 px-3 py-3 text-sm text-rose-500">
-                      Could not load the intervals.{" "}
-                      <button type="button" className="font-semibold underline" onClick={() => void intervalsQuery.refetch()}>
-                        Retry
-                      </button>
-                    </p>
-                  ) : intervalsQuery.isLoading ? (
-                    <div className="space-y-2">
-                      {[0, 1, 2, 3, 4].map((row) => (
-                        <div key={row} className="h-9 animate-pulse rounded-lg bg-[var(--color-surface-container-high)]" />
-                      ))}
-                    </div>
-                  ) : (
-                    <>
-                      <SimpleTable
-                        headers={["From (m)", "To (m)", "Rock", "Au g/t", "Cu %", "Ag g/t", "Action"]}
-                        rows={(intervalsQuery.data?.data ?? []).map((i) => {
-                          const detail = i as unknown as {
-                            assays?: Array<{ au?: unknown; cu?: unknown; ag?: unknown }>;
-                            lithologies?: Array<{ rockType?: string | null }>;
-                          };
-                          const mean = (key: "au" | "cu" | "ag") => {
-                            const values = (detail.assays ?? []).map((a) => Number(a[key])).filter((v) => Number.isFinite(v));
-                            return values.length ? String(Math.round((values.reduce((a, b) => a + b, 0) / values.length) * 1000) / 1000) : "-";
-                          };
-                          return [
-                            String(i.fromDepth),
-                            String(i.toDepth),
-                            detail.lithologies?.[0]?.rockType ?? "-",
-                            mean("au"),
-                            mean("cu"),
-                            mean("ag"),
-                            <Link key={i.id} className="text-[var(--color-primary)]" to={pathFor(projectId, zoneId, drillHoleId, i.id)}>
-                              View Assays
-                            </Link>
-                          ];
-                        })}
-                        empty="This drillhole has no intervals yet."
-                      />
-                      <Pager meta={intervalsQuery.data?.meta} page={intervalPage} onPage={setIntervalPage} noun="intervals" />
-                    </>
-                  )}
-                </Card>
-                <div className="mt-3" />
-                <Card
-                  title="Drillhole Surveys"
-                  description={`Survey measurements for drillhole ${drillHoleDetail.data?.name ?? `#${drillHoleId}`}.`}
-                  action={
-                    canManage ? (
-                      <AddBtn label="Add Survey" onClick={() => setModal("drillHoleSurvey")} />
-                    ) : undefined
-                  }
-                >
-                  <SimpleTable
-                    headers={["ID", "Depth", "Azimuth", "Dip"]}
-                    rows={(drillHoleSurveysQuery.data?.data ?? []).map((s) => [
-                      String(s.id),
-                      String(s.depth),
-                      String(s.azimuth),
-                      String(s.dip)
-                    ])}
-                    empty="No surveys."
-                  />
-                </Card>
-              </div>
-            ) : null}
-
-            {drillHoleId && intervalId && !assayId ? (
-              <div ref={assaysRef}>
-                <Card
-                  title="Assays and Lithologies"
-                  description={`Assay and lithology records for interval #${intervalId}.`}
-                  action={
-                    canManage ? (
-                      <div className="flex gap-2">
-                        <AddBtn label="Add Assay" onClick={() => setModal("assay")} />
-                        <AddBtn label="Add Lithology" onClick={() => setModal("lithology")} />
-                      </div>
-                    ) : undefined
-                  }
-                >
-                  <div className="mb-3 text-xs text-[var(--color-on-surface-variant)]">
-                    You are viewing details for the selected interval.
-                  </div>
-                  <SimpleTable
-                    headers={["ID", "Method", "Au", "Cu", "Ag", "Lab", "Action"]}
-                    rows={(assaysQuery.data?.data ?? []).map((a) => [
-                      String(a.id),
-                      a.assayMethod,
-                      String(a.au),
-                      String(a.cu),
-                      String(a.ag),
-                      a.laboratory ?? "-",
-                      <Link
-                        key={a.id}
-                        className="text-[var(--color-primary)]"
-                        to={pathFor(projectId, zoneId, drillHoleId, intervalId, a.id)}
-                      >
-                        View QAQC
-                      </Link>
-                    ])}
-                    empty="No assays."
-                  />
-                  <div className="mt-3" />
-                  <SimpleTable
-                    headers={["ID", "Rock Type", "Alteration", "Mineralization", "Comments"]}
-                    rows={(lithologiesQuery.data?.data ?? []).map((l) => [
-                      String(l.id),
-                      l.rockType ?? "-",
-                      l.alteration ?? "-",
-                      l.mineralization ?? "-",
-                      l.comments ?? "-"
-                    ])}
-                    empty="No lithologies."
-                  />
-                  <div className="mt-3" />
-                  <div className="grid grid-cols-1 gap-3 xl:grid-cols-2">
-                    {(alterationsQuery.data?.data ?? []).length > 0 ? (
-                      <Card
-                        title="Alterations"
-                        description={`Alteration logs for interval #${intervalId}.`}
-                        action={
-                          canManage ? (
-                            <AddBtn label="Add Alteration" onClick={() => setModal("alteration")} />
-                          ) : undefined
-                        }
-                      >
-                        <SimpleTable
-                          headers={["ID", "Type", "Intensity", "Description", "Comments"]}
-                          rows={(alterationsQuery.data?.data ?? []).map((a) => [
-                            String(a.id),
-                            a.type,
-                            a.intensity === null ? "-" : String(a.intensity),
-                            a.description ?? "-",
-                            a.comments ?? "-"
-                          ])}
-                          empty="No alterations."
-                        />
-                      </Card>
-                    ) : null}
-                    {(mineralizationsQuery.data?.data ?? []).length > 0 ? (
-                      <Card
-                        title="Mineralizations"
-                        description={`Mineralization logs for interval #${intervalId}.`}
-                        action={
-                          canManage ? (
-                            <AddBtn
-                              label="Add Mineralization"
-                              onClick={() => setModal("mineralization")}
-                            />
-                          ) : undefined
-                        }
-                      >
-                        <SimpleTable
-                          headers={["ID", "Mineral", "Percentage", "Style", "Habit"]}
-                          rows={(mineralizationsQuery.data?.data ?? []).map((m) => [
-                            String(m.id),
-                            m.mineral,
-                            m.percentage === null ? "-" : String(m.percentage),
-                            m.style ?? "-",
-                            m.habit ?? "-"
-                          ])}
-                          empty="No mineralizations."
-                        />
-                      </Card>
-                    ) : null}
-                    {(geologicalStructuresQuery.data?.data ?? []).length > 0 ? (
-                      <Card
-                        title="Geological Structures"
-                        description={`Structural records for interval #${intervalId}.`}
-                        action={
-                          canManage ? (
-                            <AddBtn
-                              label="Add Structure"
-                              onClick={() => setModal("geologicalStructure")}
-                            />
-                          ) : undefined
-                        }
-                      >
-                        <SimpleTable
-                          headers={["ID", "Type", "Angle", "Width", "Orientation"]}
-                          rows={(geologicalStructuresQuery.data?.data ?? []).map((g) => [
-                            String(g.id),
-                            g.structureType,
-                            g.angle === null ? "-" : String(g.angle),
-                            g.width === null ? "-" : String(g.width),
-                            g.orientation ?? "-"
-                          ])}
-                          empty="No geological structures."
-                        />
-                      </Card>
-                    ) : null}
-                    {(recoveriesQuery.data?.data ?? []).length > 0 ? (
-                      <Card
-                        title="Recoveries"
-                        description={`Core recovery metrics for interval #${intervalId}.`}
-                        action={
-                          canManage ? (
-                            <AddBtn label="Add Recovery" onClick={() => setModal("recovery")} />
-                          ) : undefined
-                        }
-                      >
-                        <SimpleTable
-                          headers={["ID", "Recovery %", "RQD %", "Core Loss", "Comments"]}
-                          rows={(recoveriesQuery.data?.data ?? []).map((r) => [
-                            String(r.id),
-                            r.recoveryPercent === null ? "-" : String(r.recoveryPercent),
-                            r.rqdPercent === null ? "-" : String(r.rqdPercent),
-                            r.coreLoss === null ? "-" : String(r.coreLoss),
-                            r.comments ?? "-"
-                          ])}
-                          empty="No recoveries."
-                        />
-                      </Card>
-                    ) : null}
-                    {(densitiesQuery.data?.data ?? []).length > 0 ? (
-                      <Card
-                        title="Densities"
-                        description={`Density measurements for interval #${intervalId}.`}
-                        action={
-                          canManage ? (
-                            <AddBtn label="Add Density" onClick={() => setModal("density")} />
-                          ) : undefined
-                        }
-                      >
-                        <SimpleTable
-                          headers={[
-                            "ID",
-                            "Specific Gravity",
-                            "Method",
-                            "Dry Density",
-                            "Wet Density"
+                    {drillHolesQuery.isError ? (
+                      errorBox("Could not load the drillholes.", () => void drillHolesQuery.refetch())
+                    ) : drillHolesQuery.isLoading ? (
+                      skeleton
+                    ) : (
+                      <>
+                        <DataTable
+                          columns={[
+                            { header: "Drillhole", cell: (d) => d.name },
+                            { header: "Type", cell: (d) => d.type },
+                            { header: "Depth (m)", cell: (d) => fmtNum(d.depth), numeric: true },
+                            { header: "Intervals", cell: (d) => fmtNum((d as { _count?: { intervals?: number } })._count?.intervals), numeric: true },
+                            {
+                              header: "Best grade",
+                              cell: (d) => {
+                                const top = formatTopIntercept(d.id);
+                                if (!top) return <span className="text-[var(--color-on-surface-variant)]">—</span>;
+                                return (
+                                  <span className="inline-flex flex-col rounded-lg bg-lime-400 px-2 py-1 text-left font-sans text-xs font-bold text-lime-950 ring-1 ring-lime-500/70">
+                                    <span>{top.label}</span>
+                                    <span className="font-medium opacity-80">{top.interval}</span>
+                                  </span>
+                                );
+                              }
+                            },
+                            { header: "Campaign", cell: (d) => d.campaign ?? "—", wide: true }
                           ]}
-                          rows={(densitiesQuery.data?.data ?? []).map((d) => [
-                            String(d.id),
-                            String(d.specificGravity),
-                            d.method ?? "-",
-                            d.dryDensity === null ? "-" : String(d.dryDensity),
-                            d.wetDensity === null ? "-" : String(d.wetDensity)
-                          ])}
-                          empty="No densities."
+                          rows={drillHolesQuery.data?.data ?? []}
+                          rowKey={(d) => String(d.id)}
+                          rowTo={(d) => pathFor(projectId, zoneId, d.id)}
+                          empty={holeSearch ? `No drillholes match “${holeSearch}”.` : "No drillholes in this zone yet."}
                         />
-                      </Card>
-                    ) : null}
-                    {(magneticSusceptibilitiesQuery.data?.data ?? []).length > 0 ? (
-                      <Card
-                        title="Magnetic Susceptibilities"
-                        description={`Magnetic susceptibility readings for interval #${intervalId}.`}
-                        action={
-                          canManage ? (
-                            <AddBtn
-                              label="Add Magnetic"
-                              onClick={() => setModal("magneticSusceptibility")}
-                            />
-                          ) : undefined
-                        }
-                      >
-                        <SimpleTable
-                          headers={["ID", "Value", "Unit", "Instrument", "Comments"]}
-                          rows={(magneticSusceptibilitiesQuery.data?.data ?? []).map((m) => [
-                            String(m.id),
-                            String(m.value),
-                            m.unit ?? "-",
-                            m.instrument ?? "-",
-                            m.comments ?? "-"
-                          ])}
-                          empty="No magnetic susceptibilities."
-                        />
-                      </Card>
-                    ) : null}
-                  </div>
-                </Card>
-              </div>
-            ) : null}
+                        <Pager meta={drillHolesQuery.data?.meta} page={holePage} onPage={setHolePage} noun="drillholes" />
+                      </>
+                    )}
+                  </Section>
 
-            {drillHoleId && intervalId && assayId ? (
-              <div ref={qaqcRef}>
-                {/* <Card
-                  title="QAQC"
-                  description={`Quality control records for assay #${assayId}.`}
-                  action={
-                    canManage ? (
-                      <AddBtn label="Add QAQC" onClick={() => setModal("qaqc")} />
-                    ) : undefined
-                  }
-                >
-                  <div className="mb-3 text-xs text-[var(--color-on-surface-variant)]">
-                    You are viewing QAQC records for the selected assay.
-                  </div>
-                  <SimpleTable
-                    headers={["ID", "Type", "Passed", "Notes"]}
-                    rows={(qaqcQuery.data?.data ?? []).map((q) => [
-                      String(q.id),
-                      q.type,
-                      q.passed ? "Yes" : "No",
-                      q.notes ?? "-"
-                    ])}
-                    empty="No QAQC records."
-                  />
-                </Card> */}
-                <div className="mt-3" />
-                <Card
-                  title="Assay Values"
-                  description={`Element values reported for assay #${assayId}.`}
-                  action={
-                    canManage ? (
-                      <AddBtn label="Add Assay Value" onClick={() => setModal("assayValue")} />
-                    ) : undefined
-                  }
-                >
-                  <SimpleTable
-                    headers={["ID", "Element", "Value", "Unit", "Detection Limit"]}
-                    rows={(assayValuesQuery.data?.data ?? []).map((v) => [
-                      String(v.id),
-                      v.element,
-                      String(v.value),
-                      v.unit ?? "-",
-                      v.detectionLimit === null ? "-" : String(v.detectionLimit)
-                    ])}
-                    empty="No assay values."
-                  />
-                </Card>
+                  <Section
+                    title="Significant Intercepts"
+                    description={`Mineralized runs calculated from the assays with the cut-off below, best grade first. Manually entered intercepts are listed too.`}
+                    action={canManage ? <AddBtn label="Add Significant Intercept" onClick={() => setModal("significantIntercept")} /> : undefined}
+                  >
+                    <div className="mb-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
+                      <label className="block">
+                        <span className="mb-1 block text-[10px] font-bold uppercase tracking-wide text-[var(--color-on-surface-variant)]">Element</span>
+                        <select
+                          className={inputClassName}
+                          value={interceptElement}
+                          onChange={(e) => {
+                            const element = e.target.value as "au" | "cu" | "ag";
+                            setInterceptElement(element);
+                            setInterceptCutoffInput(String(INTERCEPT_DEFAULTS[element]));
+                          }}
+                        >
+                          <option value="au">Au (g/t)</option>
+                          <option value="cu">Cu (%)</option>
+                          <option value="ag">Ag (g/t)</option>
+                        </select>
+                      </label>
+                      <label className="block">
+                        <span className="mb-1 block text-[10px] font-bold uppercase tracking-wide text-[var(--color-on-surface-variant)]">Cut-off ({ELEMENT_UNIT[interceptElement]})</span>
+                        <input className={inputClassName} inputMode="decimal" value={interceptCutoffInput} onChange={(e) => setInterceptCutoffInput(e.target.value)} />
+                      </label>
+                      <label className="block">
+                        <span className="mb-1 block text-[10px] font-bold uppercase tracking-wide text-[var(--color-on-surface-variant)]">Min. width (m)</span>
+                        <input className={inputClassName} inputMode="decimal" value={interceptMinWidthInput} onChange={(e) => setInterceptMinWidthInput(e.target.value)} />
+                      </label>
+                      <label className="block">
+                        <span className="mb-1 block text-[10px] font-bold uppercase tracking-wide text-[var(--color-on-surface-variant)]">Max. dilution (m)</span>
+                        <input className={inputClassName} inputMode="decimal" value={interceptDilutionInput} onChange={(e) => setInterceptDilutionInput(e.target.value)} />
+                      </label>
+                    </div>
+                    {computedInterceptsQuery.isLoading ? (
+                      skeleton
+                    ) : computedInterceptsQuery.isError ? (
+                      errorBox("Could not calculate the intercepts.", () => void computedInterceptsQuery.refetch())
+                    ) : (
+                      <>
+                        <DataTable
+                          columns={[
+                            { header: "Drillhole", cell: (si) => si.hole },
+                            { header: "From (m)", cell: (si) => fmtNum(si.from), numeric: true },
+                            { header: "To (m)", cell: (si) => fmtNum(si.to), numeric: true },
+                            { header: "Width (m)", cell: (si) => <strong>{fmtNum(si.width)}</strong>, numeric: true },
+                            { header: "Au g/t", cell: (si) => (interceptElement === "au" ? <strong>{fmtNum(si.au)}</strong> : fmtNum(si.au)), numeric: true },
+                            { header: "Cu %", cell: (si) => (interceptElement === "cu" ? <strong>{fmtNum(si.cu)}</strong> : fmtNum(si.cu)), numeric: true },
+                            { header: "Ag g/t", cell: (si) => (interceptElement === "ag" ? <strong>{fmtNum(si.ag)}</strong> : fmtNum(si.ag)), numeric: true },
+                            { header: "True width", cell: (si) => fmtNum(si.trueWidth), numeric: true, wide: true },
+                            {
+                              header: "Source",
+                              wide: true,
+                              cell: (si) => (
+                                <span className={`rounded-full px-2 py-0.5 font-sans text-xs font-bold ${si.source === "calculated" ? "bg-sky-500/15 text-sky-700 dark:text-sky-300" : "bg-slate-500/20 text-slate-600 dark:text-slate-300"}`}>
+                                  {si.source === "calculated" ? "Calculated" : "Manual"}
+                                </span>
+                              )
+                            }
+                          ]}
+                          rows={visibleInterceptRows}
+                          rowKey={(si) => si.key}
+                          rowTo={(si) => pathFor(projectId, zoneId, si.drillHoleId)}
+                          empty={`No intercepts above ${interceptParams.cutoff} ${ELEMENT_UNIT[interceptElement]} with at least ${interceptParams.minWidth} m width. Try a lower cut-off or width.`}
+                        />
+                        <Pager
+                          meta={{ total: interceptRows.length, limit: INTERCEPT_PAGE_SIZE, totalPages: interceptTotalPages }}
+                          page={interceptPage}
+                          onPage={setInterceptPage}
+                          noun="intercepts, best grade first"
+                        />
+                        <p className="mt-1 text-xs text-[var(--color-on-surface-variant)]">Grades are length-weighted averages of the assays in each run.</p>
+                      </>
+                    )}
+                  </Section>
+                </div>
+                <aside className="xl:sticky xl:top-24 xl:self-start">{mediaViewer}</aside>
               </div>
-            ) : null}
-          </div>
+            </div>
+          ) : null}
+
+          {drillHoleId && !intervalId ? (
+            <div ref={intervalsRef} className="space-y-4">
+              <ContextHeader
+                eyebrow="Drillhole"
+                title={holeName}
+                subtitle={[drillHoleDetail.data?.type, drillHoleDetail.data?.campaign].filter(Boolean).join(" · ") || undefined}
+                stats={[
+                  { label: "Depth", value: drillHoleDetail.data?.depth != null ? `${fmtNum(drillHoleDetail.data.depth)} m` : "—" },
+                  { label: "Intervals", value: intervalsQuery.data?.meta?.total ?? "—" },
+                  { label: "Surveys", value: drillHoleSurveysQuery.data?.data?.length ?? "—" }
+                ]}
+              />
+              <Section
+                title="Intervals"
+                description="Click an interval to see its assays and geology."
+                action={canManage ? <AddBtn label="Add Interval" onClick={() => setModal("interval")} /> : undefined}
+              >
+                {intervalsQuery.isError ? (
+                  errorBox("Could not load the intervals.", () => void intervalsQuery.refetch())
+                ) : intervalsQuery.isLoading ? (
+                  skeleton
+                ) : (
+                  <>
+                    <DataTable
+                      columns={[
+                        { header: "From (m)", cell: (i) => fmtNum(i.fromDepth), numeric: true },
+                        { header: "To (m)", cell: (i) => fmtNum(i.toDepth), numeric: true },
+                        { header: "Length (m)", cell: (i) => fmtNum(i.toDepth - i.fromDepth), numeric: true },
+                        { header: "Rock", cell: (i) => (i as unknown as { lithologies?: Array<{ rockType?: string | null }> }).lithologies?.[0]?.rockType ?? "—" },
+                        { header: "Au g/t", cell: (i) => fmtNum(meanOf((i as unknown as { assays?: Array<Record<string, unknown>> }).assays, "au")), numeric: true },
+                        { header: "Cu %", cell: (i) => fmtNum(meanOf((i as unknown as { assays?: Array<Record<string, unknown>> }).assays, "cu")), numeric: true },
+                        { header: "Ag g/t", cell: (i) => fmtNum(meanOf((i as unknown as { assays?: Array<Record<string, unknown>> }).assays, "ag")), numeric: true }
+                      ]}
+                      rows={intervalsQuery.data?.data ?? []}
+                      rowKey={(i) => String(i.id)}
+                      rowTo={(i) => pathFor(projectId, zoneId, drillHoleId, i.id)}
+                      empty="This drillhole has no intervals yet."
+                      maxHeight="70vh"
+                    />
+                    <Pager meta={intervalsQuery.data?.meta} page={intervalPage} onPage={setIntervalPage} noun="intervals" />
+                  </>
+                )}
+              </Section>
+              <Section
+                title="Surveys"
+                description="Downhole azimuth and dip measurements."
+                action={canManage ? <AddBtn label="Add Survey" onClick={() => setModal("drillHoleSurvey")} /> : undefined}
+              >
+                <DataTable
+                  columns={[
+                    { header: "Depth (m)", cell: (s) => fmtNum(s.depth) },
+                    { header: "Azimuth (°)", cell: (s) => fmtNum(s.azimuth), numeric: true },
+                    { header: "Dip (°)", cell: (s) => fmtNum(s.dip), numeric: true }
+                  ]}
+                  rows={drillHoleSurveysQuery.data?.data ?? []}
+                  rowKey={(s) => String(s.id)}
+                  empty="No surveys."
+                />
+              </Section>
+            </div>
+          ) : null}
+
+          {drillHoleId && intervalId && !assayId ? (
+            <div ref={assaysRef} className="space-y-4">
+              <ContextHeader
+                eyebrow="Interval"
+                title={intervalLabel}
+                subtitle={`Drillhole ${holeName}`}
+                stats={[
+                  { label: "Length", value: intervalDetail.data ? `${fmtNum(intervalDetail.data.toDepth - intervalDetail.data.fromDepth)} m` : "—" },
+                  { label: "Assays", value: assaysQuery.data?.data?.length ?? "—" },
+                  { label: "Rock", value: lithologiesQuery.data?.data?.[0]?.rockType ?? "—" }
+                ]}
+              />
+              <Section
+                title="Assays"
+                description="Click an assay to see its element values."
+                action={canManage ? <AddBtn label="Add Assay" onClick={() => setModal("assay")} /> : undefined}
+              >
+                <DataTable
+                  columns={[
+                    { header: "Method", cell: (a) => a.assayMethod },
+                    { header: "Au g/t", cell: (a) => fmtNum(a.au), numeric: true },
+                    { header: "Cu %", cell: (a) => fmtNum(a.cu), numeric: true },
+                    { header: "Ag g/t", cell: (a) => fmtNum(a.ag), numeric: true },
+                    { header: "Laboratory", cell: (a) => a.laboratory ?? "—" }
+                  ]}
+                  rows={assaysQuery.data?.data ?? []}
+                  rowKey={(a) => String(a.id)}
+                  rowTo={(a) => pathFor(projectId, zoneId, drillHoleId, intervalId, a.id)}
+                  empty="No assays."
+                />
+              </Section>
+              <Section
+                title="Lithology"
+                action={canManage ? <AddBtn label="Add Lithology" onClick={() => setModal("lithology")} /> : undefined}
+              >
+                <DataTable
+                  columns={[
+                    { header: "Rock type", cell: (l) => l.rockType ?? "—" },
+                    { header: "Alteration", cell: (l) => l.alteration ?? "—" },
+                    { header: "Mineralization", cell: (l) => l.mineralization ?? "—" },
+                    { header: "Comments", cell: (l) => l.comments ?? "—", wide: true }
+                  ]}
+                  rows={lithologiesQuery.data?.data ?? []}
+                  rowKey={(l) => String(l.id)}
+                  empty="No lithologies."
+                />
+              </Section>
+              <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
+                {(alterationsQuery.data?.data ?? []).length > 0 ? (
+                  <Section title="Alterations" action={canManage ? <AddBtn label="Add Alteration" onClick={() => setModal("alteration")} /> : undefined}>
+                    <DataTable
+                      columns={[
+                        { header: "Type", cell: (a) => a.type },
+                        { header: "Intensity", cell: (a) => fmtNum(a.intensity), numeric: true },
+                        { header: "Description", cell: (a) => a.description ?? "—", wide: true },
+                        { header: "Comments", cell: (a) => a.comments ?? "—", wide: true }
+                      ]}
+                      rows={alterationsQuery.data?.data ?? []}
+                      rowKey={(a) => String(a.id)}
+                      empty="No alterations."
+                    />
+                  </Section>
+                ) : null}
+                {(mineralizationsQuery.data?.data ?? []).length > 0 ? (
+                  <Section title="Mineralizations" action={canManage ? <AddBtn label="Add Mineralization" onClick={() => setModal("mineralization")} /> : undefined}>
+                    <DataTable
+                      columns={[
+                        { header: "Mineral", cell: (m) => m.mineral },
+                        { header: "Percentage", cell: (m) => fmtNum(m.percentage), numeric: true },
+                        { header: "Style", cell: (m) => m.style ?? "—", wide: true },
+                        { header: "Habit", cell: (m) => m.habit ?? "—", wide: true }
+                      ]}
+                      rows={mineralizationsQuery.data?.data ?? []}
+                      rowKey={(m) => String(m.id)}
+                      empty="No mineralizations."
+                    />
+                  </Section>
+                ) : null}
+                {(geologicalStructuresQuery.data?.data ?? []).length > 0 ? (
+                  <Section title="Geological Structures" action={canManage ? <AddBtn label="Add Structure" onClick={() => setModal("geologicalStructure")} /> : undefined}>
+                    <DataTable
+                      columns={[
+                        { header: "Type", cell: (g) => g.structureType },
+                        { header: "Angle", cell: (g) => fmtNum(g.angle), numeric: true },
+                        { header: "Width", cell: (g) => fmtNum(g.width), numeric: true },
+                        { header: "Orientation", cell: (g) => g.orientation ?? "—", wide: true }
+                      ]}
+                      rows={geologicalStructuresQuery.data?.data ?? []}
+                      rowKey={(g) => String(g.id)}
+                      empty="No geological structures."
+                    />
+                  </Section>
+                ) : null}
+                {(recoveriesQuery.data?.data ?? []).length > 0 ? (
+                  <Section title="Recoveries" action={canManage ? <AddBtn label="Add Recovery" onClick={() => setModal("recovery")} /> : undefined}>
+                    <DataTable
+                      columns={[
+                        { header: "Recovery %", cell: (r) => fmtNum(r.recoveryPercent), numeric: true },
+                        { header: "RQD %", cell: (r) => fmtNum(r.rqdPercent), numeric: true },
+                        { header: "Core loss", cell: (r) => fmtNum(r.coreLoss), numeric: true },
+                        { header: "Comments", cell: (r) => r.comments ?? "—", wide: true }
+                      ]}
+                      rows={recoveriesQuery.data?.data ?? []}
+                      rowKey={(r) => String(r.id)}
+                      empty="No recoveries."
+                    />
+                  </Section>
+                ) : null}
+                {(densitiesQuery.data?.data ?? []).length > 0 ? (
+                  <Section title="Densities" action={canManage ? <AddBtn label="Add Density" onClick={() => setModal("density")} /> : undefined}>
+                    <DataTable
+                      columns={[
+                        { header: "Specific gravity", cell: (d) => fmtNum(d.specificGravity), numeric: true },
+                        { header: "Dry density", cell: (d) => fmtNum(d.dryDensity), numeric: true },
+                        { header: "Wet density", cell: (d) => fmtNum(d.wetDensity), numeric: true },
+                        { header: "Method", cell: (d) => d.method ?? "—", wide: true }
+                      ]}
+                      rows={densitiesQuery.data?.data ?? []}
+                      rowKey={(d) => String(d.id)}
+                      empty="No densities."
+                    />
+                  </Section>
+                ) : null}
+                {(magneticSusceptibilitiesQuery.data?.data ?? []).length > 0 ? (
+                  <Section title="Magnetic Susceptibilities" action={canManage ? <AddBtn label="Add Magnetic" onClick={() => setModal("magneticSusceptibility")} /> : undefined}>
+                    <DataTable
+                      columns={[
+                        { header: "Value", cell: (m) => fmtNum(m.value), numeric: true },
+                        { header: "Unit", cell: (m) => m.unit ?? "—" },
+                        { header: "Instrument", cell: (m) => m.instrument ?? "—", wide: true },
+                        { header: "Comments", cell: (m) => m.comments ?? "—", wide: true }
+                      ]}
+                      rows={magneticSusceptibilitiesQuery.data?.data ?? []}
+                      rowKey={(m) => String(m.id)}
+                      empty="No magnetic susceptibilities."
+                    />
+                  </Section>
+                ) : null}
+              </div>
+            </div>
+          ) : null}
+
+          {drillHoleId && intervalId && assayId ? (
+            <div ref={qaqcRef} className="space-y-4">
+              <ContextHeader
+                eyebrow="Assay"
+                title={assayDetail.data?.assayMethod ?? "Assay"}
+                subtitle={[assayDetail.data?.laboratory, `Interval ${intervalLabel}`, `Drillhole ${holeName}`].filter(Boolean).join(" · ")}
+                stats={[
+                  { label: "Au g/t", value: fmtNum(assayDetail.data?.au) },
+                  { label: "Cu %", value: fmtNum(assayDetail.data?.cu) },
+                  { label: "Ag g/t", value: fmtNum(assayDetail.data?.ag) }
+                ]}
+              />
+              <Section
+                title="Assay Values"
+                description="Every element reported for this assay."
+                action={canManage ? <AddBtn label="Add Assay Value" onClick={() => setModal("assayValue")} /> : undefined}
+              >
+                <DataTable
+                  columns={[
+                    { header: "Element", cell: (v) => v.element },
+                    { header: "Value", cell: (v) => fmtNum(v.value), numeric: true },
+                    { header: "Unit", cell: (v) => v.unit ?? "—" },
+                    { header: "Detection limit", cell: (v) => fmtNum(v.detectionLimit), numeric: true }
+                  ]}
+                  rows={assayValuesQuery.data?.data ?? []}
+                  rowKey={(v) => String(v.id)}
+                  empty="No assay values."
+                />
+              </Section>
+            </div>
+          ) : null}
         </div>
       ) : null}
 
@@ -1607,64 +1421,6 @@ function AddBtn({ label, onClick }: { label: string; onClick: () => void }) {
     >
       <Plus size={13} /> {label}
     </button>
-  );
-}
-
-function Card({
-  title,
-  description,
-  action,
-  children
-}: {
-  title: string;
-  description?: string;
-  action?: React.ReactNode;
-  children: React.ReactNode;
-}) {
-  return (
-    <article className="rounded-xl border border-[var(--color-border-soft)] bg-[var(--color-surface-container-low)] p-5">
-      <div className="mb-3 flex items-center justify-between gap-2">
-        <div>
-          <h2 className="text-lg font-bold">{title}</h2>
-          {description ? (
-            <p className="text-xs text-[var(--color-on-surface-variant)]">{description}</p>
-          ) : null}
-        </div>
-        {action}
-      </div>
-      {children}
-    </article>
-  );
-}
-
-function MiniList({
-  title,
-  items
-}: {
-  title: string;
-  items: Array<{ id: string; label: string; to: string; selected: boolean }>;
-}) {
-  return (
-    <div className="rounded-lg border border-[var(--color-border-soft)] bg-[var(--color-surface-container-high)] p-2">
-      <p className="mb-2 text-xs font-bold uppercase tracking-wide text-[var(--color-on-surface-variant)]">
-        {title}
-      </p>
-      <div className="grid max-h-56 grid-cols-2 gap-1 overflow-y-auto pr-1 xl:grid-cols-3">
-        {items.length ? (
-          items.map((item) => (
-            <Link
-              key={item.id}
-              to={item.to}
-              className={`block rounded px-2 py-1.5 text-sm ${item.selected ? "bg-[var(--color-primary)] text-[var(--color-on-primary)]" : "hover:bg-[var(--color-surface-container-highest)]"}`}
-            >
-              {item.label}
-            </Link>
-          ))
-        ) : (
-          <p className="px-2 py-1 text-xs text-[var(--color-on-surface-variant)]">No data</p>
-        )}
-      </div>
-    </div>
   );
 }
 
@@ -2543,60 +2299,6 @@ function CreateModal({
           </button>
         </div>
       </div>
-    </div>
-  );
-}
-
-function SimpleTable({
-  headers,
-  rows,
-  empty
-}: {
-  headers: string[];
-  rows: Array<Array<string | React.ReactNode>>;
-  empty: string;
-}) {
-  return (
-    <div className="table-scroll overflow-x-auto rounded-lg border border-[var(--color-border-soft)] bg-[var(--color-surface-container-high)] shadow-sm">
-      <table className="w-full border-collapse text-left">
-        <thead>
-          <tr>
-            {headers.map((header) => (
-              <th
-                key={header}
-                className="bg-[var(--color-surface-container-highest)] px-3 py-2 text-xs font-bold uppercase tracking-wide text-[var(--color-on-surface-variant)]"
-              >
-                {header}
-              </th>
-            ))}
-          </tr>
-        </thead>
-        <tbody>
-          {rows.length ? (
-            rows.map((row, idx) => (
-              <tr
-                key={idx}
-                className={`border-t border-[var(--color-border-soft)] transition hover:bg-[var(--color-surface-container-highest)] ${idx % 2 === 0 ? "bg-transparent" : "bg-[var(--color-surface-container)]/45"}`}
-              >
-                {row.map((col, i) => (
-                  <td key={i} className="px-3 py-2 text-sm">
-                    {col}
-                  </td>
-                ))}
-              </tr>
-            ))
-          ) : (
-            <tr>
-              <td
-                colSpan={headers.length}
-                className="px-3 py-4 text-sm text-[var(--color-on-surface-variant)]"
-              >
-                {empty}
-              </td>
-            </tr>
-          )}
-        </tbody>
-      </table>
     </div>
   );
 }

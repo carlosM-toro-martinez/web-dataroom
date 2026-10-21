@@ -1,5 +1,5 @@
 import { Link, Navigate } from "react-router-dom";
-import { ClipboardList, Database, Drill, FileSpreadsheet, MapPinned, ShieldCheck, Users } from "lucide-react";
+import { BarChart3, ClipboardList, Database, Drill, FileSpreadsheet, MapPinned, ShieldCheck, Users } from "lucide-react";
 import { useAuth } from "@/features/auth/context/AuthContext";
 import { homePathFor } from "@/features/auth/lib/permissions";
 import { InternalHeader } from "@/shared/ui/InternalHeader";
@@ -49,6 +49,16 @@ export function DashboardPage() {
             <h2 className="text-lg font-bold">Sondajes</h2>
             <p className="mt-2 text-sm text-[var(--color-on-surface-variant)]">
               Programas de perforación por área y estado de cada pozo.
+            </p>
+          </Link>
+        ) : null}
+
+        {can("analisisMuestras") ? (
+          <Link to="/analisis-muestras" className={cardClassName}>
+            <BarChart3 size={22} className="mb-4 text-[var(--color-primary)]" />
+            <h2 className="text-lg font-bold">Análisis de muestras</h2>
+            <p className="mt-2 text-sm text-[var(--color-on-surface-variant)]">
+              Leyes, cobertura, laboratorios, calidad y estimación espacial.
             </p>
           </Link>
         ) : null}

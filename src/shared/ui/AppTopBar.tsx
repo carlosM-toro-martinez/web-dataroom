@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useLocation } from "react-router-dom";
 import {
   ChevronDown,
+  BarChart3,
   ClipboardList,
   Database,
   Drill,
@@ -39,6 +40,7 @@ const MAIN_ROUTES: MainRoute[] = [
   { label: "Data Room", to: "/exploraciones-data-room", icon: Database, permission: "dataRoom", group: "main" },
   { label: "Muestras", to: "/exploraciones", icon: MapPinned, permission: ["exploracion", "produccion"], group: "main" },
   { label: "Sondajes", to: "/sondajes", icon: Drill, permission: ["sondajes", "geologiaSondajes"], group: "main" },
+  { label: "Análisis", to: "/analisis-muestras", icon: BarChart3, permission: "analisisMuestras", group: "main" },
   { label: "Trabajadores", to: "/trabajadores", icon: Users, permission: "usuarios", group: "admin" },
   { label: "Roles y permisos", to: "/roles", icon: ShieldCheck, permission: "usuarios", group: "admin" },
   { label: "Solicitudes Data Room", to: "/solicitudes-data-room", icon: ClipboardList, permission: "solicitudes", group: "admin" },

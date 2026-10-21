@@ -39,6 +39,15 @@ import imgMosaLuz1Plata from "@/assets/images/MOSA_NIVEL_LUZ_1PLATA.jpg";
 import imgMosaLuz2Cobre from "@/assets/images/MOSA_NIVEL_LUZ_2COBRE.jpg";
 import { useAuth } from "@/features/auth/context/AuthContext";
 import { InternalHeader } from "@/shared/ui/InternalHeader";
+import {
+  ChipRow,
+  ContextHeader,
+  DataRoomBreadcrumb,
+  DataTable,
+  Section,
+  fmtNum,
+  type Crumb
+} from "@/features/exploraciones/components/dataroom/DataRoomUi";
 import { AuthenticatedMediaVideo } from "@/features/exploraciones/components/AuthenticatedMediaVideo";
 import { dataRoomMediaUrl } from "@/features/exploraciones/lib/dataRoomMedia";
 import {
@@ -267,7 +276,8 @@ export function ExploracionesSurfaceDataRoomPage() {
   const [dragging, setDragging] = useState(false);
   const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
   const [loadedMedia, setLoadedMedia] = useState<Set<string>>(() => new Set());
-  const [sampleRowsPerPage, setSampleRowsPerPage] = useState<5 | 10>(5);
+  const [sampleRowsPerPage, setSampleRowsPerPage] = useState(10);
+  const [sampleSearch, setSampleSearch] = useState("");
   const [samplePage, setSamplePage] = useState(0);
   const relevantSampleRef = useRef<HTMLDivElement | null>(null);
 
@@ -333,7 +343,7 @@ export function ExploracionesSurfaceDataRoomPage() {
     });
     return Array.from(dedup.values());
   }, [selectedSample, results.data]);
-  const sampleRows = useMemo(() => {
+  const allSampleRows = useMemo(() => {
     const all = samples.data ?? [];
     if (laborId) {
       return [...all].sort((a: any, b: any) => getSampleTopNumericValue(b) - getSampleTopNumericValue(a));
@@ -344,6 +354,10 @@ export function ExploracionesSurfaceDataRoomPage() {
       .filter((s) => laborSet.has(s.miningLaborId))
       .sort((a: any, b: any) => getSampleTopNumericValue(b) - getSampleTopNumericValue(a));
   }, [samples.data, laborId, levelId, labors.data]);
+  const sampleRows = useMemo(() => {
+    const term = sampleSearch.trim().toLowerCase();
+    return term ? allSampleRows.filter((s: any) => String(s.code ?? "").toLowerCase().includes(term)) : allSampleRows;
+  }, [allSampleRows, sampleSearch]);
   const sampleTotalPages = Math.max(1, Math.ceil(sampleRows.length / sampleRowsPerPage));
   const safeSamplePage = Math.min(samplePage, sampleTotalPages - 1);
   const pagedSamples = useMemo(() => {
@@ -516,253 +530,248 @@ export function ExploracionesSurfaceDataRoomPage() {
 
   if (!canView) return <Navigate to="/perfil" replace />;
 
+  const areaName = (areas.data ?? []).find((x) => x.id === areaId)?.name;
+  const levelName = (levels.data ?? []).find((x) => x.id === levelId)?.name;
+  const laborName = (labors.data ?? []).find((x) => x.id === laborId)?.name;
+  const crumbs: Crumb[] = [{ label: "Data Room", to: "/exploraciones-data-room" }, { label: "Surface", to: areaId ? p() : undefined }];
+  if (areaId) crumbs.push({ label: areaName ?? "Area", to: levelId ? p(areaId) : undefined });
+  if (areaId && levelId) crumbs.push({ label: levelName ?? "Level", to: laborId ? p(areaId, levelId) : undefined });
+  if (areaId && levelId && laborId) crumbs.push({ label: laborName ?? "Labor", to: sampleId ? p(areaId, levelId, laborId) : undefined });
+  if (sampleId) crumbs.push({ label: selectedSample?.code ?? "Sample" });
+
+  const labOf = (x: any) => {
+    if (!x.sampleLaboratoryId) return "—";
+    const slotLaboratory = sampleLabMap.get(x.sampleLaboratoryId);
+    if (!slotLaboratory) return "—";
+    const labId = slotLaboratory.split(" · ")[1];
+    return laboratoryMap.get(labId) ?? labId ?? "—";
+  };
+  const hasContext = Boolean(levelId);
+  const pageSizes = [10, 25, 50];
+
+  const mediaPanel = (
+    <Section
+      title="Models & Images"
+      description="Reference images for the selected area and level."
+      action={
+        <button onClick={() => setFullScreen(true)} className="rounded-lg border border-[var(--color-border-soft)] px-3 py-1.5 text-xs font-semibold">
+          Fullscreen
+        </button>
+      }
+    >
+      <div className="overflow-hidden rounded-xl border border-[var(--color-border-soft)]">
+        <DeferredMediaImage
+          src={modelImages[slide]}
+          alt={`Model ${slide + 1}`}
+          loaded={loadedMedia.has(modelImages[slide])}
+          onLoad={() => markMediaLoaded(modelImages[slide])}
+          className="h-[260px] w-full"
+          imageClassName="h-[260px] w-full object-cover"
+        />
+      </div>
+      <div className="mt-3 flex items-center justify-between gap-2">
+        <button
+          onClick={() => setSlide((s) => (s - 1 + modelImages.length) % modelImages.length)}
+          className="rounded-lg border border-[var(--color-border-soft)] px-3 py-1.5 text-xs font-semibold"
+        >
+          Prev
+        </button>
+        <span className="text-xs text-[var(--color-on-surface-variant)]">
+          {slide + 1} / {modelImages.length}
+        </span>
+        <button
+          onClick={() => setSlide((s) => (s + 1) % modelImages.length)}
+          className="rounded-lg border border-[var(--color-border-soft)] px-3 py-1.5 text-xs font-semibold"
+        >
+          Next
+        </button>
+      </div>
+    </Section>
+  );
+
   return (
-    <section className="space-y-4 text-[var(--color-on-surface)]">
+    <section className="space-y-5 text-[var(--color-on-surface)]">
       <InternalHeader
         eyebrow="Data Room"
         title="Surface Data Room"
-        description="Modelo de areas, niveles, labores, muestras y resultados superficiales."
+        description="Areas, levels, labors, samples and surface results."
       />
+      <DataRoomBreadcrumb items={crumbs} />
 
       {isLoading ? <LoadingPanel label="Loading surface data..." /> : null}
 
-      <article className="rounded-xl border border-[var(--color-border-soft)] bg-[var(--color-surface-container-low)] p-4">
-        <div className="mb-3 flex items-center justify-between">
-          <h2 className="text-base font-bold">Hierarchy</h2>
+      <div className="space-y-2 rounded-2xl border border-[var(--color-border-soft)] bg-[var(--color-surface-container-low)] p-4">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <p className="text-xs text-[var(--color-on-surface-variant)]">Pick an area, then a level and a labor to narrow the samples.</p>
           {canManage ? (
             <div className="flex flex-wrap gap-2">
               <AddBtn label="Add Area" onClick={() => setModal("area")} />
               {areaId ? <AddBtn label="Add Level" onClick={() => setModal("level")} /> : null}
+              {levelId ? <AddBtn label="Add Labor" onClick={() => setModal("labor")} /> : null}
               {laborId ? <AddBtn label="Add Sample" onClick={() => setModal("sample")} /> : null}
             </div>
           ) : null}
         </div>
-        <div className="grid gap-3 md:grid-cols-2">
-          <MiniList
-            title="Areas"
-            items={(areas.data ?? []).map((x) => ({
-              id: x.id,
-              label: x.name,
-              to: p(x.id),
-              selected: x.id === areaId
-            }))}
+        <ChipRow label="Area" items={(areas.data ?? []).map((x) => ({ id: x.id, label: x.name, to: p(x.id), selected: x.id === areaId }))} />
+        {areaId ? <ChipRow label="Level" items={(levels.data ?? []).map((x) => ({ id: x.id, label: x.name, to: p(areaId, x.id), selected: x.id === levelId }))} /> : null}
+        {areaId && levelId ? (
+          <ChipRow
+            label="Labor"
+            allLabel="All labors"
+            allTo={p(areaId, levelId)}
+            items={(labors.data ?? []).map((x) => ({ id: x.id, label: x.name, to: p(areaId, levelId, x.id), selected: x.id === laborId }))}
           />
-          <MiniList
-            title="Levels"
-            items={(levels.data ?? []).map((x) => ({
-              id: x.id,
-              label: x.name,
-              to: p(areaId, x.id),
-              selected: x.id === levelId
-            }))}
-          />
-        </div>
-      </article>
+        ) : null}
+      </div>
 
-      <div className="grid gap-4 xl:grid-cols-9">
-        <article className="rounded-xl border border-[var(--color-border-soft)] bg-[var(--color-surface-container-low)] p-4 xl:col-span-3">
-          <div className="mb-3 flex items-center justify-between">
-            <h3 className="text-base font-bold">Models / Images</h3>
-            <button
-              onClick={() => setFullScreen(true)}
-              className="rounded-lg border border-[var(--color-border-soft)] px-3 py-1.5 text-xs font-semibold"
-            >
-              Fullscreen
-            </button>
-          </div>
-          <div className="overflow-hidden rounded-xl border border-[var(--color-border-soft)]">
-            <DeferredMediaImage
-              src={modelImages[slide]}
-              alt={`Model ${slide + 1}`}
-              loaded={loadedMedia.has(modelImages[slide])}
-              onLoad={() => markMediaLoaded(modelImages[slide])}
-              className="h-[320px] w-full"
-              imageClassName="h-[320px] w-full object-cover"
-            />
-          </div>
-          <div className="mt-3 flex items-center justify-between">
-            <button
-              onClick={() => setSlide((s) => (s - 1 + modelImages.length) % modelImages.length)}
-              className="rounded-lg border border-[var(--color-border-soft)] px-3 py-1.5 text-xs font-semibold"
-            >
-              Prev
-            </button>
-            <div className="flex gap-2">
-              {modelImages.map((_, i) => (
-                <button
-                  key={i}
-                  onClick={() => setSlide(i)}
-                  className={`h-2.5 w-2.5 rounded-full ${i === slide ? "bg-[var(--color-primary)]" : "bg-[var(--color-border-soft)]"}`}
-                />
-              ))}
-            </div>
-            <button
-              onClick={() => setSlide((s) => (s + 1) % modelImages.length)}
-              className="rounded-lg border border-[var(--color-border-soft)] px-3 py-1.5 text-xs font-semibold"
-            >
-              Next
-            </button>
-          </div>
-          <p className="mt-2 text-xs text-[var(--color-on-surface-variant)]">
-            Reference images for the selected area, level and labor.
-          </p>
-        </article>
-
-        <div className="space-y-4 xl:col-span-6">
-          <article className="rounded-xl border border-[var(--color-border-soft)] bg-[var(--color-surface-container-low)] p-4">
-            <div className="mb-3 flex items-center justify-between">
-              <h3 className="text-base font-bold">Samples</h3>
-              <div className="flex items-center gap-2">
-                <select
-                  value={sampleRowsPerPage}
-                  onChange={(e) => {
-                    setSampleRowsPerPage(Number(e.target.value) as 5 | 10);
-                    setSamplePage(0);
-                  }}
-                  className="rounded-lg border border-[var(--color-border-soft)] bg-[var(--color-surface-container-high)] px-2 py-1 text-xs"
-                >
-                  <option value={5}>5 rows</option>
-                  <option value={10}>10 rows</option>
-                </select>
-                {canManage && laborId ? <AddBtn label="Add Sample" onClick={() => setModal("sample")} /> : null}
-              </div>
-            </div>
-            <div className="min-h-[240px]">
-              <Table
-                headers={["Code", "Type", "Top Result", "Sampled At", "Open"]}
-                rows={pagedSamples.map((s) => [
-                  s.code,
-                  s.sampleType ?? "-",
-
-                  (() => {
-                    const top = getTopResult(s);
-                    if (!top)
-                      return <span className="text-[var(--color-on-surface-variant)]">-</span>;
-                    return (
-                      <span
-                        className={`inline-flex rounded-full px-2 py-0.5 text-xs font-bold ${resultBadgeClass(top.value)}`}
-                      >
-                        {top.symbol}: {top.value}
-                        {top.unit ? ` ${top.unit}` : ""}
-                      </span>
-                    );
-                  })(),
-                  s.sampledAt ? new Date(s.sampledAt).toLocaleDateString("es-BO") : "-",
-                  <Link
-                    key={s.id}
-                    className="text-[var(--color-primary)]"
-                    to={p(areaId, levelId, s.miningLaborId, s.id)}
+      <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_360px]">
+        <div className="min-w-0 space-y-4">
+          <Section
+            title={laborName ? `Samples · ${laborName}` : levelName ? `Samples · ${levelName}` : "Samples"}
+            description={hasContext ? "Highest result first. Click a sample to see its details and lab results." : undefined}
+            action={
+              hasContext ? (
+                <div className="flex flex-wrap items-center gap-2">
+                  <input
+                    value={sampleSearch}
+                    onChange={(e) => {
+                      setSampleSearch(e.target.value);
+                      setSamplePage(0);
+                    }}
+                    placeholder="Search by code…"
+                    className="w-44 rounded-lg border border-[var(--color-border-soft)] bg-[var(--color-surface-container-high)] px-3 py-1.5 text-sm outline-none focus:border-[var(--color-primary)]"
+                  />
+                  <select
+                    value={sampleRowsPerPage}
+                    onChange={(e) => {
+                      setSampleRowsPerPage(Number(e.target.value));
+                      setSamplePage(0);
+                    }}
+                    aria-label="Rows per page"
+                    className="rounded-lg border border-[var(--color-border-soft)] bg-[var(--color-surface-container-high)] px-2 py-1.5 text-sm"
                   >
-                    Select
-                  </Link>
-                ])}
-                empty={
-                  laborId
-                    ? "No samples in selected labor."
-                    : levelId
-                      ? "No samples in selected level."
-                      : "Select a level to view samples."
-                }
-              />
-            </div>
-            <div className="mt-2 flex items-center justify-between text-xs text-[var(--color-on-surface-variant)]">
-              <span>
-                Page {safeSamplePage + 1} / {sampleTotalPages} · {sampleRows.length} records
-              </span>
-              <div className="flex items-center gap-2">
-                <button
-                  onClick={() => setSamplePage((p) => Math.max(0, p - 1))}
-                  disabled={safeSamplePage <= 0}
-                  className="rounded-md border border-[var(--color-border-soft)] px-2 py-1 disabled:opacity-40"
-                >
-                  ←
-                </button>
-                <button
-                  onClick={() => setSamplePage((p) => Math.min(sampleTotalPages - 1, p + 1))}
-                  disabled={safeSamplePage >= sampleTotalPages - 1}
-                  className="rounded-md border border-[var(--color-border-soft)] px-2 py-1 disabled:opacity-40"
-                >
-                  →
-                </button>
-              </div>
-            </div>
-            <div
-              ref={relevantSampleRef}
-              className="mt-3 rounded-lg border border-[var(--color-border-soft)] bg-[var(--color-surface-container-high)] p-3"
-            >
-              <p className="mb-2 text-xs font-bold uppercase tracking-wide text-[var(--color-on-surface-variant)]">
-                Relevant Sample Data
+                    {pageSizes.map((size) => (
+                      <option key={size} value={size}>
+                        {size} rows
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              ) : undefined
+            }
+          >
+            {!hasContext ? (
+              <p className="rounded-xl border border-dashed border-[var(--color-border-soft)] px-4 py-10 text-center text-sm text-[var(--color-on-surface-variant)]">
+                {areaId ? "Now choose a level to see its samples." : "Start by choosing an area above."}
               </p>
-              {selectedSample ? (
-                <div className="grid grid-cols-2 gap-2 text-xs">
-                  <K label="Code" value={selectedSample.code} />
-                  {/* <K label="Name" value={selectedSample.name ?? "-"} /> */}
-                  <K label="Sample Type" value={selectedSample.sampleType ?? "-"} />
-                  {/* <K label="Number" value={selectedSample.number ?? "-"} /> */}
-                  <K label="Place Ref." value={selectedSample.placeReference ?? "-"} />
-                  <K label="Sampled At" value={selectedSample.sampledAt ?? "-"} />
-                  <K label="East" value={selectedSample.east ?? "-"} />
-                  <K label="North" value={selectedSample.north ?? "-"} />
-                  <K label="Elevation" value={selectedSample.elevation ?? "-"} />
-                  <K label="Description" value={selectedSample.description ?? "-"} />
+            ) : (
+              <>
+                <DataTable
+                  columns={[
+                    { header: "Code", cell: (s) => s.code },
+                    ...(laborId ? [] : [{ header: "Labor", cell: (s: any) => (labors.data ?? []).find((l) => l.id === s.miningLaborId)?.name ?? "—" }]),
+                    { header: "Type", cell: (s) => s.sampleType ?? "—", wide: true },
+                    {
+                      header: "Top result",
+                      cell: (s) => {
+                        const top = getTopResult(s);
+                        if (!top) return <span className="text-[var(--color-on-surface-variant)]">—</span>;
+                        return (
+                          <span className={`inline-flex rounded-full px-2 py-0.5 font-sans text-xs font-bold ${resultBadgeClass(top.value)}`}>
+                            {top.symbol}: {fmtNum(top.value)}
+                            {top.unit ? ` ${top.unit}` : ""}
+                          </span>
+                        );
+                      }
+                    },
+                    { header: "Sampled", cell: (s) => (s.sampledAt ? new Date(s.sampledAt).toLocaleDateString("es-BO") : "—"), wide: true }
+                  ]}
+                  rows={pagedSamples}
+                  rowKey={(s) => s.id}
+                  rowTo={(s) => p(areaId, levelId, s.miningLaborId, s.id)}
+                  empty={sampleSearch ? `No samples match “${sampleSearch}”.` : laborId ? "No samples in the selected labor." : "No samples in the selected level."}
+                />
+                <div className="mt-3 flex flex-wrap items-center justify-between gap-2 text-xs text-[var(--color-on-surface-variant)]">
+                  <span>
+                    {sampleRows.length
+                      ? `Showing ${safeSamplePage * sampleRowsPerPage + 1}–${Math.min((safeSamplePage + 1) * sampleRowsPerPage, sampleRows.length)} of ${sampleRows.length} samples`
+                      : "0 samples"}
+                  </span>
+                  {sampleTotalPages > 1 ? (
+                    <span className="flex items-center gap-2">
+                      <button
+                        onClick={() => setSamplePage((n) => Math.max(0, n - 1))}
+                        disabled={safeSamplePage <= 0}
+                        className="rounded-lg border border-[var(--color-border-soft)] px-3 py-1.5 font-semibold disabled:opacity-40"
+                      >
+                        Previous
+                      </button>
+                      Page {safeSamplePage + 1} of {sampleTotalPages}
+                      <button
+                        onClick={() => setSamplePage((n) => Math.min(sampleTotalPages - 1, n + 1))}
+                        disabled={safeSamplePage >= sampleTotalPages - 1}
+                        className="rounded-lg border border-[var(--color-border-soft)] px-3 py-1.5 font-semibold disabled:opacity-40"
+                      >
+                        Next
+                      </button>
+                    </span>
+                  ) : null}
                 </div>
-              ) : (
-                <p className="text-xs text-[var(--color-on-surface-variant)]">
-                  Select a sample to see key fields.
-                </p>
-              )}
-            </div>
-          </article>
+              </>
+            )}
+          </Section>
 
-          <article className="rounded-xl border border-[var(--color-border-soft)] bg-[var(--color-surface-container-low)] p-4">
-            <div className="mb-3 flex items-center justify-between">
-              <h3 className="text-base font-bold">Results Panel</h3>
-              {canManage ? (
-                <div className="flex flex-wrap gap-2">
-                  <AddBtn label="Laboratory" onClick={() => setModal("laboratory")} />
-                  <AddBtn label="Sample-Lab" onClick={() => setModal("sampleLaboratory")} />
-                  <AddBtn label="Element" onClick={() => setModal("element")} />
-                  <AddBtn label="Result" onClick={() => setModal("result")} />
-                  <AddBtn label="QAQC" onClick={() => setModal("qaqc")} />
-                </div>
-              ) : null}
-            </div>
-            <div className="space-y-3">
-              <Table
-                headers={["Laboratory", "Element", "Value", "Unit"]}
-                rows={selectedSampleResults.map((x: any) => [
-                  x.sampleLaboratoryId
-                    ? (() => {
-                        const slotLaboratory = sampleLabMap.get(x.sampleLaboratoryId);
-                        if (!slotLaboratory) return "-";
-                        const parts = slotLaboratory.split(" · ");
-                        const labId = parts[1];
-                        return laboratoryMap.get(labId) ?? labId ?? "-";
-                      })()
-                    : "-",
-                  elementMap.get(x.elementId) ?? x.elementId,
-                  x.value ?? "-",
-                  x.unit ?? x.element?.defaultUnit ?? "-"
-                ])}
-                empty={
-                  sampleId ? "No results for selected sample." : "Select a sample to view results."
+          {sampleId ? (
+            <div ref={relevantSampleRef} className="space-y-4">
+              <ContextHeader
+                eyebrow="Sample"
+                title={selectedSample?.code ?? "Sample"}
+                subtitle={[selectedSample?.sampleType, selectedSample?.placeReference].filter(Boolean).join(" · ") || undefined}
+                action={
+                  <Link to={laborId ? p(areaId, levelId, laborId) : p(areaId, levelId)} className="rounded-lg border border-[var(--color-border-soft)] px-3 py-1.5 text-xs font-semibold hover:border-[var(--color-primary)]">
+                    Close detail
+                  </Link>
                 }
+                stats={[
+                  { label: "Sampled", value: selectedSample?.sampledAt ? new Date(selectedSample.sampledAt).toLocaleDateString("es-BO") : "—" },
+                  { label: "East", value: fmtNum(selectedSample?.east, 2) },
+                  { label: "North", value: fmtNum(selectedSample?.north, 2) },
+                  { label: "Elevation", value: fmtNum(selectedSample?.elevation, 2) }
+                ]}
               />
-              {/* <Table
-                headers={["Type", "Passed", "Expected", "Obtained", "Deviation %", "Comments"]}
-                rows={(qaqc.data ?? []).map((x) => [
-                  x.type,
-                  x.passed === null || x.passed === undefined ? "-" : x.passed ? "Yes" : "No",
-                  x.expectedValue ?? "-",
-                  x.obtainedValue ?? "-",
-                  x.deviationPercent ?? "-",
-                  x.comments ?? "-"
-                ])}
-                empty={sampleId ? "No QAQC for selected sample." : "Select a sample to view QAQC."}
-              /> */}
+              {selectedSample?.description ? (
+                <p className="rounded-xl border border-[var(--color-border-soft)] bg-[var(--color-surface-container-low)] px-4 py-3 text-sm">{selectedSample.description}</p>
+              ) : null}
+              <Section
+                title="Lab results"
+                action={
+                  canManage ? (
+                    <div className="flex flex-wrap gap-2">
+                      <AddBtn label="Laboratory" onClick={() => setModal("laboratory")} />
+                      <AddBtn label="Sample-Lab" onClick={() => setModal("sampleLaboratory")} />
+                      <AddBtn label="Element" onClick={() => setModal("element")} />
+                      <AddBtn label="Result" onClick={() => setModal("result")} />
+                      <AddBtn label="QAQC" onClick={() => setModal("qaqc")} />
+                    </div>
+                  ) : undefined
+                }
+              >
+                <DataTable
+                  columns={[
+                    { header: "Element", cell: (x: any) => elementMap.get(x.elementId) ?? x.element?.symbol ?? x.elementId },
+                    { header: "Value", cell: (x: any) => fmtNum(x.value), numeric: true },
+                    { header: "Unit", cell: (x: any) => x.unit ?? x.element?.defaultUnit ?? "—" },
+                    { header: "Laboratory", cell: (x: any) => labOf(x) }
+                  ]}
+                  rows={selectedSampleResults}
+                  rowKey={(x: any, i) => String(x.id ?? i)}
+                  empty="No results for this sample yet."
+                />
+              </Section>
             </div>
-          </article>
+          ) : null}
         </div>
+        <aside className="xl:sticky xl:top-24 xl:self-start">{mediaPanel}</aside>
       </div>
 
       {fullScreen ? (
@@ -1379,37 +1388,6 @@ function SurfaceCreateModal({
   );
 }
 
-function MiniList({
-  title,
-  items
-}: {
-  title: string;
-  items: Array<{ id: string; label: string; to: string; selected: boolean }>;
-}) {
-  return (
-    <div className="rounded-lg border border-[var(--color-border-soft)] bg-[var(--color-surface-container-high)] p-2">
-      <p className="mb-2 text-xs font-bold uppercase tracking-wide text-[var(--color-on-surface-variant)]">
-        {title}
-      </p>
-      <div className="grid max-h-56 grid-cols-2 gap-1 overflow-y-auto pr-1 xl:grid-cols-3">
-        {items.length ? (
-          items.map((item) => (
-            <Link
-              key={item.id}
-              to={item.to}
-              className={`block rounded px-2 py-1.5 text-sm ${item.selected ? "bg-[var(--color-primary)] text-[var(--color-on-primary)]" : "hover:bg-[var(--color-surface-container-highest)]"}`}
-            >
-              {item.label}
-            </Link>
-          ))
-        ) : (
-          <p className="px-2 py-1 text-xs text-[var(--color-on-surface-variant)]">No data</p>
-        )}
-      </div>
-    </div>
-  );
-}
-
 function AddBtn({ label, onClick }: { label: string; onClick: () => void }) {
   return (
     <button
@@ -1434,67 +1412,5 @@ function LoadingPanel({ label }: { label: string }) {
         ))}
       </div>
     </section>
-  );
-}
-
-function K({ label, value }: { label: string; value: ReactNode }) {
-  return (
-    <div className="rounded border border-[var(--color-border-soft)] bg-[var(--color-surface-container-low)] px-2 py-1">
-      <span className="block text-[10px] uppercase tracking-wide text-[var(--color-on-surface-variant)]">
-        {label}
-      </span>
-      <span className="text-xs">{value}</span>
-    </div>
-  );
-}
-
-function Table({
-  headers,
-  rows,
-  empty
-}: {
-  headers: string[];
-  rows: Array<Array<string | number | ReactNode>>;
-  empty: string;
-}) {
-  return (
-    <div className="table-scroll overflow-x-auto rounded-lg border border-[var(--color-border-soft)] bg-[var(--color-surface-container-high)]">
-      <table className="w-full border-collapse text-left">
-        <thead>
-          <tr>
-            {headers.map((h) => (
-              <th
-                key={h}
-                className="bg-[var(--color-surface-container-highest)] px-3 py-2 text-xs font-bold uppercase tracking-wide text-[var(--color-on-surface-variant)]"
-              >
-                {h}
-              </th>
-            ))}
-          </tr>
-        </thead>
-        <tbody>
-          {rows.length ? (
-            rows.map((row, idx) => (
-              <tr key={idx} className="border-t border-[var(--color-border-soft)]">
-                {row.map((col, i) => (
-                  <td key={i} className="px-3 py-2 text-sm">
-                    {col}
-                  </td>
-                ))}
-              </tr>
-            ))
-          ) : (
-            <tr>
-              <td
-                colSpan={headers.length}
-                className="px-3 py-4 text-sm text-[var(--color-on-surface-variant)]"
-              >
-                {empty}
-              </td>
-            </tr>
-          )}
-        </tbody>
-      </table>
-    </div>
   );
 }
