@@ -11,6 +11,9 @@ const PRIVATE_PREFIXES = [
   "/solicitudes-data-room",
   "/trabajadores",
   "/usuarios",
+  "/roles",
+  "/auditoria",
+  "/analisis-muestras",
   "/login",
   "/forgot-password",
   "/reset-password"

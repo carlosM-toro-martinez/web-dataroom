@@ -45,3 +45,21 @@
 
 /404
   X-Robots-Tag: noindex, nofollow, noarchive, nosnippet, noimageindex
+
+/roles
+  X-Robots-Tag: noindex, nofollow, noarchive, nosnippet, noimageindex
+
+/roles/*
+  X-Robots-Tag: noindex, nofollow, noarchive, nosnippet, noimageindex
+
+/auditoria
+  X-Robots-Tag: noindex, nofollow, noarchive, nosnippet, noimageindex
+
+/auditoria/*
+  X-Robots-Tag: noindex, nofollow, noarchive, nosnippet, noimageindex
+
+/analisis-muestras
+  X-Robots-Tag: noindex, nofollow, noarchive, nosnippet, noimageindex
+
+/analisis-muestras/*
+  X-Robots-Tag: noindex, nofollow, noarchive, nosnippet, noimageindex

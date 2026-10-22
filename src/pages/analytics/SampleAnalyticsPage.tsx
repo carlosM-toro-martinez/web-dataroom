@@ -91,12 +91,12 @@ function Chip({ tone, children }: { tone: "good" | "warn" | "bad" | "muted"; chi
   return <span className={`inline-flex whitespace-nowrap rounded-full px-2.5 py-0.5 text-[11px] font-bold ${cls}`}>{children}</span>;
 }
 
-function DataTable({ head, rows, empty }: { head: Array<{ label: string; right?: boolean }>; rows: ReactNode[][]; empty: string }) {
+function DataTable({ head, rows, empty, maxHeight }: { head: Array<{ label: string; right?: boolean }>; rows: ReactNode[][]; empty: string; maxHeight?: string }) {
   if (!rows.length) return <Empty>{empty}</Empty>;
   return (
-    <div className="overflow-x-auto rounded-xl border border-[var(--color-border-soft)]">
+    <div className="overflow-auto rounded-xl border border-[var(--color-border-soft)]" style={maxHeight ? { maxHeight } : undefined}>
       <table className="w-full border-collapse text-sm">
-        <thead>
+        <thead className="sticky top-0 z-10">
           <tr className="bg-[var(--color-surface-container-high)]">
             {head.map((h) => (
               <th key={h.label} className={`whitespace-nowrap px-3 py-2 text-[11px] font-bold uppercase tracking-wide text-[var(--color-on-surface-variant)] ${h.right ? "text-right" : "text-left"}`}>
@@ -126,8 +126,8 @@ function BarList({ rows, unit, max }: { rows: Array<{ label: string; sub?: strin
   const top = max ?? Math.max(...rows.map((r) => Math.max(r.value, r.marker ?? 0)), 1e-9);
   return (
     <ul className="space-y-2.5">
-      {rows.map((row) => (
-        <li key={`${row.sub ?? ""}${row.label}`} title={`${row.label}: ${fmt(row.value, 3)} ${unit}${row.note ? ` · ${row.note}` : ""}`}>
+      {rows.map((row, index) => (
+        <li key={`${index}-${row.label}`} title={`${row.label}: ${fmt(row.value, 3)} ${unit}${row.note ? ` · ${row.note}` : ""}`}>
           <div className="flex items-baseline justify-between gap-3 text-sm">
             <span className="min-w-0 truncate font-semibold">
               {row.label}
@@ -193,7 +193,7 @@ function TrendLine({ data, unit }: { data: Array<{ month: string; avg: number; n
   if (data.length < 2) return <Empty>Se necesitan al menos 2 meses con resultados para ver una tendencia.</Empty>;
   const W = 640;
   const H = 200;
-  const pad = { l: 44, r: 12, t: 14, b: 26 };
+  const pad = { l: 44, r: 30, t: 14, b: 26 };
   const max = Math.max(...data.map((d) => d.avg), 1e-9);
   const x = (i: number) => pad.l + ((W - pad.l - pad.r) * i) / (data.length - 1);
   const y = (v: number) => H - pad.b - ((H - pad.t - pad.b) * v) / max;
@@ -214,7 +214,7 @@ function TrendLine({ data, unit }: { data: Array<{ month: string; avg: number; n
           <rect x={x(i) - 18} y={0} width={36} height={H} fill="transparent" />
           <circle cx={x(i)} cy={y(d.avg)} r={hover === i ? 5 : 3.5} fill="var(--color-primary)" stroke="var(--color-surface-container-low)" strokeWidth={2} />
           {i % Math.ceil(data.length / 8) === 0 ? (
-            <text x={x(i)} y={H - 8} textAnchor="middle" fontSize="10" fill="var(--color-on-surface-variant)">
+            <text x={x(i)} y={H - 8} textAnchor={i === data.length - 1 ? "end" : "middle"} fontSize="10" fill="var(--color-on-surface-variant)">
               {monthLabel(d.month)}
             </text>
           ) : null}
@@ -478,7 +478,7 @@ function GradesTab({ filters, element }: { filters: AnalyticsFilters; element: E
         {g.groups.length ? (
           <BarList
             unit={unit}
-            rows={g.groups.slice(0, 15).map((r) => ({ label: r.label, sub: r.parent, value: r.avg, marker: r.max, note: `${r.n} muestras · mediana ${fmt(r.median, 3)} · mín ${fmt(r.min, 3)} · máx ${fmt(r.max, 3)}` }))}
+            rows={g.groups.slice(0, 15).map((r) => ({ label: r.label, sub: r.parent, value: r.avg, marker: r.max, note: `${r.n} muestra${r.n === 1 ? "" : "s"} · mediana ${fmt(r.median, 3)} · mín ${fmt(r.min, 3)} · máx ${fmt(r.max, 3)}` }))}
           />
         ) : (
           <Empty>Sin resultados de este elemento.</Empty>
@@ -603,6 +603,7 @@ function LaboratoriesTab({ filters }: { filters: AnalyticsFilters }) {
         subtitle={overdue.length ? `${overdue.length} de ${pending.length} pasan del plazo normal de su laboratorio.` : `${pending.length} lotes en espera, todos dentro del plazo normal.`}
       >
         <DataTable
+          maxHeight="520px"
           empty="No hay envíos pendientes."
           head={[{ label: "Folio" }, { label: "Laboratorio" }, { label: "Enviado" }, { label: "Muestras pendientes", right: true }, { label: "Espera", right: true }, { label: "Estado" }]}
           rows={[...pending]
@@ -725,7 +726,8 @@ function EstimationMap({ estimation, unit }: { estimation: Estimation; unit: str
   const spanE = Math.max(maxE - minE, 1);
   const spanN = Math.max(maxN - minN, 1);
   const H = Math.min(Math.max((W * spanN) / spanE, 260), 560);
-  const scale = Math.min(W / spanE, H / spanN);
+  const PAD = 16;
+  const scale = Math.min((W - 2 * PAD) / spanE, (H - 2 * PAD) / spanN);
   const ox = (W - spanE * scale) / 2;
   const oy = (H - spanN * scale) / 2;
   const sx = (e: number) => ox + (e - minE) * scale;
