@@ -53,7 +53,7 @@ export function DashboardPage() {
           </Link>
         ) : null}
 
-        {can("analisisMuestras") ? (
+        {can(["analisisMuestras", "misAnalisisMuestras"]) ? (
           <Link to="/analisis-muestras" className={cardClassName}>
             <BarChart3 size={22} className="mb-4 text-[var(--color-primary)]" />
             <h2 className="text-lg font-bold">Análisis de muestras</h2>

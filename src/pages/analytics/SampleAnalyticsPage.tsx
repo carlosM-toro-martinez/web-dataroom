@@ -9,9 +9,12 @@ import {
   useLaboratories,
   useOverview,
   useQuality,
+  useScope,
   type AnalyticsFilters,
   type ElementSel,
-  type Estimation
+  type Estimation,
+  type EstimationMethod,
+  type Variogram
 } from "@/features/analytics/analyticsApi";
 
 type TabKey = "resumen" | "leyes" | "cobertura" | "laboratorios" | "calidad" | "prediccion";
@@ -250,6 +253,7 @@ export function SampleAnalyticsPage() {
   }, [category, source, fromDay, toDay]);
 
   const overview = useOverview(filters);
+  const own = useScope().data?.scope === "own";
   const elements = overview.data?.elements ?? [];
   const selected = elements.find((e) => `${e.symbol}|${e.unit}` === elementKey) ?? elements[0];
   const element: ElementSel = selected ? { element: selected.symbol, unit: selected.unit } : {};
@@ -260,8 +264,18 @@ export function SampleAnalyticsPage() {
       <InternalHeader
         eyebrow="Análisis"
         title="Análisis de muestras"
-        description="Leyes, cobertura, laboratorios y calidad de las muestras de interior mina y superficie, para decidir dónde y cuánto muestrear."
+        description={
+          own
+            ? "Leyes, cobertura, laboratorios y calidad de las muestras que tú registraste, para decidir dónde y cuánto muestrear."
+            : "Leyes, cobertura, laboratorios y calidad de las muestras de interior mina y superficie, para decidir dónde y cuánto muestrear."
+        }
       />
+      {own ? (
+        <p className="-mt-2 flex items-start gap-2 rounded-xl border border-[var(--color-border-soft)] bg-[var(--color-surface-container)] px-4 py-3 text-xs text-[var(--color-on-surface-variant)]">
+          <Info size={15} className="mt-0.5 shrink-0" />
+          Estás viendo solo las muestras que registraste tú. Las cifras de los demás geólogos no aparecen aquí; la estimación espacial usa únicamente tus puntos.
+        </p>
+      ) : null}
 
       <div className={`${panelClass} flex flex-wrap items-end gap-3 p-4`}>
         <label className="min-w-[9rem] flex-1 text-xs font-semibold">
@@ -675,47 +689,111 @@ function QualityTab({ filters, element }: { filters: AnalyticsFilters; element: 
 }
 
 // ─── Estimación espacial ───────────────────────────────────────────────────────
+const METHODS: Array<{ key: EstimationMethod; label: string; hint: string; min: number }> = [
+  { key: "idw", label: "IDW", hint: "Distancia inversa (IDW): simple y rápido, pesa las muestras vecinas según qué tan cerca están.", min: 5 },
+  { key: "kriging", label: "Kriging", hint: "Kriging: aprende cómo se parecen las muestras entre sí (variograma) y además dice qué tan incierta es cada zona.", min: 8 }
+];
+
 function EstimationTab({ filters, element, ready }: { filters: AnalyticsFilters; element: ElementSel; ready: boolean }) {
   const [levelId, setLevelId] = useState<string | undefined>();
-  const estimation = useEstimation(filters, element, levelId, ready);
+  const [method, setMethod] = useState<EstimationMethod>("idw");
+  const estimation = useEstimation(filters, element, levelId, method, ready);
   if (!ready) return <Empty>Todavía no hay resultados cargados.</Empty>;
   if (estimation.isLoading || !estimation.data) return <Loading />;
   const e = estimation.data;
   const unit = e.unit ?? "";
+  const current = METHODS.find((m) => m.key === method)!;
   return (
     <div className="space-y-5">
       <Card
         title={`Mapa de leyes estimadas · ${(e.element ?? "").toUpperCase()}`}
-        subtitle="Estima la ley entre las muestras con el método de distancia inversa (IDW) y propone dónde conviene muestrear después."
+        subtitle={`${current.hint} También propone dónde conviene muestrear después.`}
         action={
-          <select className={`${fieldClass} !w-auto`} value={e.selectedLevelId ?? ""} onChange={(ev) => setLevelId(ev.target.value)} aria-label="Nivel">
-            {e.levels.map((l) => (
-              <option key={l.id} value={l.id}>
-                {l.parent} · {l.label} ({l.points} con coordenadas)
-              </option>
-            ))}
-          </select>
+          <div className="flex flex-wrap items-center gap-2">
+            <div role="group" aria-label="Método de estimación" className="inline-flex overflow-hidden rounded-lg border border-[var(--color-border-soft)]">
+              {METHODS.map((m) => (
+                <button
+                  key={m.key}
+                  type="button"
+                  onClick={() => setMethod(m.key)}
+                  aria-pressed={method === m.key}
+                  className={`px-3 py-1.5 text-xs font-semibold transition ${method === m.key ? "bg-[var(--color-primary)] text-[var(--color-on-primary)]" : "hover:bg-[var(--color-surface-container-high)]"}`}
+                >
+                  {m.label}
+                </button>
+              ))}
+            </div>
+            <select className={`${fieldClass} !w-auto`} value={e.selectedLevelId ?? ""} onChange={(ev) => setLevelId(ev.target.value)} aria-label="Nivel">
+              {e.levels.map((l) => (
+                <option key={l.id} value={l.id}>
+                  {l.parent} · {l.label} ({l.points} con coordenadas)
+                </option>
+              ))}
+            </select>
+          </div>
         }
       >
         {!e.levels.length ? (
           <Empty>No hay muestras con resultado de este elemento.</Empty>
         ) : !e.result ? (
-          <Empty>Este nivel tiene menos de 5 muestras con coordenadas y resultado: no alcanza para estimar. Elige otro nivel o completa las coordenadas.</Empty>
+          <Empty>
+            Este nivel tiene menos de {current.min} muestras con coordenadas y resultado: no alcanza para estimar con {current.label}. Elige otro nivel, completa las coordenadas
+            {method === "kriging" ? " o prueba con IDW, que pide menos puntos." : "."}
+          </Empty>
         ) : (
           <EstimationMap estimation={e} unit={unit} />
         )}
       </Card>
       <p className="flex items-start gap-2 rounded-xl border border-[var(--color-border-soft)] bg-[var(--color-surface-container)] px-4 py-3 text-xs text-[var(--color-on-surface-variant)]">
         <Info size={15} className="mt-0.5 shrink-0" />
-        Es una estimación de apoyo para priorizar, no un recurso ni una reserva. Con pocas muestras la incertidumbre es alta. Antes de decidir sobre perforación o muestreo, un geólogo debe validarla (el siguiente paso técnico es kriging con variograma).
+        Es una estimación de apoyo para priorizar, no un recurso ni una reserva. Con pocas muestras la incertidumbre es alta. Antes de decidir sobre perforación o muestreo, un geólogo debe validarla
+        {method === "kriging" ? " y revisar que el variograma automático tenga sentido geológico." : "; si además quieres ver la incertidumbre de cada zona, usa Kriging."}
       </p>
     </div>
   );
 }
 
+// Variograma: puntos = lo medido entre pares de muestras; curva = el modelo ajustado que usa el kriging.
+function VariogramChart({ vg }: { vg: Variogram }) {
+  const W = 300;
+  const H = 150;
+  const L = 34;
+  const B = 22;
+  const maxH = Math.max(vg.range * 1.15, ...vg.bins.map((b) => b.h), 1e-9);
+  const maxG = Math.max(vg.sill * 1.2, ...vg.bins.map((b) => b.gamma), 1e-9);
+  const x = (h: number) => L + (h / maxH) * (W - L - 8);
+  const y = (g: number) => H - B - (g / maxG) * (H - B - 8);
+  const curve: string[] = [];
+  for (let i = 0; i <= 40; i++) {
+    const h = (maxH * i) / 40;
+    const r = Math.min(h / vg.range, 1);
+    const g = h <= 0 ? 0 : h >= vg.range ? vg.sill : vg.nugget + (vg.sill - vg.nugget) * (1.5 * r - 0.5 * r ** 3);
+    curve.push(`${i === 0 ? "M" : "L"}${x(h).toFixed(1)},${y(g).toFixed(1)}`);
+  }
+  return (
+    <svg viewBox={`0 0 ${W} ${H}`} className="w-full" role="img" aria-label="Variograma">
+      <line x1={L} y1={H - B} x2={W - 8} y2={H - B} stroke="var(--color-border-soft)" />
+      <line x1={L} y1={8} x2={L} y2={H - B} stroke="var(--color-border-soft)" />
+      <path d={curve.join(" ")} fill="none" stroke="var(--color-primary)" strokeWidth={2} />
+      {vg.bins.map((b, i) => (
+        <circle key={i} cx={x(b.h)} cy={y(b.gamma)} r={3.5} fill="var(--color-surface-container-low)" stroke="var(--color-on-surface)" strokeWidth={1.5}>
+          <title>{`A ${Math.round(b.h)} m de distancia: diferencia ${fmt(b.gamma, 3)} (${b.n} pares)`}</title>
+        </circle>
+      ))}
+      <text x={(L + W) / 2} y={H - 4} textAnchor="middle" fontSize="10" fill="var(--color-on-surface-variant)">distancia entre muestras (m)</text>
+      <text x={4} y={14} fontSize="10" fill="var(--color-on-surface-variant)">diferencia</text>
+    </svg>
+  );
+}
+
 function EstimationMap({ estimation, unit }: { estimation: Estimation; unit: string }) {
   const [hover, setHover] = useState<string | null>(null);
+  const [layer, setLayer] = useState<"grade" | "uncertainty">("grade");
   const r = estimation.result!;
+  const kriged = r.method === "kriging";
+  const showUncertainty = kriged && layer === "uncertainty";
+  const maxStdev = Math.max(...r.cells.map((c) => c.stdev ?? 0), 1e-9);
+  const uncertaintyShade = (sd: number) => `color-mix(in srgb, var(--color-tertiary) ${Math.round(8 + (sd / maxStdev) * 87)}%, var(--color-surface-container-low))`;
   const pts = estimation.points ?? [];
   const W = 640;
   const margin = r.radius / 2;
@@ -745,7 +823,7 @@ function EstimationMap({ estimation, unit }: { estimation: Estimation; unit: str
       <div className="lg:col-span-3">
         <svg viewBox={`0 0 ${W} ${H}`} className="w-full rounded-xl border border-[var(--color-border-soft)] bg-[var(--color-surface-container-low)]" role="img" aria-label="Mapa de leyes estimadas">
           {r.cells.map((c, i) => (
-            <rect key={i} x={sx(c.east) - cell / 2} y={sy(c.north) - cell / 2} width={cell + 0.5} height={cell + 0.5} fill={shade(c.estimate)} />
+            <rect key={i} x={sx(c.east) - cell / 2} y={sy(c.north) - cell / 2} width={cell + 0.5} height={cell + 0.5} fill={showUncertainty ? uncertaintyShade(c.stdev ?? 0) : shade(c.estimate)} />
           ))}
           {pts.map((p) => (
             <circle
@@ -773,12 +851,35 @@ function EstimationMap({ estimation, unit }: { estimation: Estimation; unit: str
             </g>
           ))}
         </svg>
+        {kriged ? (
+          <div role="group" aria-label="Capa del mapa" className="mt-3 inline-flex overflow-hidden rounded-lg border border-[var(--color-border-soft)] text-xs font-semibold">
+            {([["grade", "Ley estimada"], ["uncertainty", "Incertidumbre"]] as const).map(([key, label]) => (
+              <button
+                key={key}
+                type="button"
+                aria-pressed={layer === key}
+                onClick={() => setLayer(key)}
+                className={`px-3 py-1.5 transition ${layer === key ? "bg-[var(--color-primary)] text-[var(--color-on-primary)]" : "hover:bg-[var(--color-surface-container-high)]"}`}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+        ) : null}
         <div className="mt-3 flex flex-wrap items-center gap-x-5 gap-y-2 text-xs text-[var(--color-on-surface-variant)]">
-          <span className="flex items-center gap-2">
-            {fmt(r.stats.min, 3)}
-            <span className="h-2.5 w-24 rounded" style={{ background: `linear-gradient(90deg, ${shade(lo)}, ${shade(r.stats.max)})` }} />
-            {fmt(r.stats.max, 3)} {unit}
-          </span>
+          {showUncertainty ? (
+            <span className="flex items-center gap-2">
+              más segura
+              <span className="h-2.5 w-24 rounded" style={{ background: `linear-gradient(90deg, ${uncertaintyShade(0)}, ${uncertaintyShade(maxStdev)})` }} />
+              más incierta
+            </span>
+          ) : (
+            <span className="flex items-center gap-2">
+              {fmt(r.stats.min, 3)}
+              <span className="h-2.5 w-24 rounded" style={{ background: `linear-gradient(90deg, ${shade(lo)}, ${shade(r.stats.max)})` }} />
+              {fmt(r.stats.max, 3)} {unit}
+            </span>
+          )}
           <span className="flex items-center gap-1.5"><span className="inline-block h-2.5 w-2.5 rounded-full border-[1.5px] border-[var(--color-on-surface)]" /> muestra real</span>
           <span className="flex items-center gap-1.5"><span className="inline-block h-2.5 w-2.5 rotate-45 bg-[var(--color-tertiary)]" /> punto sugerido</span>
         </div>
@@ -795,7 +896,8 @@ function EstimationMap({ estimation, unit }: { estimation: Estimation; unit: str
                   <span>
                     <span className="font-mono text-xs">E {Math.round(s.east)} · N {Math.round(s.north)}</span>
                     <span className="block text-xs text-[var(--color-on-surface-variant)]">
-                      Ley estimada {fmt(s.estimate, 3)} {unit} · a {Math.round(s.distance)} m de la muestra más cercana
+                      Ley estimada {fmt(s.estimate, 3)} {unit}
+                      {s.stdev != null ? ` (± ${fmt(s.stdev, 3)})` : ""} · a {Math.round(s.distance)} m de la muestra más cercana
                     </span>
                   </span>
                 </li>
@@ -813,6 +915,22 @@ function EstimationMap({ estimation, unit }: { estimation: Estimation; unit: str
             {reliability ? ` (${reliability})` : ""}, error típico {fmt(v.rmse, 3)} {unit}, sobre {v.n} muestras.
           </p>
         </div>
+        {r.variogram ? (
+          <div className="rounded-xl border border-[var(--color-border-soft)] bg-[var(--color-surface-container)] px-3.5 py-3 text-sm">
+            <p className="font-bold">Variograma del kriging</p>
+            <VariogramChart vg={r.variogram} />
+            <p className="mt-1 text-xs text-[var(--color-on-surface-variant)]">
+              Las muestras se parecen hasta unos <strong className="text-[var(--color-on-surface)]">{Math.round(r.variogram.range)} m</strong> (alcance); el ruido propio de la ley (pepita) es{" "}
+              <strong className="text-[var(--color-on-surface)]">{r.variogram.sill > 0 ? Math.round((r.variogram.nugget / r.variogram.sill) * 100) : 0}%</strong> de la variación total.
+            </p>
+            {r.variogram.fit != null && r.variogram.fit < 0.5 ? (
+              <p className="mt-2 flex items-start gap-1.5 text-xs text-[var(--color-on-surface-variant)]">
+                <AlertTriangle size={13} className="mt-0.5 shrink-0" />
+                El modelo calza poco con los datos ({Math.round(r.variogram.fit * 100)}%): hay pocas muestras o la ley casi no depende de la ubicación. Toma el kriging de este nivel con mucha cautela.
+              </p>
+            ) : null}
+          </div>
+        ) : null}
       </div>
     </div>
   );

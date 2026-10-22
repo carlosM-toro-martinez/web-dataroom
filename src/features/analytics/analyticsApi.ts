@@ -8,6 +8,8 @@ export type AnalyticsFilters = {
   to?: string;
 };
 
+export type EstimationMethod = "idw" | "kriging";
+
 export type ElementSel = { element?: string; unit?: string };
 
 export type Overview = {
@@ -47,16 +49,22 @@ export type Quality = {
   worst: Array<{ code: string; lab_a: string; lab_b: string; va: number; vb: number; diff_pct: number }>;
 };
 
+export type Variogram = {
+  model: "spherical"; nugget: number; sill: number; range: number; fit: number | null;
+  bins: Array<{ h: number; gamma: number; n: number }>;
+};
+
 export type Estimation = {
-  element: string | null; unit: string | null;
+  element: string | null; unit: string | null; method: EstimationMethod;
   levels: Array<{ id: string; label: string; parent: string; samples: number; points: number }>;
   selectedLevelId: string | null;
   points?: Array<{ id: string; code: string; east: number; north: number; value: number }>;
   result: null | {
+    method: EstimationMethod; variogram?: Variogram;
     points: number; step: number; radius: number;
     bounds: { minEast: number; maxEast: number; minNorth: number; maxNorth: number };
-    cells: Array<{ east: number; north: number; estimate: number; distance: number }>;
-    suggestions: Array<{ east: number; north: number; estimate: number; distance: number; score: number }>;
+    cells: Array<{ east: number; north: number; estimate: number; distance: number; stdev?: number }>;
+    suggestions: Array<{ east: number; north: number; estimate: number; distance: number; score: number; stdev?: number }>;
     validation: { n: number; rmse: number; meanError: number; correlation: number | null };
     stats: { min: number; max: number; mean: number; p75: number };
   };
@@ -83,5 +91,9 @@ export const useLaboratories = (f: AnalyticsFilters) =>
   useQuery({ queryKey: ["analytics", "laboratories", f], queryFn: () => get<Laboratories>("laboratories", base(f)), ...options });
 export const useQuality = (f: AnalyticsFilters, e: ElementSel) =>
   useQuery({ queryKey: ["analytics", "quality", f, e], queryFn: () => get<Quality>("quality", { ...base(f), ...e }), ...options });
-export const useEstimation = (f: AnalyticsFilters, e: ElementSel, levelId: string | undefined, enabled: boolean) =>
-  useQuery({ queryKey: ["analytics", "estimation", f, e, levelId], queryFn: () => get<Estimation>("estimation", { ...base(f), ...e, levelId }), enabled, ...options });
+export const useEstimation = (f: AnalyticsFilters, e: ElementSel, levelId: string | undefined, method: EstimationMethod, enabled: boolean) =>
+  useQuery({ queryKey: ["analytics", "estimation", f, e, levelId, method], queryFn: () => get<Estimation>("estimation", { ...base(f), ...e, levelId, method }), enabled, ...options });
+
+// "all": ve todas las muestras. "own": solo las que registró la propia persona.
+export const useScope = () =>
+  useQuery({ queryKey: ["analytics", "scope"], queryFn: () => get<{ scope: "all" | "own" }>("scope", {}), staleTime: 5 * 60_000 });

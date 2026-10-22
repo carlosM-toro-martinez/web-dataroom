@@ -97,7 +97,7 @@ export function DataRoomRouter() {
             <Route path="/sondajes/pozos/:holeId" element={<SondajesHolePage />} />
           </Route>
 
-          <Route element={<PermissionRoute module="analisisMuestras" />}>
+          <Route element={<PermissionRoute module={["analisisMuestras", "misAnalisisMuestras"]} />}>
             <Route path="/analisis-muestras" element={<SampleAnalyticsPage />} />
           </Route>
 

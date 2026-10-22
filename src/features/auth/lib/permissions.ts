@@ -9,6 +9,7 @@ export type PermissionModule =
   | "sondajes"
   | "geologiaSondajes"
   | "analisisMuestras"
+  | "misAnalisisMuestras"
   | "elementos"
   | "solicitudes"
   | "usuarios";
