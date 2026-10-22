@@ -34,5 +34,6 @@ export const sondajesEndpoints = {
   holeGeologyLog: (holeId: string) => `/api/drilling/holes/${holeId}/geology-log`,
   holePhotos: (holeId: string) => `/api/drilling/holes/${holeId}/photos`,
   photoById: (id: string) => `/api/drilling/photos/${id}`,
+  photosIntegrity: "/api/drilling/photos-integrity",
   photoFile: (id: string, variant: "thumb" | "full") => `/api/drilling/photos/${id}/file?variant=${variant}`
 } as const;

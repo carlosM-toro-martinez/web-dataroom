@@ -1,4 +1,5 @@
 import { AlertTriangle, Check, CloudUpload, ImageOff } from "lucide-react";
+import { ApiError } from "@/shared/api/core/apiError";
 import type { SyncState } from "@/features/sondajes/lib/shiftReports";
 import { useObjectUrl, usePhotoBlob } from "@/features/sondajes/hooks/useGeology";
 import type { PhotoView } from "@/features/sondajes/lib/geology";
@@ -48,11 +49,23 @@ export function PhotoImage({
     return <img src={url} alt={alt} className={`${className} ${fit === "cover" ? "object-cover" : "object-contain"}`} draggable={false} />;
   }
   if (blobQuery.isError || (!blobQuery.isLoading && !blobQuery.data)) {
+    // Distingue la causa real: sin internet, archivo perdido en el servidor, permiso u otro error.
+    const status = blobQuery.error instanceof ApiError ? blobQuery.error.statusCode : undefined;
+    const offline = typeof navigator !== "undefined" && !navigator.onLine;
+    const message = offline || (!status && !blobQuery.error) ? "Disponible con conexión" : status === 404 ? "Archivo no encontrado en el servidor" : status === 401 || status === 403 ? "Sin permiso para ver la imagen" : "No se pudo cargar · toca para reintentar";
     return (
-      <div className={`${className} flex flex-col items-center justify-center gap-1 bg-[var(--color-surface-container-high)] text-[var(--color-on-surface-variant)]`}>
+      <button
+        type="button"
+        title={status ? `Error ${status}` : undefined}
+        onClick={(event) => {
+          event.stopPropagation();
+          void blobQuery.refetch();
+        }}
+        className={`${className} flex flex-col items-center justify-center gap-1 bg-[var(--color-surface-container-high)] text-[var(--color-on-surface-variant)]`}
+      >
         <ImageOff size={18} />
-        <span className="px-2 text-center text-[10px] font-semibold">Disponible con conexión</span>
-      </div>
+        <span className="px-2 text-center text-[10px] font-semibold">{message}</span>
+      </button>
     );
   }
   return <div className={`${className} animate-pulse bg-[var(--color-surface-container-high)]`} />;

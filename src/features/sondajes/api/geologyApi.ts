@@ -88,3 +88,16 @@ export async function fetchPhotoBlob(id: string, variant: "thumb" | "full") {
   const response = await httpClient.get(endpoints.photoFile(id, variant), { responseType: "blob", timeout: UPLOAD_TIMEOUT });
   return response.data as Blob;
 }
+
+export type PhotoIntegrity = {
+  total: number;
+  missingCount: number;
+  mediaFolderExists: boolean;
+  missing: Array<{ id: string; code: string; hole: string; createdAt: string; missing: Array<"file" | "thumb"> }>;
+};
+
+// Qué fotos tienen registro pero no archivo en el servidor.
+export async function getPhotosIntegrity(holeId?: string) {
+  const response = await httpClient.get(endpoints.photosIntegrity, { params: holeId ? { holeId } : undefined });
+  return (response.data?.data ?? response.data) as PhotoIntegrity;
+}

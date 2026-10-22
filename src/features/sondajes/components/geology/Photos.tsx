@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Camera, ChevronLeft, ChevronRight, Download, ImagePlus, Images, Save, Trash2, X } from "lucide-react";
+import { AlertTriangle, Camera, ChevronLeft, ChevronRight, Download, ImagePlus, Images, Save, Trash2, X } from "lucide-react";
+import { useQuery } from "@tanstack/react-query";
+import { getPhotosIntegrity } from "@/features/sondajes/api/geologyApi";
 import { useToast } from "@/shared/ui/toast/ToastProvider";
 import { useAuth } from "@/features/auth/context/AuthContext";
 import {
@@ -571,3 +573,33 @@ export function PhotoStrip({ photos, onOpen }: { photos: PhotoView[]; onOpen: (p
   );
 }
 
+
+// Avisa si hay fotos con registro pero sin archivo en el servidor (por ejemplo, si se perdió el volumen de imágenes).
+export function PhotoIntegrityBanner({ holeId }: { holeId: string }) {
+  const [online, setOnline] = useState(() => (typeof navigator === "undefined" ? true : navigator.onLine));
+  useEffect(() => {
+    const update = () => setOnline(navigator.onLine);
+    window.addEventListener("online", update);
+    window.addEventListener("offline", update);
+    return () => {
+      window.removeEventListener("online", update);
+      window.removeEventListener("offline", update);
+    };
+  }, []);
+  const query = useQuery({ queryKey: ["sondajes", "photos-integrity", holeId], queryFn: () => getPhotosIntegrity(holeId), enabled: online, staleTime: 60_000, retry: false });
+  const data = query.data;
+  if (!data || data.missingCount === 0) return null;
+  return (
+    <div className="mb-3 rounded-2xl border border-rose-500/40 bg-rose-500/10 p-4 text-sm" role="alert">
+      <p className="flex items-center gap-2 font-bold text-rose-700">
+        <AlertTriangle size={16} />
+        {data.missingCount} de {data.total} foto(s) de este pozo no tienen su archivo en el servidor
+      </p>
+      <p className="mt-1 text-xs text-[var(--color-on-surface-variant)]">
+        Los registros y sus códigos están a salvo, pero la imagen no se encuentra en el almacenamiento del servidor. No es un problema de tu conexión.
+        Avisa al administrador y conserva los Excel o las fotos originales para volver a cargarlas: {data.missing.slice(0, 6).map((item) => item.code).join(", ")}
+        {data.missing.length > 6 ? "…" : ""}
+      </p>
+    </div>
+  );
+}

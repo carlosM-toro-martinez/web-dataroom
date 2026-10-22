@@ -44,7 +44,7 @@ import { formatReportDate, reportDateToIso } from "@/features/sondajes/lib/shift
 import { SyncBar } from "@/features/sondajes/components/SyncBar";
 import { Modal, dangerButton, iconButton, panelClass, primaryButton, secondaryButton } from "@/features/sondajes/components/ui";
 import { Stat, SyncPill } from "@/features/sondajes/components/geology/GeologyShared";
-import { PhotoGallery, PhotoLightbox, PhotoStrip, PhotoUploadModal } from "@/features/sondajes/components/geology/Photos";
+import { PhotoGallery, PhotoIntegrityBanner, PhotoLightbox, PhotoStrip, PhotoUploadModal } from "@/features/sondajes/components/geology/Photos";
 import { GeologyReportFormModal, type AttachedPhoto } from "@/features/sondajes/components/geology/GeologyReportFormModal";
 import { GeologyLogView } from "@/features/sondajes/components/geology/GeologyLogView";
 import { GeologyImportModal, describeImport } from "@/features/sondajes/components/geology/GeologyImportModal";
@@ -289,6 +289,8 @@ export function GeologyPanel({ hole, campaign }: { hole: DrillingHole; campaign?
           onImport={() => setImportOpen(true)}
         />
       ) : (
+        <>
+        <PhotoIntegrityBanner holeId={hole.id} />
         <PhotoGallery
           photos={photos}
           reports={reports}
@@ -296,6 +298,7 @@ export function GeologyPanel({ hole, campaign }: { hole: DrillingHole; campaign?
           onOpen={(photo) => openPhoto(photo)}
           onAdd={() => setUpload({ open: true, defaults: { reportId: lastReport?.id ?? null } })}
         />
+        </>
       )}
 
       <GeologyReportFormModal
