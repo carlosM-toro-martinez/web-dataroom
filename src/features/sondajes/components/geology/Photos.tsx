@@ -591,7 +591,8 @@ export function PhotoIntegrityBanner({ holeId }: { holeId: string }) {
   const { can } = useAuth();
   const query = useQuery({ queryKey: ["sondajes", "photos-integrity", holeId], queryFn: () => getPhotosIntegrity(holeId), enabled: online, staleTime: 60_000, retry: false });
   const data = query.data;
-  if (!data || data.missingCount === 0) return null;
+  // Solo lo ve quien puede restaurar: al resto no se le muestra una alarma que no puede resolver.
+  if (!can("geologiaSondajes", "update") || !data || data.missingCount === 0) return null;
   return (
     <div className="mb-3 rounded-2xl border border-rose-500/40 bg-rose-500/10 p-4 text-sm" role="alert">
       <p className="flex items-center gap-2 font-bold text-rose-700">
@@ -603,11 +604,9 @@ export function PhotoIntegrityBanner({ holeId }: { holeId: string }) {
         Avisa al administrador y conserva los Excel o las fotos originales para volver a cargarlas: {data.missing.slice(0, 6).map((item) => item.code).join(", ")}
         {data.missing.length > 6 ? "…" : ""}
       </p>
-      {can("geologiaSondajes", "update") ? (
-        <button type="button" className={`${primaryButton} mt-3`} onClick={() => setRestoreOpen(true)}>
-          Restaurar imágenes con los Excel o fotos originales
-        </button>
-      ) : null}
+      <button type="button" className={`${primaryButton} mt-3`} onClick={() => setRestoreOpen(true)}>
+        Restaurar imágenes con los Excel o fotos originales
+      </button>
       <RestorePhotosModal
         open={restoreOpen}
         holeId={holeId}
