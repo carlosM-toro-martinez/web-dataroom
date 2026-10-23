@@ -15,6 +15,7 @@ import {
   FolderPlus,
   Microscope,
   Layers,
+  LifeBuoy,
   MoreVertical,
   Pencil,
   Plus,
@@ -49,6 +50,7 @@ import { HoleDetailModal } from "@/features/sondajes/components/HoleDetailModal"
 import { ProgramFormModal } from "@/features/sondajes/components/ProgramFormModal";
 import { ImportProgramModal, type ImportRequest } from "@/features/sondajes/components/ImportProgramModal";
 import { PersonnelModal } from "@/features/sondajes/components/PersonnelModal";
+import { RestorePhotosModal } from "@/features/sondajes/components/geology/RestorePhotosModal";
 import { ShiftReportsBackupModal } from "@/features/sondajes/components/ShiftReportsBackupModal";
 import { SyncBar } from "@/features/sondajes/components/SyncBar";
 import { useShiftReportsSync } from "@/features/sondajes/hooks/useShiftReportsSync";
@@ -136,6 +138,7 @@ export function SondajesPage() {
   const [personnelOpen, setPersonnelOpen] = useState(false);
   const [geologyImportOpen, setGeologyImportOpen] = useState(false);
   const [backupOpen, setBackupOpen] = useState(false);
+  const [restoreOpen, setRestoreOpen] = useState(false);
   const [confirm, setConfirm] = useState<ConfirmState>(null);
   const [statusSavingId, setStatusSavingId] = useState<string | null>(null);
 
@@ -287,6 +290,7 @@ export function SondajesPage() {
                 : []),
               ...(canDrilling ? [{ key: "personnel", label: "Personal", icon: <Users size={16} />, onClick: () => setPersonnelOpen(true) }] : []),
               ...(canDrilling ? [{ key: "backup", label: "Respaldo de partes", icon: <ClipboardList size={16} />, onClick: () => setBackupOpen(true) }] : []),
+              ...(can("geologiaSondajes", "update") ? [{ key: "restore", label: "Restaurar imágenes perdidas", icon: <LifeBuoy size={16} />, onClick: () => setRestoreOpen(true) }] : []),
               ...(canCreate ? [{ key: "import", label: "Importar Excel", icon: <FileSpreadsheet size={16} />, onClick: () => setImportOpen(true) }] : [])
             ]}
           />
@@ -547,6 +551,7 @@ export function SondajesPage() {
         onImport={runImport}
       />
       {canDrilling ? <PersonnelModal open={personnelOpen} onClose={() => setPersonnelOpen(false)} /> : null}
+      {can("geologiaSondajes", "update") ? <RestorePhotosModal open={restoreOpen} onClose={() => setRestoreOpen(false)} /> : null}
       {canDrilling ? (
         <ShiftReportsBackupModal
           open={backupOpen}

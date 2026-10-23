@@ -93,11 +93,19 @@ export type PhotoIntegrity = {
   total: number;
   missingCount: number;
   mediaFolderExists: boolean;
-  missing: Array<{ id: string; code: string; hole: string; createdAt: string; missing: Array<"file" | "thumb"> }>;
+  missing: Array<{ id: string; code: string; hole: string; holeId: string; contentHash: string | null; mimeType: string; createdAt: string; missing: Array<"file" | "thumb"> }>;
 };
 
 // Qué fotos tienen registro pero no archivo en el servidor.
 export async function getPhotosIntegrity(holeId?: string) {
   const response = await httpClient.get(endpoints.photosIntegrity, { params: holeId ? { holeId } : undefined });
   return (response.data?.data ?? response.data) as PhotoIntegrity;
+}
+
+// Devuelve la imagen a un registro de foto que ya existe (se perdió el archivo en el servidor).
+export async function restorePhotoFile(id: string, full: Blob, thumb: Blob) {
+  const form = new FormData();
+  form.append("file", full, `${id}.jpg`);
+  form.append("thumb", thumb, `${id}_thumb.jpg`);
+  await httpClient.put(endpoints.photoRestore(id), form, { headers: { "Content-Type": "multipart/form-data" }, timeout: UPLOAD_TIMEOUT });
 }

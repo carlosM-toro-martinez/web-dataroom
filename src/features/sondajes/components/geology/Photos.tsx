@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { AlertTriangle, Camera, ChevronLeft, ChevronRight, Download, ImagePlus, Images, Save, Trash2, X } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { getPhotosIntegrity } from "@/features/sondajes/api/geologyApi";
+import { RestorePhotosModal } from "@/features/sondajes/components/geology/RestorePhotosModal";
 import { useToast } from "@/shared/ui/toast/ToastProvider";
 import { useAuth } from "@/features/auth/context/AuthContext";
 import {
@@ -586,6 +587,8 @@ export function PhotoIntegrityBanner({ holeId }: { holeId: string }) {
       window.removeEventListener("offline", update);
     };
   }, []);
+  const [restoreOpen, setRestoreOpen] = useState(false);
+  const { can } = useAuth();
   const query = useQuery({ queryKey: ["sondajes", "photos-integrity", holeId], queryFn: () => getPhotosIntegrity(holeId), enabled: online, staleTime: 60_000, retry: false });
   const data = query.data;
   if (!data || data.missingCount === 0) return null;
@@ -600,6 +603,19 @@ export function PhotoIntegrityBanner({ holeId }: { holeId: string }) {
         Avisa al administrador y conserva los Excel o las fotos originales para volver a cargarlas: {data.missing.slice(0, 6).map((item) => item.code).join(", ")}
         {data.missing.length > 6 ? "…" : ""}
       </p>
+      {can("geologiaSondajes", "update") ? (
+        <button type="button" className={`${primaryButton} mt-3`} onClick={() => setRestoreOpen(true)}>
+          Restaurar imágenes con los Excel o fotos originales
+        </button>
+      ) : null}
+      <RestorePhotosModal
+        open={restoreOpen}
+        holeId={holeId}
+        onClose={() => {
+          setRestoreOpen(false);
+          void query.refetch();
+        }}
+      />
     </div>
   );
 }
