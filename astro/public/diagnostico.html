@@ -1,0 +1,249 @@
+<!doctype html>
+<html lang="es" translate="no">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex, nofollow">
+  <meta name="google" content="notranslate">
+  <title>Diagnóstico de conexión | Minera Marte</title>
+  <style>
+    :root { --ok:#15803d; --bad:#b91c1c; --warn:#b45309; --muted:#64748b; --line:#e2e8f0; --bg:#f8fafc; --ink:#0f172a; }
+    * { box-sizing: border-box; }
+    body { margin:0; background:var(--bg); color:var(--ink); font:17px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+    main { max-width:760px; margin:0 auto; padding:20px 16px 40px; }
+    h1 { font-size:22px; margin:0 0 4px; }
+    p.sub { margin:0 0 16px; color:var(--muted); font-size:15px; }
+    .verdict { border-radius:12px; padding:16px 18px; margin:0 0 16px; border:2px solid var(--line); background:#fff; }
+    .verdict h2 { margin:0 0 6px; font-size:20px; }
+    .verdict p { margin:4px 0 0; }
+    .verdict.ok { border-color:var(--ok); background:#f0fdf4; } .verdict.ok h2 { color:var(--ok); }
+    .verdict.bad { border-color:var(--bad); background:#fef2f2; } .verdict.bad h2 { color:var(--bad); }
+    .verdict.warn { border-color:var(--warn); background:#fffbeb; } .verdict.warn h2 { color:var(--warn); }
+    .card { background:#fff; border:1px solid var(--line); border-radius:12px; margin:0 0 16px; overflow:hidden; }
+    .card h3 { margin:0; padding:10px 16px; font-size:13px; letter-spacing:.06em; text-transform:uppercase; color:var(--muted); background:#f1f5f9; }
+    .row { display:flex; gap:12px; padding:11px 16px; border-top:1px solid var(--line); align-items:flex-start; }
+    .row:first-of-type { border-top:0; }
+    .icon { flex:0 0 28px; height:28px; border-radius:50%; display:grid; place-items:center; color:#fff; font-weight:700; background:#94a3b8; }
+    .row.ok .icon { background:var(--ok); } .row.bad .icon { background:var(--bad); } .row.warn .icon { background:var(--warn); }
+    .row .name { font-weight:600; } .row .detail { color:var(--muted); font-size:15px; word-break:break-word; }
+    .row.bad .detail { color:var(--bad); }
+    table.info { width:100%; border-collapse:collapse; }
+    table.info td { padding:8px 16px; border-top:1px solid var(--line); vertical-align:top; font-size:15px; }
+    table.info tr:first-child td { border-top:0; } table.info td:first-child { color:var(--muted); width:42%; }
+    .code { font:700 22px/1 ui-monospace, Consolas, monospace; letter-spacing:.12em; }
+    .actions { display:flex; gap:10px; flex-wrap:wrap; margin-top:4px; }
+    button { font:inherit; font-weight:600; padding:10px 16px; border-radius:10px; border:1px solid #cbd5e1; background:#fff; cursor:pointer; }
+    button.primary { background:#0f172a; color:#fff; border-color:#0f172a; }
+    .foot { color:var(--muted); font-size:13px; margin-top:14px; }
+  </style>
+</head>
+<body>
+<main>
+  <h1>Diagnóstico de conexión</h1>
+  <p class="sub">Espera unos segundos a que terminen las pruebas. Luego toma una <b>foto o captura de toda esta pantalla</b> y envíala.</p>
+
+  <div id="verdict" class="verdict"><h2>Probando…</h2><p>Esto toma menos de 20 segundos.</p></div>
+
+  <div class="card"><h3>Pruebas</h3><div id="tests"></div></div>
+
+  <div class="card"><h3>Tu equipo</h3><table class="info" id="info"></table></div>
+
+  <div class="card"><h3>Código de esta prueba</h3>
+    <div class="row"><div><div class="code" id="code"></div><div class="detail" id="when"></div></div></div>
+  </div>
+
+  <div class="actions">
+    <button class="primary" id="again">Probar de nuevo</button>
+    <button id="copy">Copiar resultado</button>
+  </div>
+  <noscript><p class="foot"><b>Esta página necesita JavaScript.</b> Actívalo en tu navegador y recarga.</p></noscript>
+  <p class="foot">Esta prueba no pide ni guarda contraseñas. Solo comprueba si tu navegador puede comunicarse con el sistema de Minera Marte.</p>
+</main>
+
+<script>
+(function () {
+  "use strict";
+  var API_NEW = "https://api.minmartesrl.com";
+  var API_OLD = "https://api-exploracion.marte.encuentrass.lat";
+  var TIMEOUT_MS = 12000;
+  var code = "";
+  var lastText = "";
+
+  var $ = function (id) { return document.getElementById(id); };
+
+  function newCode() { return Math.random().toString(36).replace(/[^a-z0-9]/g, "").slice(2, 8).toUpperCase().padEnd(6, "X"); }
+
+  function probe(url, options) {
+    var controller = new AbortController();
+    var timer = setTimeout(function () { controller.abort(); }, TIMEOUT_MS);
+    var started = performance.now();
+    var init = Object.assign({ cache: "no-store", signal: controller.signal }, options || {});
+    return fetch(url, init).then(
+      function (response) { return { reached: true, response: response, ms: Math.round(performance.now() - started) }; },
+      function (error) { return { reached: false, timedOut: error && error.name === "AbortError", ms: Math.round(performance.now() - started) }; }
+    ).then(function (result) { clearTimeout(timer); return result; });
+  }
+
+  function addRow(state, name, detail) {
+    var row = document.createElement("div");
+    row.className = "row " + state;
+    row.innerHTML = '<div class="icon">' + (state === "ok" ? "&#10003;" : state === "bad" ? "&#10007;" : state === "warn" ? "!" : "…") + '</div>' +
+      '<div><div class="name"></div><div class="detail"></div></div>';
+    row.querySelector(".name").textContent = name;
+    row.querySelector(".detail").textContent = detail;
+    $("tests").appendChild(row);
+    return row;
+  }
+
+  function setRow(row, state, detail) {
+    row.className = "row " + state;
+    row.querySelector(".icon").innerHTML = state === "ok" ? "&#10003;" : state === "bad" ? "&#10007;" : state === "warn" ? "!" : "…";
+    row.querySelector(".detail").textContent = detail;
+  }
+
+  function browserName() {
+    var ua = navigator.userAgent;
+    var os = /Windows/.test(ua) ? "Windows" : /Android/.test(ua) ? "Android" : /iPhone|iPad/.test(ua) ? "iPhone/iPad" : /Mac OS/.test(ua) ? "Mac" : /Linux/.test(ua) ? "Linux" : "otro sistema";
+    var m = ua.match(/(Edg|OPR|Firefox|Chrome|Version)\/([\d.]+)/);
+    var name = m ? ({ Edg: "Edge", OPR: "Opera", Version: "Safari" }[m[1]] || m[1]) + " " + m[2].split(".")[0] : "navegador desconocido";
+    return name + " en " + os;
+  }
+
+  function fillInfo(clockDiffMs) {
+    var now = new Date();
+    var conn = navigator.connection ? (navigator.connection.effectiveType || "") + (navigator.connection.saveData ? " (ahorro de datos)" : "") : "no disponible";
+    var translated = /translated/.test(document.documentElement.className) ? "SÍ (puede alterar la página)" : "no";
+    var clock = clockDiffMs === null ? "no se pudo comprobar" : (Math.abs(clockDiffMs) < 120000 ? "correcta" : "DESAJUSTADA " + Math.round(Math.abs(clockDiffMs) / 60000) + " min");
+    var rows = [
+      ["Navegador", browserName()],
+      ["Fecha y hora de tu equipo", now.toLocaleString("es-BO", { hour12: false }) + " (" + (Intl.DateTimeFormat().resolvedOptions().timeZone || "zona desconocida") + ")"],
+      ["Reloj respecto al servidor", clock],
+      ["Conectado según el navegador", navigator.onLine ? "sí" : "NO"],
+      ["Tipo de red", conn],
+      ["Idioma", navigator.language || "-"],
+      ["Traducción automática", translated],
+      ["Página abierta desde", location.host]
+    ];
+    var table = $("info");
+    table.innerHTML = "";
+    rows.forEach(function (r) {
+      var tr = document.createElement("tr");
+      tr.innerHTML = "<td></td><td></td>";
+      tr.children[0].textContent = r[0];
+      tr.children[1].textContent = r[1];
+      table.appendChild(tr);
+    });
+    return rows;
+  }
+
+  function showVerdict(kind, title, lines) {
+    var box = $("verdict");
+    box.className = "verdict " + kind;
+    box.innerHTML = "<h2></h2>";
+    box.querySelector("h2").textContent = title;
+    lines.forEach(function (line) {
+      var p = document.createElement("p");
+      p.textContent = line;
+      box.appendChild(p);
+    });
+  }
+
+  function run() {
+    code = newCode();
+    $("code").textContent = code;
+    $("when").textContent = new Date().toISOString().replace("T", " ").slice(0, 19) + " UTC";
+    $("tests").innerHTML = "";
+    $("again").disabled = true;
+    showVerdict("", "Probando…", ["Esto toma menos de 20 segundos."]);
+
+    var rInternet = addRow("", "1. Tu internet funciona", "probando…");
+    var rSite = addRow("", "2. Se puede abrir el sitio minmartesrl.com", "probando…");
+    var rApi = addRow("", "3. Se puede conectar con el sistema (api.minmartesrl.com)", "probando…");
+    var rLogin = addRow("", "4. Ingreso simulado, sin contraseña real (como lo hace el sistema)", "probando…");
+    var rOld = addRow("", "5. Dirección anterior del sistema (solo informativo)", "probando…");
+
+    var result = { internet: false, site: false, api: false, login: false, old: false, clockDiff: null, apiError: "", loginError: "" };
+    var uniq = "?t=" + Date.now();
+
+    var internet = Promise.all([
+      probe("https://www.gstatic.com/generate_204", { mode: "no-cors" }),
+      probe("https://1.1.1.1/cdn-cgi/trace", { mode: "no-cors" })
+    ]).then(function (r) {
+      result.internet = r[0].reached || r[1].reached;
+      setRow(rInternet, result.internet ? "ok" : "bad", result.internet ? "Sí, hay salida a internet." : "No se logró salir a internet.");
+    });
+
+    var site = probe("/health" + uniq).then(function (r) {
+      result.site = r.reached;
+      if (r.reached) {
+        var date = r.response.headers.get("date");
+        if (date) result.clockDiff = Date.now() - new Date(date).getTime();
+      }
+      setRow(rSite, r.reached ? "ok" : "bad", r.reached ? "Sí (" + r.ms + " ms)." : "No respondió.");
+    });
+
+    var api = probe(API_NEW + "/api/health" + uniq, { mode: "cors" }).then(function (r) {
+      if (r.reached) {
+        result.api = true;
+        setRow(rApi, "ok", "Sí: el sistema respondió (HTTP " + r.response.status + ", " + r.ms + " ms).");
+        return;
+      }
+      result.apiError = r.timedOut ? "se agotó el tiempo de espera" : "la conexión fue bloqueada o falló";
+      setRow(rApi, "bad", "No hay conexión con api.minmartesrl.com (" + result.apiError + ").");
+    });
+
+    var login = probe(API_NEW + "/api/auth/login", {
+      method: "POST",
+      mode: "cors",
+      headers: { "Content-Type": "application/json", "x-device-id": "diagnostico-" + code },
+      body: JSON.stringify({ email: "diag-" + code.toLowerCase() + "@example.com", password: "diagnostico", deviceId: "diagnostico-" + code })
+    }).then(function (r) {
+      result.login = r.reached;
+      if (!r.reached) result.loginError = r.timedOut ? "se agotó el tiempo de espera" : "bloqueado o falló";
+      setRow(rLogin, r.reached ? "ok" : "bad", r.reached
+        ? "Sí: el sistema recibió el intento y lo rechazó como corresponde (HTTP " + r.response.status + ")."
+        : "No se pudo enviar (" + result.loginError + ").");
+    });
+
+    var old = probe(API_OLD + "/api/health" + uniq, { mode: "cors" }).then(function (r) {
+      result.old = r.reached;
+      setRow(rOld, r.reached ? "ok" : "warn", r.reached ? "Responde (HTTP " + r.response.status + ")." : "No responde desde tu red. No afecta si la prueba 3 salió bien.");
+    });
+
+    Promise.all([internet, site, api, login, old]).then(function () {
+      var rows = fillInfo(result.clockDiff);
+      var skew = result.clockDiff !== null && Math.abs(result.clockDiff) > 300000;
+      var notes = [];
+      if (skew) notes.push("La hora de tu equipo está desajustada: corrígela (Configuración de fecha y hora, activar ajuste automático). Una hora incorrecta rompe las conexiones seguras.");
+      if (!result.old && result.api) notes.push("Tu red bloquea la dirección anterior del sistema, pero la nueva funciona. Cierra todas las pestañas del sistema y vuelve a abrirlo con Ctrl + F5.");
+
+      if (!result.internet) {
+        showVerdict("bad", "Sin internet", ["Tu equipo no logra salir a internet. Revisa el Wi-Fi o el cable y vuelve a probar."].concat(notes));
+      } else if (result.api && result.login) {
+        showVerdict(notes.length && skew ? "warn" : "ok", "Todo bien: tu navegador llega al sistema", ["Si aun así el sistema te da error, envía una foto de esta pantalla. Cierra las pestañas del sistema y abre de nuevo con Ctrl + F5."].concat(notes));
+      } else if (result.api && !result.login) {
+        showVerdict("bad", "Ve el sistema, pero no puede enviarle datos", ["Tu red o un programa (antivirus, proxy, firewall) deja ver la dirección del sistema pero bloquea el envío de datos, que es lo que se necesita para ingresar."].concat(notes));
+      } else {
+        showVerdict("bad", "Tu red o tu equipo bloquea la conexión con el sistema", ["Tu internet funciona y el sitio abre, pero la conexión con api.minmartesrl.com no se logra. Causas posibles: filtro web o firewall de la oficina, antivirus, VPN, una extensión del navegador, un proxy, o un problema del DNS de tu proveedor.", "Prueba desde el celular con datos móviles: si ahí funciona, el problema está en tu red o en tu equipo.", "Envía la foto de esta pantalla: con el código de abajo se puede comprobar si tu intento llegó al servidor."].concat(notes));
+      }
+
+      var order = [["Internet", result.internet], ["Sitio", result.site], ["Sistema (API nueva)", result.api], ["Ingreso simulado", result.login], ["Dirección anterior", result.old]];
+      lastText = "Diagnóstico Minera Marte | código " + code + " | " + $("when").textContent + "\n" +
+        $("verdict").innerText.replace(/\n+/g, " ") + "\n" +
+        order.map(function (o) { return o[0] + ": " + (o[1] ? "OK" : "FALLA"); }).join(" | ") + "\n" +
+        rows.map(function (r) { return r[0] + ": " + r[1]; }).join("\n");
+      $("again").disabled = false;
+    });
+  }
+
+  $("again").addEventListener("click", run);
+  $("copy").addEventListener("click", function () {
+    var done = function () { $("copy").textContent = "Copiado"; setTimeout(function () { $("copy").textContent = "Copiar resultado"; }, 2000); };
+    if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(lastText).then(done, function () {});
+  });
+  fillInfo(null);
+  run();
+})();
+</script>
+</body>
+</html>
