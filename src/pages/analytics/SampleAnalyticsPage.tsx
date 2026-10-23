@@ -755,8 +755,8 @@ function EstimationTab({ filters, element, ready }: { filters: AnalyticsFilters;
 
 // Variograma: puntos = lo medido entre pares de muestras; curva = el modelo ajustado que usa el kriging.
 function VariogramChart({ vg }: { vg: Variogram }) {
-  const W = 300;
-  const H = 150;
+  const W = 420;
+  const H = 170;
   const L = 34;
   const B = 22;
   const maxH = Math.max(vg.range * 1.15, ...vg.bins.map((b) => b.h), 1e-9);

@@ -4,6 +4,7 @@ import { AlertTriangle, CheckCircle2, FileSpreadsheet, ImagePlus, Loader2, LifeB
 import { getPhotosIntegrity, restorePhotoFile, type PhotoIntegrity } from "@/features/sondajes/api/geologyApi";
 import { parseGeologyWorkbook } from "@/features/sondajes/lib/geologyExcel";
 import { sha256Hex } from "@/features/sondajes/lib/contentHash";
+import { getPhotoBlob } from "@/features/sondajes/db/geologyDb";
 import { processImage } from "@/features/sondajes/lib/imageProcessing";
 import { Modal, panelClass, primaryButton, secondaryButton } from "@/features/sondajes/components/ui";
 
@@ -72,6 +73,38 @@ export function RestorePhotosModal({ open, holeId, onClose }: { open: boolean; h
       await queryClient.invalidateQueries({ queryKey: ["sondajes"] });
     } catch (e) {
       setError(e instanceof Error ? e.message : "No se pudo leer alguno de los archivos.");
+    } finally {
+      setProgress(null);
+    }
+  }
+
+  // Cada dispositivo conserva las miniaturas (480 px) de las fotos que subió o vio. Sirven para devolverles una imagen.
+  async function runFromDevice() {
+    if (!integrity) return;
+    setReport(null);
+    setError(null);
+    try {
+      const failed: Report["failed"] = [];
+      let restored = 0;
+      let found = 0;
+      for (const [position, item] of integrity.missing.entries()) {
+        setProgress(`Buscando ${item.code} en este dispositivo (${position + 1}/${integrity.missing.length})…`);
+        const thumb = await getPhotoBlob(item.id, "thumb");
+        if (!thumb) continue;
+        found += 1;
+        try {
+          await restorePhotoFile(item.id, thumb, thumb);
+          restored += 1;
+        } catch (e) {
+          failed.push({ code: item.code, reason: e instanceof Error ? e.message : "Error" });
+        }
+      }
+      const after = await getPhotosIntegrity(holeId);
+      setIntegrity(after);
+      setReport({ found, restored, failed, stillMissing: after.missing.map((item) => item.code) });
+      await queryClient.invalidateQueries({ queryKey: ["sondajes"] });
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "No se pudo leer la copia de este dispositivo.");
     } finally {
       setProgress(null);
     }
@@ -146,6 +179,14 @@ export function RestorePhotosModal({ open, holeId, onClose }: { open: boolean; h
               <ImagePlus size={15} />
               Elegir Excel y/o fotos
             </label>
+            <div className="border-t border-[var(--color-border-soft)] pt-3">
+              <p className="text-xs text-[var(--color-on-surface-variant)]">
+                <b>¿No tienes los originales?</b> Este dispositivo (celular o computador) guarda una miniatura de las fotos que subió o vio. Úsala desde el equipo que más trabajó con las fotos: quedarán con menor resolución, pero no se pierden.
+              </p>
+              <button type="button" className={`${secondaryButton} mt-2`} disabled={busy} onClick={() => void runFromDevice()}>
+                Recuperar miniaturas guardadas en este dispositivo
+              </button>
+            </div>
             {progress ? (
               <p className="flex items-center gap-2 text-sm font-semibold">
                 <Loader2 size={15} className="animate-spin" /> {progress}
