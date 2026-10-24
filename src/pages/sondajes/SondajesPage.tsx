@@ -1,6 +1,6 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import {
   Boxes,
   CalendarClock,
@@ -50,6 +50,7 @@ import { HoleDetailModal } from "@/features/sondajes/components/HoleDetailModal"
 import { ProgramFormModal } from "@/features/sondajes/components/ProgramFormModal";
 import { ImportProgramModal, type ImportRequest } from "@/features/sondajes/components/ImportProgramModal";
 import { PersonnelModal } from "@/features/sondajes/components/PersonnelModal";
+import { ObservationsModal } from "@/features/sondajes/components/geology/ObservationsModal";
 import { RestorePhotosModal } from "@/features/sondajes/components/geology/RestorePhotosModal";
 import { ShiftReportsBackupModal } from "@/features/sondajes/components/ShiftReportsBackupModal";
 import { SyncBar } from "@/features/sondajes/components/SyncBar";
@@ -103,6 +104,7 @@ function sumPlanned(holes: DrillingHole[]) {
 
 export function SondajesPage() {
   const { showError, showSuccess } = useToast();
+  const navigate = useNavigate();
   const { can } = useAuth();
   const canDrilling = can("sondajes");
   const canGeology = can("geologiaSondajes");
@@ -139,6 +141,7 @@ export function SondajesPage() {
   const [geologyImportOpen, setGeologyImportOpen] = useState(false);
   const [backupOpen, setBackupOpen] = useState(false);
   const [restoreOpen, setRestoreOpen] = useState(false);
+  const [observationsOpen, setObservationsOpen] = useState(false);
   const [confirm, setConfirm] = useState<ConfirmState>(null);
   const [statusSavingId, setStatusSavingId] = useState<string | null>(null);
 
@@ -290,6 +293,7 @@ export function SondajesPage() {
                 : []),
               ...(canDrilling ? [{ key: "personnel", label: "Personal", icon: <Users size={16} />, onClick: () => setPersonnelOpen(true) }] : []),
               ...(canDrilling ? [{ key: "backup", label: "Respaldo de partes", icon: <ClipboardList size={16} />, onClick: () => setBackupOpen(true) }] : []),
+              ...(can("geologiaSondajes") ? [{ key: "observations", label: "Revisar observaciones geológicas", icon: <ClipboardList size={16} />, onClick: () => setObservationsOpen(true) }] : []),
               ...(can("geologiaSondajes", "update") ? [{ key: "restore", label: "Restaurar imágenes perdidas", icon: <LifeBuoy size={16} />, onClick: () => setRestoreOpen(true) }] : []),
               ...(canCreate ? [{ key: "import", label: "Importar Excel", icon: <FileSpreadsheet size={16} />, onClick: () => setImportOpen(true) }] : [])
             ]}
@@ -551,6 +555,18 @@ export function SondajesPage() {
         onImport={runImport}
       />
       {canDrilling ? <PersonnelModal open={personnelOpen} onClose={() => setPersonnelOpen(false)} /> : null}
+      {can("geologiaSondajes") ? (
+        <ObservationsModal
+          open={observationsOpen}
+          onClose={() => setObservationsOpen(false)}
+          onGo={(item) => {
+            setObservationsOpen(false);
+            const query = new URLSearchParams({ section: "geology", tab: item.target.tab });
+            if (item.target.reportId) query.set("report", item.target.reportId);
+            navigate(`/sondajes/pozos/${item.holeId}?${query.toString()}`);
+          }}
+        />
+      ) : null}
       {can("geologiaSondajes", "update") ? <RestorePhotosModal open={restoreOpen} onClose={() => setRestoreOpen(false)} /> : null}
       {canDrilling ? (
         <ShiftReportsBackupModal

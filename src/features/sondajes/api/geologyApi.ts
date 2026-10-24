@@ -109,3 +109,29 @@ export async function restorePhotoFile(id: string, full: Blob, thumb: Blob) {
   form.append("thumb", thumb, `${id}_thumb.jpg`);
   await httpClient.put(endpoints.photoRestore(id), form, { headers: { "Content-Type": "multipart/form-data" }, timeout: UPLOAD_TIMEOUT });
 }
+
+// ─── Observaciones: revisión de la información geológica cargada ────────────
+export type ObservationSeverity = "error" | "warning" | "info";
+export type GeologyObservation = {
+  id: string;
+  severity: ObservationSeverity;
+  category: "Reportes" | "Logueo" | "Fotos" | "Pozo" | "Excel";
+  hole: string;
+  holeId: string;
+  title: string;
+  detail: string;
+  suggestion: string;
+  evidence: Array<{ label: string; value: string }>;
+  target: { tab: "reports" | "log" | "photos"; reportId?: string; photoIds?: string[] };
+};
+export type GeologyReview = {
+  generatedAt: string;
+  summary: { error: number; warning: number; info: number; total: number };
+  holes: Array<{ hole: string; holeId: string; reports: number; logIntervals: number; loggedMeters: number; photos: number; coreBoxPhotos: number; photosWithMeters: number; photosWithBoxes: number; photosWithoutReport: number }>;
+  items: GeologyObservation[];
+};
+
+export async function getGeologyObservations(holeId?: string) {
+  const response = await httpClient.get(endpoints.geologyObservations, { params: holeId ? { holeId } : undefined });
+  return unwrap(response.data) as GeologyReview;
+}

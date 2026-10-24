@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import {
   Camera,
+  ClipboardCheck,
   Eye,
   FileSpreadsheet,
   Images,
@@ -47,6 +49,7 @@ import { Stat, SyncPill } from "@/features/sondajes/components/geology/GeologySh
 import { PhotoGallery, PhotoIntegrityBanner, PhotoLightbox, PhotoStrip, PhotoUploadModal } from "@/features/sondajes/components/geology/Photos";
 import { GeologyReportFormModal, type AttachedPhoto } from "@/features/sondajes/components/geology/GeologyReportFormModal";
 import { GeologyLogView } from "@/features/sondajes/components/geology/GeologyLogView";
+import { ObservationsModal } from "@/features/sondajes/components/geology/ObservationsModal";
 import { GeologyImportModal, describeImport } from "@/features/sondajes/components/geology/GeologyImportModal";
 import { useDrillingHolesQuery } from "@/features/sondajes/hooks/useSondajes";
 
@@ -80,7 +83,10 @@ export function GeologyPanel({ hole, campaign }: { hole: DrillingHole; campaign?
   const addPhotos = useAddPhotosMutation();
   const deleteReport = useDeleteGeologyReportMutation();
 
-  const [tab, setTab] = useState<SubTab>("reports");
+  const [searchParams, setSearchParams] = useSearchParams();
+  const initialTab = searchParams.get("tab");
+  const [tab, setTab] = useState<SubTab>(initialTab === "log" || initialTab === "photos" ? initialTab : "reports");
+  const [observationsOpen, setObservationsOpen] = useState(false);
   const [form, setForm] = useState<{ open: boolean; report: GeologyReportView | null }>({ open: false, report: null });
   const [viewId, setViewId] = useState<string | null>(null);
   const [toDelete, setToDelete] = useState<GeologyReportView | null>(null);
@@ -98,6 +104,21 @@ export function GeologyPanel({ hole, campaign }: { hole: DrillingHole; campaign?
   const logSummary = summarizeLog(log.rows);
   const lastReport = reports.find((report) => report.sync !== "error");
   const suggestedFrom = Math.max(lastReport?.toDepth ?? 0, lastReport ? 0 : logSummary.loggedTo, lastReport ? 0 : hole.currentDepth ?? 0);
+  // Al llegar desde «Observaciones» con ?report=…, abre ese reporte para corregirlo y limpia la dirección.
+  const requestedReport = searchParams.get("report");
+  useEffect(() => {
+    if (!requestedReport) return;
+    const target = reports.find((report) => report.id === requestedReport);
+    if (target) setForm({ open: true, report: target });
+    if (target || reportsQuery.isFetched) {
+      const next = new URLSearchParams(searchParams);
+      next.delete("report");
+      next.delete("tab");
+      next.delete("section");
+      setSearchParams(next, { replace: true });
+    }
+  }, [requestedReport, reports, reportsQuery.isFetched]); // eslint-disable-line react-hooks/exhaustive-deps
+
   const viewing = viewId ? reports.find((report) => report.id === viewId) ?? null : null;
   const busy = saveReport.isPending || saveLog.isPending || addPhotos.isPending || sync.isSyncing;
 
@@ -166,6 +187,10 @@ export function GeologyPanel({ hole, campaign }: { hole: DrillingHole; campaign?
   return (
     <div className="space-y-5">
       <div className="flex flex-wrap items-center justify-end gap-2">
+        <button type="button" className={secondaryButton} onClick={() => setObservationsOpen(true)}>
+          <ClipboardCheck size={16} />
+          Observaciones
+        </button>
         {can("geologiaSondajes", "create") ? (
           <>
             <button type="button" className={secondaryButton} onClick={() => setImportOpen(true)}>
@@ -300,6 +325,18 @@ export function GeologyPanel({ hole, campaign }: { hole: DrillingHole; campaign?
         />
         </>
       )}
+
+      <ObservationsModal
+        open={observationsOpen}
+        holeId={hole.id}
+        onClose={() => setObservationsOpen(false)}
+        onGo={(item) => {
+          setObservationsOpen(false);
+          setTab(item.target.tab);
+          const target = item.target.reportId ? reports.find((report) => report.id === item.target.reportId) : undefined;
+          if (target && item.target.tab === "reports" && can("geologiaSondajes", "update")) setForm({ open: true, report: target });
+        }}
+      />
 
       <GeologyReportFormModal
         open={form.open}

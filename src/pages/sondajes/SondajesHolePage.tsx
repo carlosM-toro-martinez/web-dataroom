@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { Link, useParams } from "react-router-dom";
+import { Link, useParams, useSearchParams } from "react-router-dom";
 import {
   AlertTriangle,
   ArrowLeft,
@@ -73,7 +73,8 @@ export function SondajesHolePage() {
   // Perforación (partes de turno) y Geología (reporte geológico, logueo, fotos) son permisos separados.
   const canDrilling = can("sondajes");
   const canGeology = can("geologiaSondajes");
-  const [section, setSection] = useState<"drilling" | "geology">(canDrilling ? "drilling" : "geology");
+  const [searchParams] = useSearchParams();
+  const [section, setSection] = useState<"drilling" | "geology">(canGeology && (!canDrilling || searchParams.get("section") === "geology") ? "geology" : "drilling");
   const holesQuery = useDrillingHolesQuery();
   const campaignsQuery = useDrillingCampaignsQuery();
   const reportsQuery = useHoleShiftReportsQuery(holeId, canDrilling);
