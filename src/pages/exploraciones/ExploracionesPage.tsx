@@ -13,6 +13,14 @@ import {
   type ReportColumn
 } from "@/shared/lib/excelReport";
 import {
+  composeSampleName,
+  detectNameStyle,
+  extractEditableSuffix,
+  namePrefix,
+  normalizeNameToken,
+  type SampleNameStyle
+} from "@/features/exploraciones/lib/sampleName";
+import {
   Beaker,
   ChevronDown,
   Download,
@@ -196,6 +204,7 @@ interface SampleForm {
   surfaceObjectiveId: string;
   priority: SamplePriority | "";
   sampleNameSuffix: string;
+  nameStyle: SampleNameStyle;
   sampledAt: string;
   east: string;
   north: string;
@@ -434,6 +443,7 @@ function initialSampleForm(): SampleForm {
     surfaceObjectiveId: "",
     priority: "NORMAL",
     sampleNameSuffix: "",
+    nameStyle: "full",
     sampledAt: toLocalDatetimeInput(),
     east: "",
     north: "",
@@ -1913,27 +1923,21 @@ function ExploracionesRegisterPage({ sampleCategory }: { sampleCategory: SampleC
       (((item.payload as any).category ?? "EXPLORATION") as SampleCategory) === sampleCategory
   );
   const remoteVisibleSamples = registerType === "interior" ? remoteInteriorSamples.data ?? [] : remoteSurfaceSamples.data ?? [];
-  const interiorNamePrefix = [
-    normalizeNameToken(selectedInteriorArea?.abbreviation ?? selectedInteriorArea?.name),
-    normalizeNameToken(selectedInteriorLevelOption?.abbreviation ?? selectedInteriorLevelOption?.name),
-    normalizeNameToken(
-      selectedInteriorLaborOption?.abbreviation ?? selectedInteriorLaborOption?.name ?? sampleForm.interiorLaborText
-    )
-  ]
-    .filter(Boolean)
-    .join("-");
-  const surfaceNamePrefix = [
-    normalizeNameToken(selectedSurfaceAreaOption?.abbreviation ?? selectedSurfaceAreaOption?.name),
-    normalizeNameToken(selectedSurfaceLevelOption?.abbreviation ?? selectedSurfaceLevelOption?.name),
-    normalizeNameToken(
-      selectedSurfaceLaborOption?.abbreviation ?? selectedSurfaceLaborOption?.name ?? sampleForm.surfaceLaborText
-    )
-  ]
-    .filter(Boolean)
-    .join("-");
+  const interiorNamePrefix = namePrefix(
+    sampleForm.nameStyle,
+    selectedInteriorArea,
+    selectedInteriorLevelOption,
+    selectedInteriorLaborOption ?? { name: sampleForm.interiorLaborText }
+  );
+  const surfaceNamePrefix = namePrefix(
+    sampleForm.nameStyle,
+    selectedSurfaceAreaOption,
+    selectedSurfaceLevelOption,
+    selectedSurfaceLaborOption ?? { name: sampleForm.surfaceLaborText }
+  );
   const sampleNamePrefix = registerType === "interior" ? interiorNamePrefix : surfaceNamePrefix;
   const normalizedSuffix = normalizeNameToken(sampleForm.sampleNameSuffix);
-  const sampleName = [sampleNamePrefix, normalizedSuffix].filter(Boolean).join("-");
+  const sampleName = composeSampleName(sampleNamePrefix, normalizedSuffix, sampleForm.nameStyle);
 
   const sampleRows = useMemo<SampleTableRow[]>(() => {
     const elementById = new Map(elements.map((element) => [element.id, element]));
@@ -2340,30 +2344,22 @@ function ExploracionesRegisterPage({ sampleCategory }: { sampleCategory: SampleC
     setSampleForm((current) => ({ ...current, [field]: value }));
   }
 
-  function getInteriorPrefixFromIds(areaId?: string, levelId?: string, laborId?: string) {
-    const area = interiorAreas.find((item) => item.id === areaId);
-    const level = interiorLevels.find((item) => item.id === levelId);
-    const labor = interiorLabors.find((item) => item.id === laborId);
-    return [
-      normalizeNameToken(area?.abbreviation ?? area?.name),
-      normalizeNameToken(level?.abbreviation ?? level?.name),
-      normalizeNameToken(labor?.abbreviation ?? labor?.name)
-    ]
-      .filter(Boolean)
-      .join("-");
+  function getInteriorPrefixFromIds(style: SampleNameStyle, areaId?: string, levelId?: string, laborId?: string) {
+    return namePrefix(
+      style,
+      interiorAreas.find((item) => item.id === areaId),
+      interiorLevels.find((item) => item.id === levelId),
+      interiorLabors.find((item) => item.id === laborId)
+    );
   }
 
-  function getSurfacePrefixFromIds(areaId?: string, levelId?: string, laborId?: string) {
-    const area = surfaceAreas.find((item) => item.id === areaId);
-    const level = surfaceLevels.find((item) => item.id === levelId);
-    const labor = surfaceLabors.find((item) => item.id === laborId);
-    return [
-      normalizeNameToken(area?.abbreviation ?? area?.name),
-      normalizeNameToken(level?.abbreviation ?? level?.name),
-      normalizeNameToken(labor?.abbreviation ?? labor?.name)
-    ]
-      .filter(Boolean)
-      .join("-");
+  function getSurfacePrefixFromIds(style: SampleNameStyle, areaId?: string, levelId?: string, laborId?: string) {
+    return namePrefix(
+      style,
+      surfaceAreas.find((item) => item.id === areaId),
+      surfaceLevels.find((item) => item.id === levelId),
+      surfaceLabors.find((item) => item.id === laborId)
+    );
   }
 
   function resetSampleForm() {
@@ -2407,7 +2403,8 @@ function ExploracionesRegisterPage({ sampleCategory }: { sampleCategory: SampleC
         const levelId = labor?.interiorLevelId;
         const level = interiorLevels.find((item) => item.id === levelId);
         const areaId = level?.interiorAreaId;
-        const prefix = getInteriorPrefixFromIds(areaId, levelId, payload.interiorLaborId);
+        const nameStyle = detectNameStyle(payload.name);
+        const prefix = getInteriorPrefixFromIds(nameStyle, areaId, levelId, payload.interiorLaborId);
         setSampleForm({
           ...initialSampleForm(),
           interiorAreaId: areaId ?? "",
@@ -2416,6 +2413,7 @@ function ExploracionesRegisterPage({ sampleCategory }: { sampleCategory: SampleC
           interiorObjectiveId: objectiveTextFromId("interior", payload.interiorObjectiveId),
           priority: payload.priority ?? "NORMAL",
           sampleNameSuffix: extractEditableSuffix(payload.name, prefix),
+          nameStyle,
           sampledAt: toLocalDatetimeInput(payload.sampledAt ? new Date(payload.sampledAt) : new Date()),
           east: payload.east === undefined ? "" : String(payload.east),
           north: payload.north === undefined ? "" : String(payload.north),
@@ -2430,7 +2428,8 @@ function ExploracionesRegisterPage({ sampleCategory }: { sampleCategory: SampleC
         const levelId = labor?.surfaceLevelId;
         const level = surfaceLevels.find((item) => item.id === levelId);
         const areaId = level?.surfaceAreaId;
-        const prefix = getSurfacePrefixFromIds(areaId, levelId, payload.surfaceLaborId);
+        const nameStyle = detectNameStyle(payload.name);
+        const prefix = getSurfacePrefixFromIds(nameStyle, areaId, levelId, payload.surfaceLaborId);
         setSampleForm({
           ...initialSampleForm(),
           surfaceAreaId: areaId ?? "",
@@ -2439,6 +2438,7 @@ function ExploracionesRegisterPage({ sampleCategory }: { sampleCategory: SampleC
           surfaceObjectiveId: objectiveTextFromId("surface", payload.surfaceObjectiveId),
           priority: payload.priority ?? "NORMAL",
           sampleNameSuffix: extractEditableSuffix(payload.name, prefix),
+          nameStyle,
           sampledAt: toLocalDatetimeInput(payload.sampledAt ? new Date(payload.sampledAt) : new Date()),
           east: payload.east === undefined ? "" : String(payload.east),
           north: payload.north === undefined ? "" : String(payload.north),
@@ -2456,7 +2456,9 @@ function ExploracionesRegisterPage({ sampleCategory }: { sampleCategory: SampleC
     const sample = row.raw as any;
     const module = registerType;
     if (module === "interior") {
+      const nameStyle = detectNameStyle(sample.name);
       const prefix = getInteriorPrefixFromIds(
+        nameStyle,
         sample.labor?.level?.area?.id,
         sample.labor?.level?.id,
         sample.labor?.id
@@ -2469,6 +2471,7 @@ function ExploracionesRegisterPage({ sampleCategory }: { sampleCategory: SampleC
         interiorObjectiveId: sample.objective?.name ?? "",
         priority: sample.priority ?? "NORMAL",
         sampleNameSuffix: extractEditableSuffix(sample.name, prefix),
+        nameStyle,
         sampledAt: toLocalDatetimeInput(sample.sampledAt ? new Date(sample.sampledAt) : new Date()),
         east: sample.east === undefined || sample.east === null ? "" : String(sample.east),
         north: sample.north === undefined || sample.north === null ? "" : String(sample.north),
@@ -2478,7 +2481,9 @@ function ExploracionesRegisterPage({ sampleCategory }: { sampleCategory: SampleC
         labL3: sample.labAssignments?.find((item: any) => item.slot === "L3")?.laboratory?.id ?? ""
       });
     } else {
+      const nameStyle = detectNameStyle(sample.name);
       const prefix = getSurfacePrefixFromIds(
+        nameStyle,
         sample.labor?.level?.area?.id,
         sample.labor?.level?.id,
         sample.labor?.id
@@ -2491,6 +2496,7 @@ function ExploracionesRegisterPage({ sampleCategory }: { sampleCategory: SampleC
         surfaceObjectiveId: sample.objective?.name ?? "",
         priority: sample.priority ?? "NORMAL",
         sampleNameSuffix: extractEditableSuffix(sample.name, prefix),
+        nameStyle,
         sampledAt: toLocalDatetimeInput(sample.sampledAt ? new Date(sample.sampledAt) : new Date()),
         east: sample.east === undefined || sample.east === null ? "" : String(sample.east),
         north: sample.north === undefined || sample.north === null ? "" : String(sample.north),
@@ -3767,7 +3773,7 @@ function ExploracionesRegisterPage({ sampleCategory }: { sampleCategory: SampleC
                 <p className="text-[10px] font-bold uppercase tracking-wider text-[var(--color-on-surface-variant)]">
                   Nombre generado
                 </p>
-                <p className="mt-0.5 truncate text-sm font-semibold text-[var(--color-on-surface)]">
+                <p className="mt-0.5 break-words text-sm font-semibold text-[var(--color-on-surface)]">
                   {sampleName || "Completa ubicación y sufijo"}
                 </p>
               </div>
@@ -4458,28 +4464,6 @@ function priorityBadgeClass(priority: SamplePriority) {
   return classes[priority];
 }
 
-function normalizeNameToken(value?: string | null) {
-  return (value ?? "")
-    .trim()
-    .toUpperCase()
-    .replace(/[\/\s]+/g, "-")
-    .replace(/[^A-Z0-9-]/g, "")
-    .replace(/-+/g, "-")
-    .replace(/^-|-$/g, "");
-}
-
-function extractEditableSuffix(fullName?: string | null, prefix?: string) {
-  const normalizedName = normalizeNameToken(fullName);
-  const normalizedPrefix = normalizeNameToken(prefix);
-  if (!normalizedName) return "";
-  if (!normalizedPrefix) return normalizedName;
-  if (normalizedName === normalizedPrefix) return "";
-  if (normalizedName.startsWith(`${normalizedPrefix}-`)) {
-    return normalizedName.slice(normalizedPrefix.length + 1);
-  }
-  return normalizedName;
-}
-
 function latLonToUtm(latitude: number, longitude: number) {
   const a = 6378137;
   const f = 1 / 298.257223563;
@@ -4554,6 +4538,16 @@ function lineValue(value?: unknown, minLength = 12) {
   const text = value === null || value === undefined || value === "" ? "" : String(value);
   const underline = "_".repeat(Math.max(minLength, 1));
   return text ? `${escapeHtml(text)}${underline.slice(0, Math.max(2, minLength - text.length))}` : underline;
+}
+
+// Full sample names are longer than the old abbreviations: shrink them to fit the talon and, when very long,
+// let them wrap onto a second line instead of being cut.
+function voucherNameStyle(name: unknown) {
+  const length = String(name ?? "").trim().length;
+  if (length <= 26) return "font-size:17px";
+  if (length <= 36) return "font-size:14px";
+  if (length <= 46) return "font-size:11.5px";
+  return "font-size:10px;white-space:normal;line-height:1.05;height:22px";
 }
 
 function compactValue(value: unknown, maxLength = 26) {
@@ -4654,7 +4648,7 @@ function renderVoucherMarkup(row: SampleTableRow, symbols: string[] = []) {
           </div>
           <div class="form-row cols-location">
             <div class="field"><span class="label">LUGAR:</span><span class="fill">${compactValue(row.location, 24)}</span></div>
-            <div class="field"><span class="label">MUESTRA:</span><span class="fill">${compactValue(row.name, 26)}</span></div>
+            <div class="field"><span class="label">MUESTRA:</span><span class="fill" style="${voucherNameStyle(row.name)}">${compactValue(row.name, 80)}</span></div>
           </div>
           <div class="form-row cols-coords">
             <div class="field">
@@ -4704,7 +4698,7 @@ function voucherPrintStyles() {
     .form-row { display: grid; gap: 10px; height: 23px; align-items: end; font-size: 17px; line-height: 1; white-space: nowrap; }
     .cols-project { grid-template-columns: 1fr 220px; }
     .cols-sampler { grid-template-columns: 1fr 300px; }
-    .cols-location { grid-template-columns: 1fr 1fr; }
+    .cols-location { grid-template-columns: .8fr 1.2fr; }
     .cols-coords { grid-template-columns: 1fr; }
     .field { display: flex; min-width: 0; align-items: end; gap: 4px; }
     .label { flex: 0 0 auto; }
@@ -4927,6 +4921,7 @@ function writeDispatchRemissionDocument(
     th:nth-child(2), td:nth-child(2) { width: 138px; }
     th:nth-child(3), td:nth-child(3) { width: 88px; }
     th:nth-child(4), td:nth-child(4) { width: auto; }
+    td:nth-child(4) { overflow-wrap: anywhere; line-height: 1.25; }
     th:nth-child(5), td:nth-child(5) { width: 86px; }
     th:nth-child(6), td:nth-child(6) { width: 124px; }
     .number-cell { font-weight: 800; }
