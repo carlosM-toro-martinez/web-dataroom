@@ -104,6 +104,7 @@ const privatePrefixes = [
   "/usuarios",
   "/roles",
   "/auditoria",
+  "/accesos",
   "/analisis-muestras",
   "/login",
   "/forgot-password",

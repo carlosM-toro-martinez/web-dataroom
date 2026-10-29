@@ -22,6 +22,7 @@ const ExploracionesFormsPage = lazy(() => import("@/pages/exploraciones/Explorac
 const ExploracionesAjustesPage = lazy(() => import("@/pages/exploraciones/ExploracionesAjustesPage").then((module) => ({ default: module.ExploracionesAjustesPage })));
 const SondajesPage = lazy(() => import("@/pages/sondajes/SondajesPage").then((module) => ({ default: module.SondajesPage })));
 const SampleAnalyticsPage = lazy(() => import("@/pages/analytics/SampleAnalyticsPage").then((module) => ({ default: module.SampleAnalyticsPage })));
+const AccessPage = lazy(() => import("@/pages/access/AccessPage").then((module) => ({ default: module.AccessPage })));
 const AuditPage = lazy(() => import("@/pages/audit/AuditPage").then((module) => ({ default: module.AuditPage })));
 const SondajesHolePage = lazy(() => import("@/pages/sondajes/SondajesHolePage").then((module) => ({ default: module.SondajesHolePage })));
 import { ProtectedRoute } from "@/app/router/guards/ProtectedRoute";
@@ -105,6 +106,7 @@ export function DataRoomRouter() {
             <Route path="/exploraciones/ajustes" element={<ExploracionesAjustesPage />} />
             <Route path="/exploraciones-data-room/forms" element={<ExploracionesFormsPage />} />
             <Route path="/auditoria" element={<AuditPage />} />
+            <Route path="/accesos" element={<AccessPage />} />
           </Route>
 
           <Route element={<PermissionRoute module="solicitudes" />}>

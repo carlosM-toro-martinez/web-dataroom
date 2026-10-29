@@ -15,6 +15,7 @@ import {
   Settings,
   ShieldCheck,
   Sun,
+  UserCheck,
   Users,
   X
 } from "lucide-react";
@@ -44,6 +45,7 @@ const MAIN_ROUTES: MainRoute[] = [
   { label: "Trabajadores", to: "/trabajadores", icon: Users, permission: "usuarios", group: "admin" },
   { label: "Roles y permisos", to: "/roles", icon: ShieldCheck, permission: "usuarios", group: "admin" },
   { label: "Solicitudes Data Room", to: "/solicitudes-data-room", icon: ClipboardList, permission: "solicitudes", group: "admin" },
+  { label: "Accesos", to: "/accesos", icon: UserCheck, adminOnly: true, group: "admin" },
   { label: "Auditoría", to: "/auditoria", icon: History, adminOnly: true, group: "admin" },
   { label: "Ajustes", to: "/exploraciones/ajustes", icon: Settings, adminOnly: true, group: "admin" }
 ];
