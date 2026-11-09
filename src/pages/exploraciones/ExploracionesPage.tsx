@@ -4800,30 +4800,6 @@ function dispatchItemSampleCode(item: NonNullable<SampleDispatch["items"]>[numbe
   return item.sample?.code ?? item.interiorSampleId ?? item.surfaceSampleId ?? "-";
 }
 
-function dispatchItemSector(item: NonNullable<SampleDispatch["items"]>[number]) {
-  const sample = item.sample as any;
-  const candidates = [
-    sample?.labor?.level?.area?.name,
-    sample?.area?.name,
-    sample?.labor?.level?.area?.abbreviation,
-    sample?.area?.abbreviation,
-    sample?.sector
-  ];
-  const explicit = candidates.find((value) => typeof value === "string" && value.trim());
-  if (explicit) return String(explicit).trim().toUpperCase();
-
-  const nameParts = String(sample?.name ?? "")
-    .split(/[\/-]/)
-    .map((part) => part.trim())
-    .filter(Boolean);
-  if (nameParts.length >= 1) return nameParts[0].toUpperCase();
-
-  const code = dispatchItemSampleCode(item);
-  const parts = code.split(/[\/-]/).map((part) => part.trim()).filter(Boolean);
-  if (parts.length >= 1) return parts[0].toUpperCase();
-  return "";
-}
-
 function dispatchItemName(item: NonNullable<SampleDispatch["items"]>[number]) {
   return item.sample?.name ?? dispatchItemSampleCode(item);
 }
@@ -4861,7 +4837,6 @@ function writeDispatchRemissionDocument(
         <tr>
           <td class="number-cell">${index + 1}</td>
           <td><mark>${escapeHtml(dispatchItemSampleCode(item))}</mark></td>
-          <td><mark>${escapeHtml(dispatchItemSector(item))}</mark></td>
           <td><mark>${escapeHtml(dispatchItemName(item))}</mark></td>
           <td class="priority"><mark>${escapeHtml(dispatchItemPriority(item))}</mark></td>
           <td class="assays"><mark>${escapeHtml(assays)}</mark></td>
@@ -4874,7 +4849,6 @@ function writeDispatchRemissionDocument(
       (_, index) => `
         <tr>
           <td class="number-cell">${rows.length + index + 1}</td>
-          <td></td>
           <td></td>
           <td></td>
           <td></td>
@@ -4919,11 +4893,10 @@ function writeDispatchRemissionDocument(
     th { height: 34px; text-align: left; font-weight: 800; }
     th:nth-child(1), td:nth-child(1) { width: 36px; }
     th:nth-child(2), td:nth-child(2) { width: 138px; }
-    th:nth-child(3), td:nth-child(3) { width: 88px; }
-    th:nth-child(4), td:nth-child(4) { width: auto; }
-    td:nth-child(4) { overflow-wrap: anywhere; line-height: 1.25; }
-    th:nth-child(5), td:nth-child(5) { width: 86px; }
-    th:nth-child(6), td:nth-child(6) { width: 124px; }
+    th:nth-child(3), td:nth-child(3) { width: auto; }
+    td:nth-child(3) { overflow-wrap: anywhere; line-height: 1.25; }
+    th:nth-child(4), td:nth-child(4) { width: 86px; }
+    th:nth-child(5), td:nth-child(5) { width: 124px; }
     .number-cell { font-weight: 800; }
     mark { background: #d6dd00; color: #000; padding: 0 1px; }
     .priority { text-align: center; font-weight: 800; }
@@ -4970,7 +4943,6 @@ function writeDispatchRemissionDocument(
         <tr>
           <th>Nº</th>
           <th>Código de muestra</th>
-          <th>Sector</th>
           <th>Nombre</th>
           <th>Prioridad</th>
           <th>Ensayos solicitados</th>
